@@ -79,10 +79,7 @@ Site checks (Playwright) live in `scripts/site/check_*.py`.
 ## Contract
 
 - **VexyMarketplace** on Base: `0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660`
-- **Verified** (partial match) on Blockscout:
-  <https://base.blockscout.com/address/0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660?tab=contract>
-  Bytecode is identical; only the Remix metadata hash differs. Built with Remix, solc 0.8.28,
-  optimizer off. Not yet verified on Basescan.
+- **Verified** on Basescan (<https://basescan.org/address/0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660#code>, exact match), also on Blockscout (<https://base.blockscout.com/address/0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660?tab=contract>) and Sourcify; built with Remix, solc 0.8.28, optimizer off.
 - **Origin.** A fork of [Vexy](https://base.blockscout.com/address/0x6b478209974bd27e6cf661fef86c68072b0d6738)
   (veAERO market) by @0xValde. Our only functional change:
   `require(currency == USDC)` plus a USDC constant — listings are USDC-only. `Owned.sol` was

@@ -29,7 +29,7 @@ market layer (phase 4) does not start.
 | 17.09 | First stake (#27, max-lock on), Vexy teardown, name and hosting, execution plan | 0 | ✅ |
 | 20.09 | Market contract deployed on Base (USDC-only listings) | 2 | ✅ |
 | 23.09 | Site live at `lants.eth` (IPFS + ENS); auto snapshot 3×/day; AntSeed contest entry on X | 2 · build in public | ✅ |
-| 24.09 | Repo made public; contract source verified on Blockscout | 3 | ✅ |
+| 24.09 | Repo made public; contract source verified on Basescan and Blockscout | 3 | ✅ |
 | this week | Listing on antseed.com/ecosystem | 3 | 🔜 |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
@@ -45,7 +45,7 @@ market layer (phase 4) does not start.
   led by expected staker reward per unit of weight next epoch.
 - **The USDC market** — list a position, buy it through the contract, priced as **USDC per locked
   ANTS**. Contract: VexyMarketplace fork, `0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660` on Base,
-  source-verified on Blockscout.
+  source-verified on Basescan and Blockscout.
 - **Docs page** and wallet connect via Privy.
 - **Hosting** — static site on IPFS, addressed by `lants.eth` (via ENS). Content is served through
   IPNS on Filebase, so updates need no gas. Live at https://lants.eth.limo since 23.09.
@@ -62,7 +62,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Deploy market contract on Base (USDC listings) | 20.09 | ✅ done |
 | Register `lants.eth` and go live on IPFS + ENS | 23.09 | ✅ done |
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
-| Make repo public + verify contract on Blockscout | 24.09 | ✅ done |
+| Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Seller perks board | — | open |
 | List on antseed.com/ecosystem | this week | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
@@ -96,7 +96,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 
 ### Phase 3 — Launch and listen (24.09 → 22.10)
 
-- [x] Repo public; contract source verified on Blockscout — 24.09
+- [x] Repo public; contract source verified on Basescan and Blockscout — 24.09
 - [ ] Listed on antseed.com/ecosystem — this week
 - [ ] First staker reward for #27 + weekly recap #1 — 01.10
 - [ ] Launch announcement on X and in the AntSeed chat — 02.10
@@ -160,7 +160,7 @@ Most concrete first. Nothing here is decided before 22.10.
 ## Build log
 
 **24.09.2026** — Repo made public (ahead of the planned 02.10). Contract source verified on
-Blockscout the same day.
+Basescan and Blockscout the same day.
 
 **23.09.2026** — Site live at `lants.eth` (IPFS + ENS, IPNS via Filebase, gas-free updates).
 Automatic snapshot 3×/day turned on. AntSeed contest entry posted on X.
