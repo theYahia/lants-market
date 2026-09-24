@@ -66,6 +66,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Seller perks board | — | open |
 | List on antseed.com/ecosystem | this week | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
+| Stake our epoch-23 buyer reward (3,487 ANTS) into the pool with the best reward per weight, measured at the end of epoch 24 | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
 | Signal check + money-model decision; stop rule check on 05.11 | 22.10 | open |
