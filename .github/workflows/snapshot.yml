@@ -3,7 +3,13 @@ name: snapshot
 on:
   schedule:
     - cron: '17 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Who triggered the run: manual (always publishes) or cron (skips when the live snapshot is fresh)'
+        required: false
+        default: manual
+        type: string
 
 env:
   SELLERS_FILE: sellers.json
@@ -25,6 +31,7 @@ jobs:
         env:
           IPNS_KEY: ${{ env.IPNS_KEY }}
           EVENT_NAME: ${{ github.event_name }}
+          SOURCE: ${{ github.event.inputs.source }}
         run: |
           set -uo pipefail
           URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
@@ -61,16 +68,20 @@ jobs:
           }
 
           const event = process.env.EVENT_NAME || '';
+          const source = process.env.SOURCE || '';
           const slotIso = slot.toISOString();
           let run = true;
 
-          if (event === 'schedule' && liveTs && liveTs.getTime() >= slot.getTime()) {
-            run = false;
-            console.log(`fresh for slot ${slotIso} (live ${liveTs.toISOString()}), skipping`);
-          } else if (event !== 'schedule') {
-            console.log(`event=${event} -> always run`);
+          // Apply freshness gate for scheduled runs or cron‑triggered workflow_dispatch.
+          if (event === 'schedule' || (event === 'workflow_dispatch' && source === 'cron')) {
+            if (liveTs && liveTs.getTime() >= slot.getTime()) {
+              run = false;
+              console.log(`fresh for slot ${slotIso} (live ${liveTs.toISOString()}), skipping`);
+            } else {
+              console.log(`stale for slot ${slotIso} (live ${liveTs ? liveTs.toISOString() : 'none'}), running`);
+            }
           } else {
-            console.log(`stale for slot ${slotIso} (live ${liveTs ? liveTs.toISOString() : 'none'}), running`);
+            console.log(`event=${event} source=${source} -> always run`);
           }
 
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
