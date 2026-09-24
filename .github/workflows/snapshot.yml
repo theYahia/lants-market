@@ -112,46 +112,65 @@ jobs:
         env:
           FILEBASE_KEY: ${{ secrets.FILEBASE_KEY }}
           FILEBASE_SECRET: ${{ secrets.FILEBASE_SECRET }}
-        run: node scripts/deploy/publish.mjs
+        run: |
+          set -euo pipefail
+          node scripts/deploy/publish.mjs | tee publish.log
 
-      - name: Verify live URL after publish
+      - name: Verify published snapshot
         if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
-          URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
 
-          # Get the expected generatedAt value from the freshly built snapshot
-          if ! EXPECTED=$(node -e "console.log(require('./dist/fixtures/snapshot-e23.live.json').generatedAt)"); then
-            echo "FAILED: expected snapshot file ./dist/fixtures/snapshot-e23.live.json not found"
+          # Expected generatedAt from the freshly built snapshot
+          if ! EXPECTED=$(node -e "console.log(require('./dist/fixtures/snapshot-e23.live.json').generatedAt)") || [ -z "$EXPECTED" ]; then
+            echo "FAILED: expected snapshot file ./dist/fixtures/snapshot-e23.live.json not found or missing generatedAt"
             exit 1
           fi
 
-          ok=0
-          LAST_GOT="none"
-          for attempt in $(seq 1 20); do
-            echo "verify attempt ${attempt}: ${URL}"
-            code=$(curl -sS -o body.json -w '%{http_code}' "${URL}" || echo 000)
-            if [ "${code}" = "200" ]; then
-              if GOT=$(node -e "console.log(require('./body.json').generatedAt)" 2>/dev/null); then
-                echo "attempt ${attempt}: HTTP ${code}, got ${GOT}, expected ${EXPECTED}"
-                LAST_GOT="${GOT}"
-                if [ "${GOT}" = "${EXPECTED}" ]; then
-                  echo "live snapshot fresh: ${GOT}"
-                  ok=1
-                  break
-                else
-                  echo "generatedAt mismatch, retrying..."
-                fi
-              else
-                echo "attempt ${attempt}: HTTP ${code}, unable to parse generatedAt, retrying..."
+          # Extract CID from publish.log
+          if ! CID=$(grep -oE 'root CID = [^ ]+' publish.log | awk '{print $4}'); then
+            echo "FAILED: could not parse CID from publish.log"
+            exit 1
+          fi
+          if [ -z "$CID" ]; then
+            echo "FAILED: CID is empty after parsing publish.log"
+            exit 1
+          fi
+
+          # HARD check: poll the direct CID URL
+          HARD_URL="https://ipfs.filebase.io/ipfs/${CID}/fixtures/snapshot-e23.live.json"
+          hard_ok=0
+          for attempt in $(seq 1 10); do
+            echo "hard check attempt ${attempt}: ${HARD_URL}"
+            code=$(curl -sS --max-time 30 -o body.json -w '%{http_code}' "${HARD_URL}" || echo 000)
+            if [ "$code" = "200" ]; then
+              GOT=$(node -e "console.log(require('./body.json').generatedAt)" 2>/dev/null || echo "")
+              echo "attempt ${attempt}: HTTP ${code}, got ${GOT}, expected ${EXPECTED}"
+              if [ "$GOT" = "$EXPECTED" ]; then
+                echo "published snapshot OK: ${CID} ${EXPECTED}"
+                hard_ok=1
+                break
               fi
             else
-              echo "attempt ${attempt}: HTTP ${code}, retrying after propagation sleep..."
+              echo "attempt ${attempt}: HTTP ${code}, retrying..."
             fi
-            sleep 45
+            sleep 30
           done
 
-          if [ "${ok}" != "1" ]; then
-            echo "FAILED: live snapshot not updated (expected ${EXPECTED}, got ${LAST_GOT})"
+          if [ "$hard_ok" != "1" ]; then
+            echo "FAILED: CID ${CID} does not serve the new snapshot"
             exit 1
+          fi
+
+          # SOFT check: IPNS gateway (non‑fatal)
+          IPNS_URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
+          if curl -sS --max-time 30 -o ipns_body.json "${IPNS_URL}"; then
+            GOT_IPNS=$(node -e "console.log(require('./ipns_body.json').generatedAt)" 2>/dev/null || echo "")
+            if [ "$GOT_IPNS" = "$EXPECTED" ]; then
+              echo "IPNS already serves the new snapshot"
+            else
+              echo "::warning::IPNS gateway still serves ${GOT_IPNS}; propagation usually takes ~15 minutes"
+            fi
+          else
+            echo "::warning::IPNS gateway fetch failed; propagation usually takes ~15 minutes"
           fi
