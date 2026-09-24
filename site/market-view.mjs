@@ -261,7 +261,36 @@ async function readListings() {
       }
     }
     const ownerMismatch = isLive && (!owner || owner.toLowerCase() !== seller.toLowerCase());
-    out.push({ listingId, nftId, seller, currency, price, soldTime, endTime, isLive, ownerMismatch });
+    // read the on‑chain position data for fresh listings that are not yet in the snapshot
+    let chainAmount = null;
+    let chainClosed = false;
+    if (isLive) {
+      try {
+        const pRaw = await ethCallTo(MARKET.nft,
+          '0x99fbab88' + encUint(nftId)); // positions(uint256)
+        const words = decodeWords(pRaw);
+        chainAmount = wordToBigInt(words[2]); // amount
+        const closedAt = wordToBigInt(words[6]);
+        const withdrawn = wordToBigInt(words[7]);
+        chainClosed = closedAt > 0n || withdrawn > 0n;
+      } catch {
+        chainAmount = null;
+        chainClosed = false;
+      }
+    }
+    out.push({
+      listingId,
+      nftId,
+      seller,
+      currency,
+      price,
+      soldTime,
+      endTime,
+      isLive,
+      ownerMismatch,
+      chainAmount,
+      chainClosed
+    });
   }
 
   // ensure deterministic order
@@ -337,8 +366,14 @@ function render(snapshot, items) {
       unclaimedVal = unclaimed.toFixed(2);
     }
 
-    const dead = !!pos && (pos.withdrawn || Number(pos.closedAtEpoch) > 0);
-    const invalid = item.isLive && (dead || item.ownerMismatch || !pos);
+    // a position is dead if the snapshot says so, otherwise fall back to the on‑chain flag
+    const dead = pos ? (pos.withdrawn || Number(pos.closedAtEpoch) > 0) : !!item.chainClosed;
+    // a live listing is invalid only when it is dead or the owner mismatches; missing snapshot data is now allowed
+    const invalid = item.isLive && (dead || item.ownerMismatch);
+    // if we have on‑chain amount but no snapshot entry, show it as a locked value
+    if (item.isLive && !pos && item.chainAmount != null) {
+      lockedVal = (Number(item.chainAmount) / 1e18).toFixed(2);
+    }
     const stateVal = invalid ? 'invalid' :
       (item.isLive ? 'live' :
         (item.soldTime !== 0n ? 'sold' : 'expired'));
