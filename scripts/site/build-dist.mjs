@@ -20,6 +20,8 @@ const FILES = [
 
 // The only allowed external data-URL: canonical IPNS key.
 const ALLOWED_IPNS_KEY = 'k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b';
+// The additional allowed external data URL (live JSON snapshot).
+const ALLOWED_DATA_URL = 'https://raw.githubusercontent.com/theYahia/lants-market/data/live.json';
 
 // Compute the dist directory root via fileURLToPath
 const DIST_ROOT = fileURLToPath(new URL('../../dist/', import.meta.url));
@@ -90,7 +92,7 @@ const checkForbiddenUrls = (content, fileLabel) => {
     // Ignore occurrences that are part of the substring 'www.w3.org/2000/svg' (xmlns)
     if (match[1].includes('www.w3.org/2000/svg')) continue;
     // Allow the single canonical data-URL via IPNS key.
-    if (match[1].includes(ALLOWED_IPNS_KEY)) continue;
+    if (match[1].includes(ALLOWED_IPNS_KEY) || match[1] === ALLOWED_DATA_URL) continue;
     fail(`${fileLabel}: prohibited external URL (${match[1]}) in resource loading context`);
   }
 
@@ -111,7 +113,7 @@ const checkForbiddenUrls = (content, fileLabel) => {
     // Ignore occurrences that are part of the substring 'www.w3.org/2000/svg' (xmlns)
     if (match[0].includes('www.w3.org/2000/svg')) continue;
     // Allow the single canonical data-URL via IPNS key.
-    if (match[0].includes(ALLOWED_IPNS_KEY)) continue;
+    if (match[0].includes(ALLOWED_IPNS_KEY) || match[0] === ALLOWED_DATA_URL) continue;
 
     // Locate where this URL is — if it's inside href of <a> or in xmlns, skip
     const before = content.slice(0, match.index);

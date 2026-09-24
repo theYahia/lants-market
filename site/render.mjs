@@ -16,10 +16,12 @@ import {
  * The badge-deal class is now only used in the Listings section.
  */
 
-const LIVE_URL =
-  'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json';
+// Live snapshot URLs: primary (data branch) first, IPNS fallback.
+const LIVE_URLS = [
+  'https://raw.githubusercontent.com/theYahia/lants-market/data/live.json',
+  'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json'
+];
 
-// IPNS resolution on Filebase can take 4-10s; give it plenty of head-room.
 const LIVE_TIMEOUT_MS = 20000;
 
 // Load the local snapshot used for the very first paint so the tbody is never
@@ -37,19 +39,24 @@ async function loadLocalSnapshot() {
   return await res.json();
 }
 
-// Fetch the live snapshot from the IPNS gateway with a generous timeout.
+// Fetch the live snapshot from the URLs with a generous timeout per attempt.
 async function loadLiveSnapshot() {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LIVE_TIMEOUT_MS);
-  try {
-    const res = await fetch(LIVE_URL, { signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('bad status ' + res.status);
-    return await res.json();
-  } catch (e) {
-    clearTimeout(timer);
-    return null;
+  for (const url of LIVE_URLS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LIVE_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json = await res.json();
+      if (json && json.generatedAt) return json;
+    } catch (e) {
+      // ignore and try next URL
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return null;
 }
 
 let currentSortCol = null;
