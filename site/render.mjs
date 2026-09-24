@@ -252,7 +252,7 @@ function renderSnapshot(snapshot, opts = {}) {
     // Helper to create numeric cells with right‑align style
     const makeCell = (text) => {
       const td = document.createElement('td');
-      td.setAttribute('style', 'text-align:right;font-variant-numeric:tabular-nums');
+      td.setAttribute('style', 'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap');
       td.textContent = text;
       return td;
     };
@@ -295,7 +295,7 @@ function renderSnapshot(snapshot, opts = {}) {
   dustRow.appendChild(dustLockCell);
 
   const dustRewardCell = document.createElement('td');
-  dustRewardCell.setAttribute('style', 'text-align:right;font-variant-numeric:tabular-nums');
+  dustRewardCell.setAttribute('style', 'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap');
   dustRewardCell.textContent = dustReward;
   dustRow.appendChild(dustRewardCell);
 
