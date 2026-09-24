@@ -95,7 +95,9 @@ Site checks (Playwright) live in `scripts/site/check_*.py`.
 
 ## Data pipeline
 
-A GitHub Actions job (`snapshot.yml`) runs three times a day (06/14/22 UTC): it builds a snapshot of
+A GitHub Actions job (`snapshot.yml`) publishes a fresh snapshot for each 06/14/22 UTC window. It wakes up
+every hour and skips when the live snapshot is already fresh, so a delayed or dropped GitHub cron is caught up
+within the hour. Each run builds a snapshot of
 positions (`site/enrich-snapshot.mjs`, `site/enrich-sales.mjs`), gates it through
 `site/sanity-check.mjs`, and publishes to IPNS. Filebase secrets live only in CI.
 

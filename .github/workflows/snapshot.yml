@@ -2,14 +2,16 @@ name: snapshot
 
 on:
   schedule:
-    - cron: '0 6 * * *'
-    - cron: '0 14 * * *'
-    - cron: '0 22 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch: {}
 
 env:
   SELLERS_FILE: sellers.json
   IPNS_KEY: k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b
+
+concurrency:
+  group: snapshot
+  cancel-in-progress: false
 
 jobs:
   snapshot:
@@ -18,59 +20,138 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Decide whether to run
+        id: decide
+        env:
+          IPNS_KEY: ${{ env.IPNS_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+          URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
+          # Fetch live snapshot; any failure => empty body => treated as stale.
+          curl -sS --max-time 30 -o live.json "${URL}" || echo '{}' > live.json
+          [ -s live.json ] || echo '{}' > live.json
+          node <<'NODE'
+          const fs = require('fs');
+
+          // Last slot boundary among 06:00/14:00/22:00 UTC that is <= now.
+          const now = new Date();
+          const slots = [6, 14, 22];
+          let slot = new Date(Date.UTC(
+            now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 22, 0, 0, 0));
+          const h = now.getUTCHours();
+          if (h < 6) {
+            // 00:00–05:59 UTC -> previous day 22:00
+            slot = new Date(slot.getTime() - 24 * 3600 * 1000);
+          } else {
+            const boundary = slots.filter(s => s <= h).pop(); // 6, 14, or 22
+            slot = new Date(Date.UTC(
+              now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), boundary, 0, 0, 0));
+          }
+
+          let liveTs = null;
+          try {
+            const live = JSON.parse(fs.readFileSync('live.json', 'utf8'));
+            if (live && live.generatedAt) {
+              const d = new Date(live.generatedAt);
+              if (!isNaN(d.getTime())) liveTs = d;
+            }
+          } catch (e) {
+            // treat as stale
+          }
+
+          const event = process.env.EVENT_NAME || '';
+          const slotIso = slot.toISOString();
+          let run = true;
+
+          if (event === 'schedule' && liveTs && liveTs.getTime() >= slot.getTime()) {
+            run = false;
+            console.log(`fresh for slot ${slotIso} (live ${liveTs.toISOString()}), skipping`);
+          } else if (event !== 'schedule') {
+            console.log(`event=${event} -> always run`);
+          } else {
+            console.log(`stale for slot ${slotIso} (live ${liveTs ? liveTs.toISOString() : 'none'}), running`);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `run=${run}\n`);
+          NODE
+
       - name: Setup Node
+        if: steps.decide.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install dependencies
+        if: steps.decide.outputs.run == 'true'
         run: npm ci || npm install
 
       - name: Fetch antscan sellers
+        if: steps.decide.outputs.run == 'true'
         continue-on-error: true
         run: curl -sf -o sellers.json https://antscan.co/api/sellers
 
       - name: Enrich snapshot
+        if: steps.decide.outputs.run == 'true'
         run: node site/enrich-snapshot.mjs
 
       - name: Enrich sales
+        if: steps.decide.outputs.run == 'true'
         run: node site/enrich-sales.mjs --sellers sellers.json
 
       - name: Sanity check (gate — fail without publishing)
+        if: steps.decide.outputs.run == 'true'
         run: node site/sanity-check.mjs
 
       - name: Build dist
+        if: steps.decide.outputs.run == 'true'
         run: node scripts/site/build-dist.mjs
 
       - name: Publish (CAR + IPNS)
+        if: steps.decide.outputs.run == 'true'
         env:
           FILEBASE_KEY: ${{ secrets.FILEBASE_KEY }}
           FILEBASE_SECRET: ${{ secrets.FILEBASE_SECRET }}
         run: node scripts/deploy/publish.mjs
 
       - name: Verify live URL after publish
+        if: steps.decide.outputs.run == 'true'
         run: |
           set -euo pipefail
           URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
+
+          # Get the expected generatedAt value from the freshly built snapshot
+          if ! EXPECTED=$(node -e "console.log(require('./dist/fixtures/snapshot-e23.live.json').generatedAt)"); then
+            echo "FAILED: expected snapshot file ./dist/fixtures/snapshot-e23.live.json not found"
+            exit 1
+          fi
+
           ok=0
-          for attempt in 1 2 3 4 5 6; do
+          LAST_GOT="none"
+          for attempt in $(seq 1 20); do
             echo "verify attempt ${attempt}: ${URL}"
             code=$(curl -sS -o body.json -w '%{http_code}' "${URL}" || echo 000)
             if [ "${code}" = "200" ]; then
-              if grep -q 'generatedAt' body.json; then
-                echo "live snapshot OK (HTTP 200, generatedAt present)"
-                cat body.json | head -c 400
-                ok=1
-                break
+              if GOT=$(node -e "console.log(require('./body.json').generatedAt)" 2>/dev/null); then
+                echo "attempt ${attempt}: HTTP ${code}, got ${GOT}, expected ${EXPECTED}"
+                LAST_GOT="${GOT}"
+                if [ "${GOT}" = "${EXPECTED}" ]; then
+                  echo "live snapshot fresh: ${GOT}"
+                  ok=1
+                  break
+                else
+                  echo "generatedAt mismatch, retrying..."
+                fi
               else
-                echo "HTTP 200 but generatedAt missing, retrying..."
+                echo "attempt ${attempt}: HTTP ${code}, unable to parse generatedAt, retrying..."
               fi
             else
-              echo "HTTP ${code}, retrying after propagation sleep..."
+              echo "attempt ${attempt}: HTTP ${code}, retrying after propagation sleep..."
             fi
-            sleep 20
+            sleep 45
           done
+
           if [ "${ok}" != "1" ]; then
-            echo "FAILED: live snapshot-e23.live.json not confirmed (200 + generatedAt)"
+            echo "FAILED: live snapshot not updated (expected ${EXPECTED}, got ${LAST_GOT})"
             exit 1
           fi
