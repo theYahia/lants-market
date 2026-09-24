@@ -106,7 +106,7 @@ export function cancelNftListings(nftCollection, nftId) {
 export function decodeWords(hex) {
   if (typeof hex !== 'string') throw new Error('response must be string');
   let s = hex.trim();
-  if (s.startsWith('0x') || s.startsWith('0X')) s = s.slice(1);
+  if (s.startsWith('0x') || s.startsWith('0X')) s = s.slice(2);
   if (s === '') return [];
   if (!/^[0-9a-fA-F]+$/.test(s)) throw new Error('bad hex response');
   if (s.length % 64 !== 0) throw new Error('length not multiple of 32 bytes');

@@ -109,10 +109,33 @@ const LIVE_URLS = [
 const WORDS_PER_LISTING = 11;
 
 async function ethCall(data) {
-  return await walletRequest({
-    method: 'eth_call',
-    params: [{ to: MARKET.market, data }, 'latest']
-  });
+  const READ_RPCS = [
+    'https://base-rpc.publicnode.com',
+    'https://base.drpc.org',
+    'https://mainnet.base.org'
+  ];
+  for (const rpc of READ_RPCS) {
+    try {
+      const response = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_call',
+          params: [{ to: MARKET.market, data }, 'latest']
+        })
+      });
+      if (!response.ok) continue;
+      const json = await response.json();
+      if (typeof json.result === 'string') {
+        return json.result;
+      }
+    } catch (_) {
+      // try next RPC
+    }
+  }
+  throw new Error('all public RPCs failed');
 }
 
 // Ensure the wallet is on the expected chain, switching (and adding if needed)
@@ -557,6 +580,17 @@ async function onConnect() {
   }
 }
 
+async function loadPublicMarket() {
+  if (MARKET.market === ZERO) return;
+  try {
+    const snapshot = await loadSnapshot();
+    const items = await readListings();
+    render(snapshot, items);
+  } catch (e) {
+    console.warn('public market load failed', e);
+  }
+}
+
 export function initMarketView() {
   const btn = document.getElementById('hdr-connect');
   if (!btn) return;
@@ -691,4 +725,5 @@ if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initMarketView();
   initCreateListing();
   initOfferForm();
+  loadPublicMarket();
 }
