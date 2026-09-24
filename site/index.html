@@ -84,7 +84,7 @@
                                 <th title="Position id in the lANTS collection on Base.">#</th>
                                 <th class="text-right" title="ANTS locked in this position.">AMOUNT</th>
                                 <th class="text-right" title="Remaining lock duration for this position; 'max' marks a maximum-length lock.">LOCK</th>
-                                <th class="text-right" title="Forecast for the next epoch: this position's share of the epoch staker budget of 100,000 ANTS, distributed through pool sales rather than by stake size. No reward has been paid to these positions yet.">REWARD<span class="th-note">forecast</span></th>
+                                <th class="text-right" title="Reward from the staking contract for the current epoch: this position's live share of the 100,000 ANTS staker budget, based on actual purchases in its pool so far. It moves during the epoch and settles at the epoch end. Early in an epoch, before any purchases count, the previous epoch's reward is shown. Refreshed with every snapshot.">REWARD<span class="th-note" id="th-reward-note">live</span></th>
                                 <th class="text-right" title="Net ANTS returned if you exit the lock early, after the slash. A seller has no reason to sell below this; a buyer can treat it as the floor of any negotiation. No sales or market prices are implied.">EXIT<span class="th-note">net</span></th>
                             </tr>
                         </thead>

@@ -2,6 +2,7 @@ import {
   startEpoch,
   isMaxLock,
   expectedReward,
+  rewardMode,
   exitSlash,
   fadingCount,
   floorPrice,
@@ -228,6 +229,8 @@ function renderSnapshot(snapshot, opts = {}) {
   const tbody = document.querySelector('table tbody');
   // Clear any existing rows
   tbody.innerHTML = '';
+  const rewardNote = document.getElementById('th-reward-note');
+  if (rewardNote) { const m = rewardMode(snapshot); rewardNote.textContent = `${m.mode} · e${m.epoch}`; }
 
   // Render live positions
   enrichedLive.forEach(({ pos, amount, lockLeftStr, lockLeft, isMax, reward, floor }) => {

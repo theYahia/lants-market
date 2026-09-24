@@ -5,9 +5,9 @@ Why: the criterion “render.mjs has isMaxLock” passes even when the function
 is called incorrectly. Previously only row #27 was truly checked, and thresholds
 of diversity (amounts_vary > 3, slashes_vary > 1) let the storefront pass with wei
 instead of ANTS and zero penalties. Now the reference is computed in this script
-from snapshot snapshot-e23.full.json independent of page code, using formulas
-of the protocol (port from site/metrics.mjs, BigInt -> int, integer divisions),
-and each DOM row is compared.
+from snapshot snapshot-e23.full.json independent of page code, using the contract
+field `pendingStakerReward` (exposed as `rewardByEpoch` per position) as the source
+of the REWARD column, exactly as the site now does.
 
 Units and the “active” branch reproduce the page behavior verbatim:
   * the expected_reward formula already returns human ANTS (total rewards
@@ -56,39 +56,33 @@ def start_epoch(pos) -> int:
     return int(pos["stakeStartEpoch"]) + 1
 
 
-def expected_reward(snap, pos, epoch) -> int:
-    """BigInt arithmetic replaced with precise ints; all divisions are integer."""
+def reward_epoch(snap) -> int:
+    """
+    Determine which epoch the contract uses for the REWARD column.
+
+    * If any position has a positive ``rewardByEpoch`` entry for the snapshot
+      epoch, the mode is ``live`` and we use that epoch.
+    * Otherwise we fall back to the previous epoch (``prev``).
+    """
+    epoch = int(snap["epoch"])
     epoch_str = str(epoch)
-    total_weighted_points = 0
-    pool_weighted_points = {}
-    # Build pool list (unique agents)
-    agents = []
-    seen = set()
     for p in snap["positions"]:
-        if p["agentId"] not in seen:
-            seen.add(p["agentId"])
-            agents.append(p["agentId"])
-    for agent_id in agents:
-        sales_val = snap.get("salesByPool", {}).get(agent_id)
-        weight_val = snap.get("poolWeightByEpoch", {}).get(agent_id, {}).get(epoch_str)
-        if sales_val is None or weight_val is None:
-            continue
-        weighted_points = int(sales_val) * int(weight_val or 0)
-        total_weighted_points += weighted_points
-        pool_weighted_points[agent_id] = weighted_points
-    if total_weighted_points == 0:
-        return 0
-    agent_id = pos["agentId"]
-    pool_weight = snap.get("poolWeightByEpoch", {}).get(agent_id, {}).get(epoch_str)
-    if not pool_weight:
-        return 0
-    if not snap.get("salesByPool", {}).get(agent_id):
-        return 0
-    pool_reward = int(snap["stakerBudget"]) * pool_weighted_points.get(agent_id, 0) // total_weighted_points
-    position_weight = pos.get("weightsByEpoch", {}).get(epoch_str)
-    if not position_weight:
-        return 0
-    return pool_reward * int(position_weight) // int(pool_weight)
+        if int(p.get("rewardByEpoch", {}).get(epoch_str, "0")) > 0:
+            return epoch
+    return epoch - 1
+
+
+def expected_reward(snap, pos) -> float:
+    """
+    Return the contract‑derived reward for a position, in human ANTS.
+
+    The contract stores rewards as integer wei in ``rewardByEpoch``; we divide
+    by 1e18 to obtain ANTS.
+    """
+    mode = reward_epoch(snap)
+    mode_str = str(mode)
+    reward_int = int(pos.get("rewardByEpoch", {}).get(mode_str, "0"))
+    return reward_int / 1e18
 
 
 def is_max_lock(pos, epoch) -> bool:
@@ -166,29 +160,11 @@ def main() -> int:
     # New table should have 20 rows (19 live positions + dust row)
     EXPECTED_ROWS = 20
 
-    # Forecast epoch: “next” after the snapshot. Relative to snapshot epoch
-    # compare with reference value of row #27 (38486.00): choose the
-    # interpretation that yields the reference by protocol formula, and apply
-    # apply it uniformly to all rows. The formula returns human
-    # ANTS units — division by 1e18 is no longer applied.
-    snap_epoch = int(snap["epoch"])
-    pos27 = positions[27]
-    snap_based = snap_epoch + 1
-    start_based = start_epoch(pos27)
-    if close(expected_reward(snap, pos27, snap_based), 38486.00, FLOAT_TOL):
-        reward_epoch_of = lambda pos: snap_based
-    elif close(expected_reward(snap, pos27, start_based), 38486.00, FLOAT_TOL):
-        reward_epoch_of = lambda pos: start_based
-    else:
-        # no interpretation yields a reference — we will record a snapshot
-        reward_epoch_of = lambda pos: snap_based
-
-    # reference per each position (for calculations, but not for direct row comparison)
+    # Build reference data per position using the contract‑derived reward.
     ref = {}
     for pid, pos in positions.items():
-        e = reward_epoch_of(pos)
         amount = int(pos["amount"]) / 1e18
-        reward = expected_reward(snap, pos, e)
+        reward = expected_reward(snap, pos)
         slash = exit_slash(pos)
         slash_bps = int(pos.get("slashBps") or 0)
         floor = amount * (1 - slash_bps / 10000)

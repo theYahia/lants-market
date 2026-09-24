@@ -8,59 +8,54 @@ function weiToBigInt(weiStr) {
   }
 }
 
+/**
+ * Determine which epoch should be used for reward calculations.
+ *
+ * - `cur`  – the current epoch as a string.
+ * - `prev` – the previous epoch as a string.
+ *
+ * If any position already has a non‑zero reward for the current epoch,
+ * we are in “live” mode and use the current epoch.
+ * Otherwise we fall back to the previous epoch (all current values are still 0).
+ *
+ * Guard: if the snapshot or its positions are missing we default to live mode.
+ *
+ * @param {object} snapshot – the snapshot object containing `epoch` and `positions`.
+ * @returns {{mode: 'live'|'prev', epoch: string}}
+ */
+export function rewardMode(snapshot) {
+  const cur = String(Number(snapshot?.epoch ?? 0));
+  const prev = String(Number(snapshot?.epoch ?? 0) - 1);
+
+  if (!snapshot || !Array.isArray(snapshot.positions)) {
+    return { mode: 'live', epoch: cur };
+  }
+
+  for (const pos of snapshot.positions) {
+    const val = BigInt(pos.rewardByEpoch?.[cur] ?? 0);
+    if (val > 0n) {
+      return { mode: 'live', epoch: cur };
+    }
+  }
+
+  return { mode: 'prev', epoch: prev };
+}
+
+/**
+ * Contract truth: pendingStakerReward for the current epoch (live share
+ * of the staker budget by actual purchases so far). Falls back to the previous
+ * epoch while every current value is 0.
+ *
+ * @param {object} snapshot – the snapshot containing positions.
+ * @param {object} pos      – a single position.
+ * @param {any}    epoch    – (ignored) kept for backward compatibility.
+ * @returns {number} reward in ANTS (human readable).
+ */
 export function expectedReward(snapshot, pos, epoch) {
   if (!snapshot || !pos) return 0;
-  const epochStr = String(epoch);
-
-  // Unique pools: take agentId from positions
-  const poolMap = new Map();
-  for (const p of snapshot.positions) {
-    poolMap.set(p.agentId, true);
-  }
-
-  let totalWeightedPoints = 0n;
-  const poolWeightedPoints = new Map();
-
-  // Compute the denominator and weighted points across all pools
-  for (const [agentId, _] of poolMap) {
-    const salesVal = snapshot.salesByPool?.[agentId];
-    const weightVal = snapshot.poolWeightByEpoch?.[agentId]?.[epochStr];
-
-    if (salesVal == null || weightVal == null) continue;
-
-    const sales = Number(salesVal);
-    const weight = weiToBigInt(weightVal);
-    const weightedPoints = BigInt(sales) * weight;
-    totalWeightedPoints += weightedPoints;
-    poolWeightedPoints.set(agentId, weightedPoints);
-  }
-
-  if (totalWeightedPoints === 0n) return 0;
-
-  const agentId = pos.agentId;
-  const poolWeight = snapshot.poolWeightByEpoch?.[agentId]?.[epochStr];
-
-  if (!poolWeight) return 0; // No weight for the epoch
-  if (!snapshot.salesByPool?.[agentId]) return 0; // No sales for the pool
-
-  const poolWeightedPoint = poolWeightedPoints.get(agentId) || 0n;
-  const stakerBudget = BigInt(snapshot.stakerBudget);
-
-  // poolReward (in the same units as the staker budget)
-  // Formula: poolReward = stakerBudget * poolWeightedPoints / SUM_j
-  const poolReward = (stakerBudget * poolWeightedPoint) / totalWeightedPoints;
-
-  const positionWeight = pos.weightsByEpoch?.[epochStr];
-  if (!positionWeight) return 0;
-
-  const posWeightVal = weiToBigInt(positionWeight);
-  const poolWeightVal = weiToBigInt(poolWeight);
-
-  // positionReward = poolReward * positionWeight / poolWeight
-  const reward = (poolReward * posWeightVal) / poolWeightVal;
-
-  // Return a plain number
-  return Number(reward);
+  const modeInfo = rewardMode(snapshot);
+  const rewardWei = BigInt(pos.rewardByEpoch?.[modeInfo.epoch] ?? 0);
+  return Number(rewardWei) / 1e18;
 }
 
 export function startEpoch(pos) {
@@ -168,6 +163,7 @@ export function lockLabel(pos, currentEpoch) {
 
 export default {
   expectedReward,
+  rewardMode,
   startEpoch,
   isMaxLock,
   fadingCount,
