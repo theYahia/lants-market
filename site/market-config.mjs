@@ -173,3 +173,8 @@ export function encOneAddressCall(selector, address) {
 export function encAddressPlusTwoNumbers(selector, address, num1, num2) {
   return selector + encAddr(address) + encUint(num1) + encUint(num2);
 }
+
+// Listing ids of trades between our own wallets. They are marked internal on the market and never count toward
+// volume, price per ANTS or implied FDV. Add an id here in a commit after an internal trade; a lot bought by
+// an outside wallet is a real external sale and is NOT added.
+export const INTERNAL_LISTING_IDS = [];

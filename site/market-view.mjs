@@ -7,8 +7,9 @@ const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(ar
 
 import {
   MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
-  cancelNftListings, encCreateListing, encSetApprovalForAll
+  cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS
 } from './market-config.mjs';
+import { computeMarketStats } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash } from './metrics.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
@@ -322,7 +323,15 @@ function makeSpan(field, value) {
   return s;
 }
 
+function updateTiles(items, snapshot) {
+  const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, Math.floor(Date.now() / 1000));
+  const vol = document.querySelector('#m-positions .metric-value');
+  const fdv = document.querySelector('#m-locked .metric-value');
+  if (vol) { vol.textContent = s.volumeText; vol.setAttribute('data-src', 'computed'); }
+  if (fdv) { fdv.textContent = s.fdvText; fdv.setAttribute('data-src', 'computed'); }
+}
 function render(snapshot, items) {
+  updateTiles(items, snapshot);
   const table = tableEl();
   table.textContent = '';
   if (!items.length) {
@@ -376,7 +385,7 @@ function render(snapshot, items) {
     }
     const stateVal = invalid ? 'invalid' :
       (item.isLive ? 'live' :
-        (item.soldTime !== 0n ? 'sold' : 'expired'));
+        (item.soldTime !== 0n ? (INTERNAL_LISTING_IDS.map(String).includes(String(item.listingId)) ? 'sold · internal' : 'sold') : 'expired'));
 
     // ---- build DOM ----
     // "#<listingId>"
@@ -804,5 +813,6 @@ if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initMarketView();
   initCreateListing();
   initOfferForm();
+  updateTiles([], null);
   loadPublicMarket();
 }
