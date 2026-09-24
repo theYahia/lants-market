@@ -64,8 +64,18 @@ export function startEpoch(pos) {
 }
 
 export function isMaxLock(pos, epoch) {
+  // Guard against missing position or missing epoch data
   if (!pos) return false;
-  return pos.weightsByEpoch[epoch] === pos.maxLockPowerByEpoch[epoch];
+
+  // Retrieve the max‑lock power for the epoch; if it doesn't exist, it's not a max‑lock
+  const maxLock = pos.maxLockPowerByEpoch?.[epoch];
+  if (maxLock == null) return false;
+
+  // Max‑lock only applies when the max‑lock power is a positive value
+  if (BigInt(maxLock) <= 0n) return false;
+
+  // Compare the weight for the epoch with the (positive) max‑lock power
+  return pos.weightsByEpoch?.[epoch] === maxLock;
 }
 
 export function fadingCount(pos) {
@@ -161,10 +171,12 @@ export function lockLabel(pos, currentEpoch) {
   return label;
 }
 
+export function exitBurn(pos) { if (!pos) return 0; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps || 0) / 10000); }
+
 export default {
   expectedReward,
   rewardMode,
-  startEpoch,
+  startEpoch, exitBurn,
   isMaxLock,
   fadingCount,
   exitSlash,

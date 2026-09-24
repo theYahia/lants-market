@@ -23,6 +23,7 @@ export const SEL = {
   allowance:      '0xdd62ed3e', // allowance(address,address)
   approve:        '0x095ea7b3', // approve(address,uint256)
   ownerOf:        '0x6352211e', // ownerOf(uint256)
+  isApprovedForAll: '0xe985e9c5', // isApprovedForAll(address,address)
   balanceOf:      '0x70a08231', // balanceOf(address)
   // cast sig "cancelNftListings(address,uint256)"
   cancelNftListings: '0xa7faa28e',

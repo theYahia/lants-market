@@ -8,7 +8,7 @@ import {
   floorPrice,
   yieldPerEpoch,
   payback,
-  lockLabel,
+  lockLabel, exitBurn,
 } from './metrics.mjs';
 
 /**
@@ -246,6 +246,11 @@ function renderSnapshot(snapshot, opts = {}) {
     // First cell – pure position number
     const idCell = document.createElement('td');
     idCell.textContent = pos.id;
+if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
+  idCell.classList.add('is-pending');
+  idCell.dataset.start = String(pos.stakeStartEpoch);
+  idCell.title = 'Staking power activates at epoch ' + pos.stakeStartEpoch;
+}
     // Badge rendering removed; class badge-deal is no longer applied here.
     row.appendChild(idCell);
 
@@ -265,14 +270,18 @@ function renderSnapshot(snapshot, opts = {}) {
     const lockText = document.createElement('span');
     lockText.textContent = lockLeftStr;
     lockTd.appendChild(lockText);
-    // Add title if peak weight condition holds
-    if (Number(pos.weightsByEpoch[epoch]) > 0 && pos.weightsByEpoch[epoch] === pos.maxLockPowerByEpoch[epoch]) {
-      lockTd.title = 'peak weight';
-    }
+    if (isMax) {
+  lockTd.classList.add('is-maxlock');
+  lockTd.title = 'Max lock: constant peak weight. Cannot be split or merged while max lock is on.';
+} else if (Number(pos.weightsByEpoch[epoch]) > 0 && pos.weightsByEpoch[epoch] === pos.maxLockPowerByEpoch[epoch]) {
+  lockTd.title = 'peak weight';
+}
     row.appendChild(lockTd);
 
     row.appendChild(makeCell(reward));
-    row.appendChild(makeCell(floor));
+    const exitTd = makeCell(floor);
+    exitTd.title = 'Early exit burns ~' + exitBurn(pos).toFixed(2) + ' ANTS (' + exitSlash(pos) + '%). No burn after the lock ends.';
+    row.appendChild(exitTd);
 
     tbody.appendChild(row);
   });

@@ -6,7 +6,7 @@ let connectedAccount = null;
 const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(args);
 
 import {
-  MARKET, SEL, encUint, decodeWords, wordToBigInt, wordToAddr, formatUnits,
+  MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
   cancelNftListings, encCreateListing, encSetApprovalForAll
 } from './market-config.mjs';
 import { isMaxLock, expectedReward, exitSlash } from './metrics.mjs';
@@ -108,7 +108,7 @@ const LIVE_URLS = [
 // Number of 32-byte words in the listings(uint256) struct (measured by ABI).
 const WORDS_PER_LISTING = 11;
 
-async function ethCall(data) {
+async function ethCallTo(to, data) {
   const READ_RPCS = [
     'https://base-rpc.publicnode.com',
     'https://base.drpc.org',
@@ -123,7 +123,7 @@ async function ethCall(data) {
           jsonrpc: '2.0',
           id: 1,
           method: 'eth_call',
-          params: [{ to: MARKET.market, data }, 'latest']
+          params: [{ to, data }, 'latest']
         })
       });
       if (!response.ok) continue;
@@ -137,6 +137,7 @@ async function ethCall(data) {
   }
   throw new Error('all public RPCs failed');
 }
+async function ethCall(data) { return ethCallTo(MARKET.market, data); }
 
 // Ensure the wallet is on the expected chain, switching (and adding if needed)
 // instead of bailing out with a 'wrong network' message.
@@ -249,7 +250,18 @@ async function readListings() {
     }
 
     const isLive = (soldTime === 0n && endTime >= now);
-    out.push({ listingId, nftId, seller, currency, price, soldTime, endTime, isLive });
+    let owner = null;
+    if (isLive) {
+      try {
+        const oRaw = await ethCallTo(MARKET.nft,
+          SEL.ownerOf + encUint(nftId));
+        owner = wordToAddr(decodeWords(oRaw)[0]);
+      } catch {
+        owner = null;
+      }
+    }
+    const ownerMismatch = isLive && (!owner || owner.toLowerCase() !== seller.toLowerCase());
+    out.push({ listingId, nftId, seller, currency, price, soldTime, endTime, isLive, ownerMismatch });
   }
 
   // ensure deterministic order
@@ -309,6 +321,7 @@ function render(snapshot, items) {
     let lockVal = '\u2014';
     let rewardVal = '\u2014';
     let slashVal = '\u2014';
+    let unclaimedVal = '\u2014';
 
     if (item.isLive && pos) {
       const ants = Number(pos.amount) / 1e18;
@@ -318,10 +331,17 @@ function render(snapshot, items) {
       rewardVal = Number(rew).toFixed(2);
       // add percent sign to slash value
       slashVal = `${exitSlash(pos)}%`;
+      const cur = String(Number(snapshot.epoch));
+      const prev = String(Number(snapshot.epoch) - 1);
+      const unclaimed = (Number(BigInt(pos.rewardByEpoch?.[prev] ?? 0)) + Number(BigInt(pos.rewardByEpoch?.[cur] ?? 0))) / 1e18;
+      unclaimedVal = unclaimed.toFixed(2);
     }
 
-    const stateVal = item.isLive ? 'live' :
-      (item.soldTime !== 0n ? 'sold' : 'expired');
+    const dead = !!pos && (pos.withdrawn || Number(pos.closedAtEpoch) > 0);
+    const invalid = item.isLive && (dead || item.ownerMismatch || !pos);
+    const stateVal = invalid ? 'invalid' :
+      (item.isLive ? 'live' :
+        (item.soldTime !== 0n ? 'sold' : 'expired'));
 
     // ---- build DOM ----
     // "#<listingId>"
@@ -347,6 +367,9 @@ function render(snapshot, items) {
     // " \u00b7 reward <reward>"
     row.appendChild(document.createTextNode(' \u00b7 reward '));
     row.appendChild(makeSpan('reward', rewardVal));
+    row.appendChild(document.createTextNode(' \u00b7 unclaimed '));
+    row.appendChild(makeSpan('unclaimed', unclaimedVal));
+    row.appendChild(document.createTextNode(' \u2192 buyer'));
 
     // " \u00b7 slash <slash>"
     row.appendChild(document.createTextNode(' \u00b7 slash '));
@@ -358,14 +381,16 @@ function render(snapshot, items) {
 
     // button for live rows - Buy
     if (item.isLive) {
-      const btnBuy = document.createElement('button');
-      btnBuy.className = 'buy';
-      btnBuy.dataset.id = item.listingId.toString();
-      btnBuy.dataset.price = item.price.toString();
-      btnBuy.dataset.currency = item.currency;
-      btnBuy.textContent = 'Buy';
-      row.appendChild(document.createTextNode(' '));
-      row.appendChild(btnBuy);
+      if (!invalid) {
+        const btnBuy = document.createElement('button');
+        btnBuy.className = 'buy';
+        btnBuy.dataset.id = item.listingId.toString();
+        btnBuy.dataset.price = item.price.toString();
+        btnBuy.dataset.currency = item.currency;
+        btnBuy.textContent = 'Buy';
+        row.appendChild(document.createTextNode(' '));
+        row.appendChild(btnBuy);
+      }
 
       // button for cancelling the listing - Cancel
       const btnCancel = document.createElement('button');
@@ -391,6 +416,16 @@ function render(snapshot, items) {
   caveat2.dataset.caveat = 'Only one active listing per NFT.';
   caveat2.textContent = caveat2.dataset.caveat;
   table.appendChild(caveat2);
+
+  const caveat3 = document.createElement('div');
+  caveat3.dataset.caveat = 'Unclaimed staker rewards transfer to the buyer with the NFT. Sellers: claim before listing. Only the previous and current epoch are counted here.';
+  caveat3.textContent = caveat3.dataset.caveat;
+  table.appendChild(caveat3);
+
+  const caveat4 = document.createElement('div');
+  caveat4.dataset.caveat = 'A listing on a closed, split, moved or transferred position is invalid and cannot be bought.';
+  caveat4.textContent = caveat4.dataset.caveat;
+  table.appendChild(caveat4);
 }
 
 // Fill the data-panel="my-listings" panel with the current wallet's own lots
@@ -630,11 +665,20 @@ export function initCreateListing() {
       const accounts = await walletRequest({ method: 'eth_requestAccounts' });
       const from = accounts && accounts[0];
       if (!from) { say('No account'); btn.disabled = false; return; }
-      say('Approving the marketplace...');
-      await walletRequest({
-        method: 'eth_sendTransaction',
-        params: [{ from, to: MARKET.nft, data: encSetApprovalForAll(MARKET.market, true) }]
-      });
+      say('Checking marketplace approval...');
+      const aRaw = await ethCallTo(MARKET.nft, SEL.isApprovedForAll + encAddr(from) + encAddr(MARKET.market));
+      const approved = wordToBigInt(decodeWords(aRaw)[0]) !== 0n;
+      if (!approved) {
+        say('Approving the marketplace...');
+        await walletRequest({
+          method: 'eth_sendTransaction',
+          params: [{ from, to: MARKET.nft, data: encSetApprovalForAll(MARKET.market, true) }]
+        });
+        say('Approval sent. Wait for confirmation, then press Create listing again.');
+        btn.disabled = false;
+        return;
+      }
+      // continue to createListing as now
       say('Creating the listing...');
       const data = encCreateListing({
         nftCollection: MARKET.nft,

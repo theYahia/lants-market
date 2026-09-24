@@ -86,8 +86,23 @@ def expected_reward(snap, pos) -> float:
 
 
 def is_max_lock(pos, epoch) -> bool:
+    """Return ``True`` only if the position has a *positive* max‑lock power for the
+    given epoch and that power equals the weight for the same epoch.
+
+    The original implementation returned ``True`` even when the max‑lock power was
+    ``0`` (or missing), which caused false‑positive "max" labels.  This version mirrors the
+    corrected JavaScript logic.
+    """
     e = str(epoch)
-    return pos["weightsByEpoch"][e] == pos["maxLockPowerByEpoch"][e]
+    # Guard against missing data
+    max_lock = pos["maxLockPowerByEpoch"].get(e)
+    if max_lock is None:
+        return False
+    # Max‑lock must be a positive integer
+    if int(max_lock) <= 0:
+        return False
+    # Compare the weight with the (positive) max‑lock power
+    return pos["weightsByEpoch"].get(e) == max_lock
 
 
 def exit_slash(pos):
