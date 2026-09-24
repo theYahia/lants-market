@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{b as r}from"./chunk-76B3DWJN.js";import{$b as n,Ob as e}from"./chunk-WYQAMW35.js";import{i as t}from"./chunk-33MCIVAL.js";t();var f=async({chain:a,address:s,appId:c,rpcConfig:i,erc20Address:p})=>({balance:await e({chain:a,transport:n(r(a,i,c))}).readContract({address:p,abi:o,functionName:"balanceOf",args:[s]}).catch((()=>0n)),chain:a}),o=[{constant:!0,inputs:[{name:"_owner",type:"address"}],name:"balanceOf",outputs:[{name:"balance",type:"uint256"}],payable:!1,stateMutability:"view",type:"function"}];export{f as a};

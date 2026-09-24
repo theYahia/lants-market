@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>lANTS Market — Docs</title>
+    <link rel="stylesheet" href="app.css">
+    <style>
+        .doc-layout {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        .doc-nav {
+            position: sticky;
+            top: 1rem;
+            align-self: start;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 1rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+        }
+        .doc-nav a {
+            color: var(--accent);
+            text-decoration: none;
+            font-family: var(--font-sans);
+            font-size: 0.9rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .doc-nav a:last-child {
+            border-bottom: none;
+        }
+        .doc-main {
+            min-width: 0;
+        }
+        .doc-main table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        .doc-main table th,
+        .doc-main table td {
+            border: 1px solid var(--line);
+            padding: 0.5rem 1rem;
+            text-align: left;
+        }
+        .doc-main table th {
+            background: var(--bg);
+            color: var(--ink);
+            font-weight: bold;
+        }
+        .doc-main table td {
+            color: var(--ink);
+        }
+        .doc-main pre {
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .doc-main pre code {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--ink);
+            line-height: 1.6;
+        }
+        .doc-main section {
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 2rem;
+        }
+        .doc-main section:last-child {
+            border-bottom: none;
+        }
+        @media (max-width: 860px) {
+            .doc-layout {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            .doc-nav {
+                position: static;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            .doc-nav a {
+                border-bottom: none;
+                padding: 0.25rem 0.5rem;
+                background: var(--bg);
+                border: 1px solid var(--line);
+                border-radius: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; border-bottom: 1px solid var(--line);">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="width: 24px; height: 24px; background: var(--accent); border-radius: 6px;"></div>
+            <span style="font-family: var(--font-mono); color: var(--ink);">lANTS</span>
+        </div>
+        <a href="index.html" style="color: var(--accent); text-decoration: none; font-family: var(--font-sans);">Back to market</a>
+    </header>
+    <div class="doc-layout">
+        <nav class="doc-nav">
+            <a href="#introduction">Introduction</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#listings">Listings</a>
+            <a href="#positions-rewards">Positions & Rewards</a>
+            <a href="#snapshot-data">Snapshot & Data</a>
+            <a href="#faq">FAQ</a>
+            <a href="#contact">Contact</a>
+            <a href="#privacy-terms">Privacy & Terms</a>
+        </nav>
+        <main class="doc-main">
+            <section id="introduction">
+<h1>Introduction</h1>
+<p>The lANTS marketplace is a contract for listing and selling lANTS positions on Base (chainId 8453). Positions are ERC-721 tokens issued by the AntseedSellerPools collection. Payment is settled in USDC.</p>
+<p>This site documents the deployed contracts as they are, including their current limits. It does not describe planned features as if they existed.</p>
+<h2>Contracts</h2>
+<table>
+<thead>
+<tr><th>Component</th><th>Address</th></tr>
+</thead>
+<tbody>
+<tr><td>Marketplace (<code>VexyMarketplace</code>)</td><td><code>0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660</code></td></tr>
+<tr><td>Position collection (<code>AntseedSellerPools</code>)</td><td><code>0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652</code></td></tr>
+<tr><td>USDC (6 decimals)</td><td><code>0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913</code></td></tr>
+<tr><td>ANTS token</td><td><code>0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263</code></td></tr>
+<tr><td>Emissions (<code>emissionsGate</code>)</td><td><code>0xE60a31E6CD2F8455503cA0B3f6545Dd3DDF543BD</code></td></tr>
+<tr><td>Operator / fee recipient</td><td><code>0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B</code></td></tr>
+</tbody>
+</table>
+<p>ENS name: <code>lants.eth</code>.</p>
+<h2>What you can do today</h2>
+<ul>
+<li>List an lANTS position you own for a USDC price.</li>
+<li>Buy a listed position; the token transfers directly from seller to buyer.</li>
+<li>Cancel your own listings at any time, for free.</li>
+</ul>
+<p>A 1% fee is taken from each sale and sent to the fee recipient.</p>
+<h2>What does not exist yet</h2>
+<ul>
+<li><strong>Offers.</strong> There is no offer contract for this market. The storefront</li>
+</ul>
+<p>shows a "coming soon" label. Do not expect offer functionality.</p>
+<ul>
+<li><strong>Listings.</strong> The market is empty at the time of writing</li>
+</ul>
+<p>(<code>listingsLength() = 0</code>). No position has been listed yet.</p>
+<h2>How this site reads the chain</h2>
+<p>The storefront works from a snapshot taken at a fixed block, not from a live read of the whole network. Every data table is labelled with its snapshot block and epoch (for example: block 51613321, epoch 23). Values you see reflect that block, not the current head.</p>
+<h2>Origin</h2>
+<p>The marketplace contract is adapted from Vexy by @0xValde. The source is marked <code>UNLICENSED</code>. The credit is stated here and in Privacy & Terms, openly and without hiding it.</p>
+<h2>Who runs this</h2>
+<p>The project is built by one person with help from AntSeed network models. There is no company and no team page.</p>
+</section>
+<section id="how-it-works">
+<h1>How it works</h1>
+<p>The marketplace lets an NFT owner list a token for sale in USDC without transferring the token into escrow. The NFT stays in the seller's wallet until a purchase completes.</p>
+<h2>Roles and custody</h2>
+<p>The seller keeps ownership of the NFT for the entire life of a listing. To make a sale possible, the seller must approve the marketplace to move the token:</p>
+<pre><code>setApprovalForAll(market, true)   // selector 0xa22cb465</code></pre>
+<p>Without this approval a buyer's transaction reaches the payment stage and then reverts on the ERC-721 transfer. No funds change hands in a reverted transaction.</p>
+<h2>Currency and price format</h2>
+<p>All listings are priced in USDC. USDC uses 6 decimals, so a price is an integer count of micro-dollars:</p>
+<table>
+<thead>
+<tr><th>Price</th><th>Value passed to the contract</th></tr>
+</thead>
+<tbody>
+<tr><td>$0.10</td><td>100000</td></tr>
+<tr><td>$1.00</td><td>1000000</td></tr>
+<tr><td>$100.00</td><td>100000000</td></tr>
+</tbody>
+</table>
+<p>The contract rejects any currency other than USDC.</p>
+<h2>Fee</h2>
+<p>A fixed 1% fee applies to every sale:</p>
+<pre><code>FEE = 0.01 ether
+fee = price * FEE / 1e18   // exactly 1% of price</code></pre>
+<p>On purchase the buyer pays <code>price</code>. The seller receives <code>price - fee</code>, and the fee recipient receives <code>fee</code>. Both transfers happen in the same transaction.</p>
+<h2>Lifetime</h2>
+<p>Every listing has an end time set at creation:</p>
+<pre><code>endTime = block.timestamp + fixedDuration + slopeDuration</code></pre>
+<p>The combined duration cannot exceed 60 days. After <code>endTime</code> the listing can no longer be bought; a purchase attempt reverts.</p>
+<h2>Cancellation</h2>
+<p>A seller cancels by calling:</p>
+<pre><code>cancelNftListings(nftCollection, nftId)</code></pre>
+<p>This increments the seller's nonce for that NFT. Every prior listing on that token no longer matches the current nonce and becomes invalid. Cancellation costs only gas.</p>
+<p>It does not delete anything. The listing record stays in the <code>listings</code> array, and the transaction history remains on-chain permanently. "Invalid" means unbuyable, not removed.</p>
+</section>
+<section id="listings">
+<h1>Listings</h1>
+<p>A listing records who is selling which NFT, at what price, in USDC, and until when.</p>
+<h2>Creating a listing</h2>
+<p>Listings are created with:</p>
+<pre><code>createListing(
+  address nftCollection,
+  uint256 nftId,
+  address currency,       // must be USDC
+  uint256 price,
+  uint96  slopeMax,
+  uint32  slopeDuration,
+  uint32  fixedDuration
+)</code></pre>
+<p>Requirements enforced by the contract:</p>
+<table>
+<thead>
+<tr><th>Check</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>ownerOf(nftId) == msg.sender</code></td><td>You must own the NFT to list it.</td></tr>
+<tr><td><code>slopeDuration + fixedDuration <= 60 days</code></td><td>Total lifetime is capped at 60 days.</td></tr>
+<tr><td><code>currency == USDC</code></td><td>Only USDC is accepted.</td></tr>
+<tr><td><code>listingPrice(listingId) > 0</code></td><td>A zero-price listing cannot be created.</td></tr>
+</tbody>
+</table>
+<p>The NFT is not moved on listing. Remember to approve the marketplace (<code>setApprovalForAll</code>), or sales will revert.</p>
+<h2>Fixed price vs. Dutch auction</h2>
+<p>The contract supports two pricing modes through the same function.</p>
+<p><strong>Fixed price.</strong> With <code>slopeMax = 0</code> and <code>slopeDuration = 0</code>, <code>listingPrice</code> always returns the base <code>price</code>. The listing form on this site creates fixed-price listings only.</p>
+<p><strong>Dutch auction.</strong> With a non-zero <code>slopeMax</code> and <code>slopeDuration</code>, the price starts above the base price and falls to it along a cubic curve:</p>
+<pre><code>r = (endTime - fixedDuration - now) * 1e12 / slopeDuration
+price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
+<p>Once the slope period has passed, <code>listingPrice</code> returns the base <code>price</code>. Dutch-auction listings are not offered by the form and must be created by calling the contract directly.</p>
+<h2>Buying a listing</h2>
+<pre><code>buyListing(uint256 listingId)</code></pre>
+<p>Conditions that must all hold:</p>
+<table>
+<thead>
+<tr><th>Check</th><th>If it fails</th></tr>
+</thead>
+<tbody>
+<tr><td><code>soldTime == 0</code></td><td>Already sold.</td></tr>
+<tr><td><code>endTime >= block.timestamp</code></td><td>Listing has expired.</td></tr>
+<tr><td><code>sellerNftNonce == current nonce</code></td><td>Listing was cancelled.</td></tr>
+</tbody>
+</table>
+<p>When all conditions hold, the buyer pays <code>price</code> in USDC. The seller receives <code>price - fee</code>, the fee recipient receives <code>fee</code>, and the NFT is transferred from seller to buyer in the same transaction.</p>
+</section>
+<section id="positions-rewards">
+<h1>Positions & Rewards</h1>
+<p>A staking position is an ERC-721 token minted when you stake ANTS into a seller's pool. One stake produces one token. The collection is <code>0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652</code>.</p>
+<p><code>positions(uint256)</code> returns: <code>owner</code>, <code>agentId</code>, <code>amount</code>, <code>weightAmount</code>, <code>stakeStartEpoch</code>, <code>stakeEndEpoch</code>, <code>closedAtEpoch</code>, <code>withdrawn</code>.</p>
+<p>Example — position #27, read on-chain:</p>
+<table>
+<thead>
+<tr><th>Field</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>owner</td><td><code>0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B</code></td></tr>
+<tr><td>agentId</td><td>52894</td></tr>
+<tr><td>amount</td><td>10,075.913604428940056768 ANTS</td></tr>
+<tr><td>stakeStartEpoch</td><td>24</td></tr>
+<tr><td>stakeEndEpoch</td><td>128 (104-epoch lock)</td></tr>
+<tr><td>closedAtEpoch</td><td>0</td></tr>
+<tr><td>withdrawn</td><td>false</td></tr>
+</tbody>
+</table>
+<p><strong>Epochs.</strong> An epoch lasts one week. Epoch 23 began 2026-09-17 09:54 UTC; epoch 24 begins 2026-09-24 09:54 UTC. <code>currentEpoch()</code> at snapshot time was 23.</p>
+<p><strong>Activation.</strong> <code>stakeActivationDelay()</code> = 1, so a position is not active in the epoch it is created. Calling <code>splitStake</code> on an inactive position reverts with <code>PositionClosed()</code> even though <code>closedAtEpoch</code> is 0.</p>
+<p><strong>Lock bounds.</strong> <code>minStakeEpochs()</code> = 1, <code>MAX_STAKE_EPOCHS()</code> = 104.</p>
+<p><strong>Early exit.</strong> Exiting before the end epoch is slashed by <code>earlyExitSlashBps</code>. For #27 this is 50%. The floor you recover on early exit is <code>amount * (1 - slash)</code> = 5,037.96 ANTS.</p>
+<p><strong>Rewards.</strong> A staker's reward for an epoch is driven by pool *sales*, not by stake size:</p>
+<pre><code>poolReward     = stakerBudget * (poolSales * poolWeight) / sum(poolSales * poolWeight over all pools)
+positionReward = poolReward * positionWeight / poolWeight</code></pre>
+<p><code>stakerBudget</code> = 100,000 ANTS per epoch, read via raw selector <code>0x56ab55c5</code> on the <code>emissionsGate</code> contract <code>0xE60a31E6CD2F8455503cA0B3f6545Dd3DDF543BD</code> at block 51613321. This selector has no name in any signature database and the contract ABI is not verified. The value is constant across epochs 21, 22 and 23 and equals 2% of the weekly emission of 5,000,000 ANTS derived from <code>currentEmissionRate()</code>.</p>
+<p>Position #27 metrics for the next epoch:</p>
+<table>
+<thead>
+<tr><th>Metric</th><th>Value</th><th>Definition</th></tr>
+</thead>
+<tbody>
+<tr><td>reward</td><td>38,486 ANTS</td><td>next-epoch position reward</td></tr>
+<tr><td>yield</td><td>3.820</td><td>reward / amount</td></tr>
+<tr><td>payback</td><td>0.131</td><td>floor / reward (epochs for the reward to cover the floor)</td></tr>
+</tbody>
+</table>
+<p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The stake contract is on the <code>transferWhitelist</code>, so you can stake, but you cannot send ANTS to another person. Because of this, the position NFT is the only way to move locked ANTS.</p>
+<p>---</p>
+</section>
+<section id="snapshot-data">
+<h1>Snapshot & Data</h1>
+<p>The site computes from a snapshot, not from a live read of the whole network.</p>
+<p>Latest snapshot: block 51613321, epoch 23, taken 2026-09-21T18:42:00.253Z. The line under the table reads <code>Snapshot: block ..., epoch ..., taken ...</code>.</p>
+<p>The snapshot contains 50 positions, sales across 199 pools, and weights across 199 pools. Pool weights are read with <code>poolWeightAtEpoch(agentId, epoch)</code> for every pool with non-zero sales — 199 sequential calls through <code>base-rpc.publicnode.com</code>.</p>
+<p><strong>Known defect, fixed.</strong> Before 2026-09-21, weights were collected only for the 32 pools that hold our own positions, so the reward denominator was understated. The ratio of the full denominator to the partial one was 1.1179. As a result the site showed #27 at 43,022 instead of 38,486 — 11.8% too high. The defect was found and corrected, and the snapshot was rebuilt.</p>
+<p><strong>Sources.</strong> Pool sales come from the public API <code>antscan.co/api/sellers</code>, a third-party community site, not an on-chain source. Everything else is read directly from Base.</p>
+<p><strong>Cross-check.</strong> Positions are read from two independent RPCs (<code>base-rpc.publicnode.com</code> and <code>base.drpc.org</code>) and compared. If they disagree, the build fails.</p>
+<p><strong>Privacy.</strong> The page has no backend and does not collect user data. The wallet connects in the browser, and network requests go through the wallet's provider.</p>
+<p>---</p>
+</section>
+<section id="faq">
+<h1>FAQ</h1>
+<h3>What is a lANTS position, and why does this market exist?</h3>
+<p>A position is an ERC-721 from the AntseedSellerPools collection (0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652 on Base, chainId 8453). It represents ANTS locked by staking into a seller pool. ANTS themselves are non-transferable between wallets: transfersEnabled() is false and a transfer reverts with TransfersNotEnabled(). The stake contract sits in the transfer whitelist, so the position NFT is the only way to hand locked ANTS to another wallet. This market exists so that NFT can change hands.</p>
+<h3>How do I get a position?</h3>
+<p>The main path is to stake: call stake(agentId, amount, stakeEpochs) on the pool, which mints the position NFT to you. stakeEpochs runs from minStakeEpochs = 1 to MAX_STAKE_EPOCHS = 104, where one epoch is one week. The position activates from the next epoch: stakeActivationDelay = 1. The other path is to buy an existing position from a listing here.</p>
+<h3>How do I list a position for sale?</h3>
+<p>First call setApprovalForAll for the marketplace, VexyMarketplace (0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660); the NFT stays in your wallet. Then call createListing(nftCollection, nftId, currency, price, slopeMax, slopeDuration, fixedDuration). Settlement is in USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, 6 decimals). The seller pays a 1 % fee on sale. slopeDuration + fixedDuration must be <= 60 days.</p>
+<h3>What is the difference between a fixed price and a Dutch auction?</h3>
+<p>Fixed price: slopeMax = 0 and slopeDuration = 0. The price is constant. Dutch auction: slopeMax and slopeDuration are non-zero. price is the base price, which is also the final and minimum price; the auction starts above it and declines toward it.</p>
+<h3>How does the Dutch auction price actually move?</h3>
+<p>r is the remaining slope time: r = (endTime - fixedDuration - now) * 1e12 / slopeDuration. The price is price + (price * r^3 / 1e36) * slopeMax / 1e18. Early in the slope r is near 1, so the price is at its maximum and falls fast; toward the end it flattens out at the base price. The r^3 term means most of the drop happens near the start.</p>
+<h3>How do I buy a listing?</h3>
+<p>Buyers fill a listing directly at its current price, paid in USDC. There is no bidding and no offer system: no offer contract exists.</p>
+<h3>How do I cancel a listing?</h3>
+<p>Call cancelNftListings(nftCollection, nftId). It cancels ALL of your listings on that NFT at once by incrementing the nonce; you cannot cancel a single lot by id. The records are not deleted, they just become unbuyable. The only cost is gas.</p>
+<h3>How much will my position sell for?</h3>
+<p>We don't know, and we won't pretend to. <strong>There have been zero sales.</strong> There is no trade history, no volume, and no discount range to quote. The first sale will be the first data point. Anyone citing an expected price right now is guessing.</p>
+<h3>Are there any listings right now?</h3>
+<p>Currently none. The market is empty. When it isn't, listings appear here automatically from on-chain data. There is no offer system: buyers fill listings directly, they do not bid.</p>
+<h3>How does the interface read data?</h3>
+<p>This site is static. All reads come from your connected wallet or a public RPC endpoint. There is no backend, no database, no server-side indexer of ours.</p>
+<h3>Who makes this, and what do you collect about me?</h3>
+<p>One person, with help from AntSeed network models. There is no company and no team. We collect nothing: no accounts, no analytics, no cookies, no logs. See Privacy & Terms.</p>
+</section>
+<section id="contact">
+<h1>Contact</h1>
+<p>Reach out on X. The ENS name lants.eth is a wallet address for on-chain interaction, not an inbox. We make no promise to respond.</p>
+<table>
+<thead>
+<tr><th>Channel</th><th>Where</th><th>Use it for</th></tr>
+</thead>
+<tbody>
+<tr><td>X</td><td><a href="https://x.com/TheTieTieTies" target="_blank" rel="noopener">@TheTieTieTies</a></td><td>Questions and notes</td></tr>
+<tr><td>ENS</td><td>lants.eth</td><td>Identifying the operator wallet on-chain</td></tr>
+</tbody>
+</table>
+</section>
+<section id="privacy-terms">
+<h1>Privacy & Terms</h1>
+<h2>Privacy</h2>
+<p>This interface is static and non-custodial. It never touches your keys or funds — every action is a transaction you sign in your own wallet.</p>
+<ul>
+<li>The wallet modal is Privy (privy.io), a React SDK bundled into this page; it talks to Privy servers (auth.privy.io) when the modal opens and a wallet connects. Login is wallet-only — no email, no social accounts, no embedded wallets — and connecting a phone by QR uses the public WalletConnect relay through the WalletConnect project ID configured by Privy.</li>
+<li>We use no analytics, no logging, no cookies. We do not collect or store personal data ourselves.</li>
+<li>Anything you send to the blockchain — addresses, listings, trades — is</li>
+</ul>
+<p>public and permanent. We can't delete or alter it, and neither can anyone else.</p>
+<h2>Terms</h2>
+<ul>
+<li>The marketplace contract is adapted from Vexy and provided as-is, without</li>
+</ul>
+<p>warranties of any kind.</p>
+<ul>
+<li>You are responsible for verifying contract addresses before you interact and</li>
+</ul>
+<p>for reviewing every transaction you sign.</p>
+<ul>
+<li>Eligibility: don't use this interface if doing so is prohibited where you live.</li>
+</ul>
+<p>We have no way to verify who you are and make no representation that use is lawful in your jurisdiction — that check is yours.</p>
+<p>We are not a registered entity and hold none of your data or assets. This is software, used at your own risk.</p>
+</section>
+
+        </main>
+    </div>
+    <footer style="text-align: center; padding: 2rem; border-top: 1px solid var(--line); color: var(--muted); font-family: var(--font-sans);">
+        <a href="index.html" style="color: var(--accent);">index.html</a> — Marketplace contract adapted from Vexy by @0xValde
+    </footer>
+</body>
+</html>

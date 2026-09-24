@@ -1,0 +1,384 @@
+{
+  "epoch": 23,
+  "generatedAt": "2026-09-19T18:24:54.200Z",
+  "positions": [
+    {
+      "id": "1",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "2",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "3",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "4",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "5",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "6",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "7",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "8",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "9",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "10",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "11",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "12",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "13",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "14",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "15",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "16",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "17",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "18",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "19",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "20",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "21",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "22",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "23",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "24",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "25",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "26",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "27",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "28",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "29",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "30",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "31",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "32",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "33",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "34",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "35",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "36",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "37",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "38",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "39",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "40",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "41",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    },
+    {
+      "id": "42",
+      "agentId": "undefined",
+      "amount": "undefined",
+      "weightAmount": "undefined",
+      "stakeStartEpoch": "undefined",
+      "stakeEndEpoch": "undefined",
+      "closedAtEpoch": "undefined"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{a as i}from"./chunk-ISUVDYAI.js";import{b as l}from"./chunk-WDIA52AP.js";import{e as h,i as o}from"./chunk-33MCIVAL.js";o();var e=h(l(),1);var g=({icon:t,name:s})=>typeof t=="string"?(0,e.jsx)("img",{alt:`${s||"wallet"} logo`,src:t,style:{height:24,width:24,borderRadius:4}}):t===void 0?(0,e.jsx)(i,{style:{height:24,width:24}}):t?(0,e.jsx)(t,{style:{height:24,width:24}}):null;export{g as a};

@@ -1,0 +1,8 @@
+lANTS Market bundles the following third-party software in this directory:
+
+- @privy-io/react-auth 3.45.0, Copyright Privy, licensed under the Apache License 2.0 (see LICENSE).
+- react 19.3.0 and react-dom 19.3.0, Copyright Meta Platforms, Inc. and affiliates, MIT License.
+- @walletconnect/ethereum-provider 2.22.4 and @reown/appkit 1.8.9 (pulled in by @privy-io/react-auth for WalletConnect QR). Portions (c) 2025 Reown, Inc. All Rights Reserved. Reown Community License (see LICENSE.md).
+- process 0.11.10 and buffer 6.0.3, MIT License.
+
+The bundle was built with esbuild from site/src/privy-bridge.jsx without modifying the upstream packages.

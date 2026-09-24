@@ -1,0 +1,76 @@
+name: snapshot
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+    - cron: '0 14 * * *'
+    - cron: '0 22 * * *'
+  workflow_dispatch: {}
+
+env:
+  SELLERS_FILE: sellers.json
+  IPNS_KEY: k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Fetch antscan sellers
+        continue-on-error: true
+        run: curl -sf -o sellers.json https://antscan.co/api/sellers
+
+      - name: Enrich snapshot
+        run: node site/enrich-snapshot.mjs
+
+      - name: Enrich sales
+        run: node site/enrich-sales.mjs --sellers sellers.json
+
+      - name: Sanity check (gate — fail without publishing)
+        run: node site/sanity-check.mjs
+
+      - name: Build dist
+        run: node scripts/site/build-dist.mjs
+
+      - name: Publish (CAR + IPNS)
+        env:
+          FILEBASE_KEY: ${{ secrets.FILEBASE_KEY }}
+          FILEBASE_SECRET: ${{ secrets.FILEBASE_SECRET }}
+        run: node scripts/deploy/publish.mjs
+
+      - name: Verify live URL after publish
+        run: |
+          set -euo pipefail
+          URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            echo "verify attempt ${attempt}: ${URL}"
+            code=$(curl -sS -o body.json -w '%{http_code}' "${URL}" || echo 000)
+            if [ "${code}" = "200" ]; then
+              if grep -q 'generatedAt' body.json; then
+                echo "live snapshot OK (HTTP 200, generatedAt present)"
+                cat body.json | head -c 400
+                ok=1
+                break
+              else
+                echo "HTTP 200 but generatedAt missing, retrying..."
+              fi
+            else
+              echo "HTTP ${code}, retrying after propagation sleep..."
+            fi
+            sleep 20
+          done
+          if [ "${ok}" != "1" ]; then
+            echo "FAILED: live snapshot-e23.live.json not confirmed (200 + generatedAt)"
+            exit 1
+          fi

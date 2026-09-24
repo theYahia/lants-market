@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{Aa as s}from"./chunk-WB6MAAQS.js";import{a as m}from"./chunk-WDIA52AP.js";import{e as P,i}from"./chunk-33MCIVAL.js";i();var r=P(m(),1);var y=({enabled:a=!0}={})=>{let{showFiatPrices:c,getUsdPriceForSol:l}=s(),[f,o]=(0,r.useState)(!0),[n,t]=(0,r.useState)(void 0),[d,u]=(0,r.useState)(void 0);return(0,r.useEffect)((()=>{(async()=>{if(c&&a)try{o(!0);let e=await l();e?u(e):t(Error("Unable to fetch SOL price"))}catch(e){t(e)}finally{o(!1)}else o(!1)})()}),[]),{solPrice:d,isSolPriceLoading:f,solPriceError:n}};export{y as a};

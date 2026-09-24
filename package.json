@@ -1,0 +1,22 @@
+{
+  "name": "lants-market",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Valuation board and market layer for locked ANTS positions (lANTS) on AntSeed",
+  "scripts": {
+    "probe:state": "node scripts/probes/net-state.cjs",
+    "probe:sellers": "node scripts/probes/seller-rank.cjs"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "3.45.0",
+    "buffer": "6.0.3",
+    "process": "0.11.10",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "viem": "^2.52.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "ipfs-car": "^3.1.0"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env*
+*.log
+foundry.lock
+site.png
+dist/
+*.bak
+site/fixtures/snapshot-e23.live.json
+# build output
+contracts/out/
+contracts/cache/

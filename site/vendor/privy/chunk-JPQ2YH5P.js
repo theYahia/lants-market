@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{a as n}from"./chunk-5PBRHVUG.js";import{a as c,b as d}from"./chunk-WDIA52AP.js";import{e as o,i as m}from"./chunk-33MCIVAL.js";m();var a=o(d(),1),r=o(c(),1);var i=n((()=>({}))),u=({children:e,configPlugins:t})=>((0,r.useEffect)((()=>{if(t&&t.length!==0)return i.setState(Object.fromEntries(t.map((s=>[s.id,s])))),()=>{i.setState(Object.fromEntries(t.map((s=>[s.id,void 0]))))}}),[t]),(0,a.jsx)(a.Fragment,{children:e}));var f=e=>i.getState()[e],S=()=>(0,r.useCallback)((e=>f(e)),[]);export{u as a,f as b,S as c};

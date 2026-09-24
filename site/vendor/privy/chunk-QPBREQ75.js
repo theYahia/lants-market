@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{a as i}from"./chunk-WDIA52AP.js";import{e as c,i as o}from"./chunk-33MCIVAL.js";o();var e=c(i(),1);function l({title:t,titleId:r,...n},a){return e.createElement("svg",Object.assign({xmlns:"http://www.w3.org/2000/svg",fill:"none",viewBox:"0 0 24 24",strokeWidth:1.5,stroke:"currentColor","aria-hidden":"true","data-slot":"icon",ref:a,"aria-labelledby":r},n),t?e.createElement("title",{id:r},t):null,e.createElement("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"m19.5 8.25-7.5 7.5-7.5-7.5"}))}var s=e.forwardRef(l),u=s;export{u as a};

@@ -1,0 +1,2 @@
+/*privy-bundle*/
+import{a as u}from"./chunk-WDIA52AP.js";import{e as c,i as a}from"./chunk-33MCIVAL.js";a();var e=c(u(),1),m=t=>{let[o,s]=(0,e.useState)();return(0,e.useEffect)((()=>{t().then((p=>{s(p)})).catch((()=>{}))}),[]),o},n=async t=>typeof window<"u"&&"PaymentRequest"in window&&await new window.PaymentRequest([{supportedMethods:t}],{id:"0",total:{label:"Item",amount:{currency:"USD",value:"1.00"}}}).canMakePayment(),d=()=>n("https://apple.com/apple-pay"),r=()=>n("https://google.com/pay");export{m as a,d as b,r as c};
