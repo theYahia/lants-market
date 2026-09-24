@@ -99,11 +99,9 @@ const SELECTORS = {
   listingPrice: SEL.listingPrice
 };
 
-// Live snapshot URLs: primary (data branch) first, IPNS fallback.
-const LIVE_URLS = [
-  'https://raw.githubusercontent.com/theYahia/lants-market/data/live.json',
-  'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json'
-];
+// Canonical live snapshot URL (IPNS via filebase gateway).
+const LIVE_URL =
+  'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json';
 
 // Number of 32-byte words in the listings(uint256) struct (measured by ABI).
 const WORDS_PER_LISTING = 11;
@@ -171,25 +169,19 @@ async function loadSnapshot() {
     return await res.json();
   }
 
-  // Try live URLs first (primary then fallback)
-  for (const url of LIVE_URLS) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const json = await res.json();
-      if (json && json.generatedAt) return json;
-    } catch (_) {
-      // ignore and try next URL
-    }
-  }
-  // Fallback to local fixtures (exactly as before)
   try {
-    const res = await fetch('./fixtures/snapshot-e23.live.json');
+    const res = await fetch(LIVE_URL);
     if (!res.ok) throw new Error('bad status ' + res.status);
     return await res.json();
-  } catch (e2) {
-    const res = await fetch('./fixtures/snapshot-e23.full.json');
-    return await res.json();
+  } catch (e) {
+    try {
+      const res = await fetch('./fixtures/snapshot-e23.live.json');
+      if (!res.ok) throw new Error('bad status ' + res.status);
+      return await res.json();
+    } catch (e2) {
+      const res = await fetch('./fixtures/snapshot-e23.full.json');
+      return await res.json();
+    }
   }
 }
 

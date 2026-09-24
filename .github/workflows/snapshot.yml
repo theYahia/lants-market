@@ -21,8 +21,6 @@ concurrency:
 
 jobs:
   snapshot:
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -187,18 +185,3 @@ jobs:
           else
             echo "::warning::IPNS gateway fetch failed; propagation usually takes ~15 minutes"
           fi
-
-      - name: Update data branch
-        if: steps.decide.outputs.run == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          CID=$(grep -oE 'root CID = [^ ]+' publish.log | awk '{print $4}'); [ -n "$CID" ] || { echo "no CID"; exit 1; }
-          rm -rf data-out && mkdir data-out
-          node -e "const s=require('./dist/fixtures/snapshot-e23.live.json'); s.cid=process.argv[1]; require('fs').writeFileSync('data-out/live.json', JSON.stringify(s))" "$CID"
-          cd data-out && git init -q && git checkout -q --orphan data && git add live.json
-          GEN=$(node -e "console.log(require('./live.json').generatedAt)")
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "chore(data): live snapshot $GEN ($CID)"
-          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
-          echo "data branch updated: $GEN $CID"
