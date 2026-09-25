@@ -55,12 +55,12 @@
           </div>
 
           <div class="metric-card" id="m-positions">
-            <div class="metric-label">7-Day Volume</div>
+            <div class="metric-label">7-Day Volume<span class="info" tabindex="0" data-tip="External lANTS sales volume in USDC over the last 7 days; internal trades excluded.">ⓘ</span></div>
             <div class="metric-value">$0</div>
           </div>
 
           <div class="metric-card" id="m-locked">
-            <div class="metric-label" title="Median price per locked ANTS from external sales in the last 30 days times the 1.04B max supply. Shown only after 3 external sales; trades between our own wallets never count.">Implied FDV</div>
+            <div class="metric-label">Implied FDV<span class="info" tabindex="0" data-tip="Median external price per locked ANTS over 30 days × 1.04B max supply; after 3 sales.">ⓘ</span></div>
             <div class="metric-value">—</div>
           </div>
 
@@ -81,11 +81,11 @@
                     <table>
                         <thead>
                             <tr>
-                                <th title="Position id in the lANTS collection on Base.">#</th>
-                                <th class="text-right" title="ANTS locked in this position.">AMOUNT</th>
-                                <th class="text-right" title="Remaining lock in weeks; 'max' means a max lock whose weight stays constant and does not count down.">LOCK</th>
-                                <th class="text-right" title="Reward from the staking contract for the current epoch: this position's live share of the epoch's staker budget, based on actual purchases in its pool so far. It moves during the epoch and settles at the epoch end. Early in an epoch, before any purchases count, the previous epoch's reward is shown. Refreshed with every snapshot.">REWARD<span class="th-note" id="th-reward-note">live</span></th>
-                                <th class="text-right" title="Net ANTS returned if you exit the lock early, after the slash. A seller has no reason to sell below this; a buyer can treat it as the floor of any negotiation. No sales or market prices are implied.">EXIT<span class="th-note">net</span></th>
+                                <th>#<span class="info" tabindex="0" data-tip="Position id in the lANTS collection on Base.">ⓘ</span></th>
+                                <th class="text-right">AMOUNT<span class="info" tabindex="0" data-tip="ANTS locked in this position.">ⓘ</span></th>
+                                <th class="text-right">LOCK<span class="info" tabindex="0" data-tip="Weeks left in the lock; 'max' keeps constant weight that never counts down.">ⓘ</span></th>
+                                <th class="text-right">REWARD<span class="info" tabindex="0" data-tip="Staker reward for the current epoch; grows with pool purchases, settles at epoch end.">ⓘ</span><span class="th-note" id="th-reward-note">live</span></th>
+                                <th class="text-right">EXIT<span class="info" tabindex="0" data-tip="ANTS returned on early exit after the slash burn.">ⓘ</span><span class="th-note">net</span></th>
                             </tr>
                         </thead>
                         <tbody id="rows">
@@ -256,5 +256,6 @@
     <script type="module" src="./render.mjs"></script>
     <script type="module" src="./market-view.mjs"></script>
     <script type="module" src="./market-buy.mjs"></script>
+<script type="module" src="./tips.mjs"></script>
 </body>
 </html>

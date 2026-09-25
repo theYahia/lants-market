@@ -684,3 +684,21 @@ th.sort-desc {
 .is-maxlock{color:var(--accent);}
 .is-pending td:nth-child(4){color:var(--muted);}
 .cf-note{color:var(--muted);font-size:var(--fs-12);margin:4px 0 10px;}
+
+/* Info-icon tooltips (dark only) */
+.info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1em; height: 1em; margin-left: .35em;
+  font-size: .85em; line-height: 1;
+  color: var(--muted); opacity: .7;
+  cursor: help; vertical-align: middle; user-select: none;
+}
+.info:hover, .info:focus-visible { opacity: 1; outline: none; }
+#tip {
+  position: fixed; z-index: 9999; max-width: min(280px, 90vw);
+  padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line);
+  background: oklch(0.14 0.02 255); color: var(--muted);
+  font-family: var(--font-mono); font-size: var(--fs-11); line-height: 1.35;
+  pointer-events: none; opacity: 0; transition: opacity .1s;
+}
+#tip.show { opacity: 1; }
