@@ -827,3 +827,21 @@ body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio 
 .pf-placeholder p{color:var(--muted);margin:8px 0 16px;}
 #pf-connect{padding:10px 16px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-13);cursor:pointer;}
 #pf-placeholder:not([hidden]) ~ #my-listings{display:none;}
+/* My Positions: same look as the listings/positions tables, site tokens only */
+#pf-placeholder:not([hidden]) ~ #pf-positions-wrap{display:none;}
+.pf-positions-wrap,.my-listings{margin-top:24px;}
+.pf-positions-head h3,.my-listings-head h3{margin:0 0 8px;font-size:var(--fs-14);}
+#pf-positions,[data-panel="my-listings"]{background-color:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;}
+#pf-positions .pf-pos-head,#pf-positions .pf-pos-row{display:grid;grid-template-columns:64px 112px 72px 112px 112px 1fr;gap:8px 12px;align-items:center;padding:8px 12px;}
+#pf-positions .pf-pos-head{border-bottom:1px solid var(--line);}
+#pf-positions .pf-pos-head > span{color:var(--muted);font-size:var(--fs-10);font-weight:500;text-transform:uppercase;}
+#pf-positions .pf-pos-row + .pf-pos-row{border-top:1px solid var(--line);}
+#pf-positions .pf-pos-head > span:nth-child(2),#pf-positions .pf-pos-head > span:nth-child(3),#pf-positions .pf-pos-head > span:nth-child(4),#pf-positions .pf-pos-head > span:nth-child(5),
+#pf-positions .pf-pos-row > span:nth-child(2),#pf-positions .pf-pos-row > span:nth-child(3),#pf-positions .pf-pos-row > span:nth-child(4),#pf-positions .pf-pos-row > span:nth-child(5){text-align:right;font-variant-numeric:tabular-nums;}
+#pf-positions .pf-actions{justify-self:end;display:flex;gap:8px;}
+#pf-positions button.pf-list,#pf-positions button.pf-manage{padding:4px 10px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;}
+#pf-positions button.pf-manage{border-color:var(--line);color:var(--ink);}
+#pf-positions .pf-empty{padding:16px 12px;color:var(--muted);}
+#pf-positions .pf-empty a{color:var(--accent);}
+[data-panel="my-listings"] .market-row,[data-panel="my-listings"] .feed-empty{padding:8px 12px;}
+@media (max-width:640px){#pf-positions .pf-pos-head,#pf-positions .pf-pos-row{min-width:620px;}}

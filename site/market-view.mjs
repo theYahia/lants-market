@@ -3,6 +3,7 @@
 
 let selectedProvider = null;
 let connectedAccount = null;
+let myIds = []; // ids of the connected wallet's positions (filled in onConnect)
 export const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(args);
 
 import {
@@ -673,6 +674,7 @@ async function onConnect() {
         const countRaw = await ethCallTo(POSITIONS_CONTRACT, stakerPositionCount + encAddress(account));
         const count = countRaw === '0x' ? 0 : parseInt(countRaw, 16);
 
+        myIds = [];
         if (count === 0) {
           if (pfValues.length >= 3) {
             pfValues[0].textContent = '0';
@@ -690,10 +692,13 @@ async function onConnect() {
           // stakerPositionIds
           const idsRaw = await ethCallTo(POSITIONS_CONTRACT, stakerPositionIds + encAddress(account) + encUint256(0) + encUint256(count));
           const idsWords = decodeWords(idsRaw);
+          // uint256[] return: word 0 = offset, word 1 = length, then the ids
           const ids = [];
-          for (let i = 0; i < count; i++) {
-            ids.push(wordToBigInt(idsWords[i]));
+          const idsLen = idsWords.length > 1 ? Number(wordToBigInt(idsWords[1])) : 0;
+          for (let i = 0; i < idsLen; i++) {
+            ids.push(wordToBigInt(idsWords[2 + i]));
           }
+          myIds = ids;
 
           // Sum pending rewards
           let rewardsSum = 0n;
@@ -723,6 +728,7 @@ async function onConnect() {
     const snapshot = await loadSnapshot();
     const items = await readListings();
     render(snapshot, items);
+    if (connectedAccount) await renderMyPositions(connectedAccount, myIds, snapshot);
     await renderMyListingsPanel();
   } catch (e) {
     // surface any eth_call / connect error, never stay silent
@@ -1112,6 +1118,164 @@ export function initCancelHandler() {
       btn.disabled = false;
     }
   });
+}
+
+export async function renderMyPositions(account, ids, snapshot) {
+  const container = document.getElementById('pf-positions');
+  if (!container) return;
+
+  container.textContent = '';
+  const E = snapshot ? String(Number(snapshot.epoch) + 1) : '0';
+  const rows = [];
+
+  // Build header row
+  const head = document.createElement('div');
+  head.className = 'pf-pos-head';
+  ['#', 'AMOUNT', 'LOCK', 'REWARD', 'EXIT', ''].forEach(text => {
+    const span = document.createElement('span');
+    span.textContent = text;
+    head.appendChild(span);
+  });
+  container.appendChild(head);
+
+  for (const id of ids) {
+    let amount, lockWeeks, rewardText, exitText, exitTitle = '', skip = false;
+
+    if (snapshot) {
+      const pos = findPos(snapshot, id);
+      if (!pos) continue;
+
+      // Closed filter
+      if (pos.withdrawn || (Number(pos.closedAtEpoch) > 0 && Number(pos.closedAtEpoch) <= Number(snapshot.epoch))) continue;
+
+      amount = Number(pos.amount) / 1e18;
+      lockWeeks = isMaxLock(pos, E) ? 'max' : Math.max(0, Number(pos.stakeEndEpoch) - Number(E)) + 'w';
+
+      if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
+        rewardText = 'from e' + pos.stakeStartEpoch;
+      } else {
+        rewardText = expectedReward(snapshot, pos, E).toFixed(2);
+      }
+
+      const fp = floorPrice(pos);
+      if (typeof fp === 'number') {
+        exitText = fp.toFixed(2);
+        const eb = exitBurn(pos);
+        const es = exitSlash(pos);
+        if (eb !== null && es !== null) {
+          exitTitle = 'Exit burn: ' + (eb * 100).toFixed(1) + '% · Slash: ' + (es * 100).toFixed(1) + '%';
+        } else if (eb !== null) {
+          exitTitle = 'Exit burn: ' + (eb * 100).toFixed(1) + '%';
+        }
+      } else {
+        exitText = '\u2014';
+      }
+
+      if (pos.exitOpensEpoch != null && !exitTitle) {
+        exitTitle = 'Exit locked until epoch ' + pos.exitOpensEpoch + '.';
+      }
+    } else {
+      // Chain fallback
+      try {
+        const raw = await ethCallTo(MARKET.nft, '0x99fbab88' + encUint(id));
+        const w = decodeWords(raw);
+        const withdrawn = wordToBigInt(w[7]) !== 0n;
+        const closedAt = Number(wordToBigInt(w[6]));
+        if (withdrawn || (closedAt > 0 && closedAt <= Number(snapshot?.epoch || 0))) continue;
+
+        amount = Number(wordToBigInt(w[2])) / 1e18;
+        const endEp = Number(wordToBigInt(w[5]));
+        lockWeeks = Math.max(0, endEp - Number(E)) + 'w';
+        rewardText = '—';
+        exitText = '—';
+        exitTitle = 'Appears after the next snapshot';
+      } catch (e) {
+        console.error('Error reading position', id, e);
+        continue;
+      }
+    }
+
+    // Build row
+    const row = document.createElement('div');
+    row.className = 'pf-pos-row';
+    row.dataset.id = id.toString();
+
+    row.appendChild(makeSpan('id', '#' + id.toString()));
+    row.appendChild(makeSpan('amount', amount.toFixed(2)));
+    row.appendChild(makeSpan('lock', String(lockWeeks)));
+    row.appendChild(makeSpan('reward', rewardText));
+
+    const exitSpan = makeSpan('exit', exitText);
+    if (exitTitle) exitSpan.title = exitTitle;
+    row.appendChild(exitSpan);
+
+    const actions = document.createElement('span');
+    actions.className = 'pf-actions';
+
+    const listBtn = document.createElement('button');
+    listBtn.className = 'pf-list';
+    listBtn.dataset.id = id.toString();
+    listBtn.textContent = 'List';
+    actions.appendChild(listBtn);
+
+    const manageBtn = document.createElement('button');
+    manageBtn.className = 'pf-manage';
+    manageBtn.dataset.id = id.toString();
+    manageBtn.textContent = 'Manage';
+    actions.appendChild(manageBtn);
+
+    row.appendChild(actions);
+    container.appendChild(row);
+    rows.push(row);
+  }
+
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'pf-empty';
+    empty.textContent = 'No lANTS positions in this wallet. ';
+
+    const browse = document.createElement('a');
+    browse.className = 'pf-browse';
+    browse.href = '#tabs';
+    browse.textContent = 'Browse listings';
+    empty.appendChild(browse);
+
+    empty.appendChild(document.createTextNode(' \u00b7 '));
+
+    const stake = document.createElement('a');
+    stake.href = 'https://antseed.com/';
+    stake.target = '_blank';
+    stake.rel = 'noopener';
+    stake.textContent = 'Stake on AntSeed';
+    empty.appendChild(stake);
+
+    container.appendChild(empty);
+  }
+
+  // Bind delegated click handler once
+  if (!renderMyPositions._bound) {
+    renderMyPositions._bound = true;
+    container.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target.classList.contains('pf-browse')) {
+        e.preventDefault();
+        document.querySelector('a.hdr-link[href="#tabs"]')?.click();
+        document.querySelector('.tab[data-tab="listings"]')?.click();
+      } else if (target.classList.contains('pf-list') || target.classList.contains('pf-manage')) {
+        const id = target.dataset.id;
+        const fieldId = target.classList.contains('pf-list') ? '#cf-nftid' : '#mf-posid';
+        const formId = target.classList.contains('pf-list') ? '#create-form' : '#manage-form';
+        const inp = document.querySelector(fieldId);
+        if (inp) {
+          inp.value = id;
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        document.querySelector('a.hdr-link[href="#tabs"]')?.click();
+        document.querySelector('.tab[data-tab="listings"]')?.click();
+        document.querySelector(formId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
 }
 
 export function initCreateListing() {

@@ -782,6 +782,163 @@ class QASweep:
             self.page.locator(SEL["market_strip"]).wait_for(state="visible", timeout=10000)
 
 
+    def check_por_04(self):
+        """Portfolio positions: two isolated contexts for two wallets.
+        Part 1: wallet with position id 27 (+ no id 32), both view + manage.
+        Part 2: empty wallet shows 'No lANTS positions' with browse link.
+        Runs in its own isolated browser contexts to avoid polluting shared state."""
+        context = None
+        try:
+            # ===== Part 1: wallet 0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B =====
+            context = self.browser.new_context(viewport={"width": 1280, "height": 900})
+            
+            def route_handler(route):
+                url = route.request.url
+                if not url.startswith(ORIGIN):
+                    route.continue_()
+                    return
+                path = strip_query(url).replace(ORIGIN, "")
+                if path == "" or path == "/":
+                    path = "/index.html"
+                rel = path.lstrip("/")
+                file_path = DIST / rel
+                try:
+                    file_path.resolve().relative_to(DIST.resolve())
+                except ValueError:
+                    route.continue_()
+                    return
+                if file_path.is_file():
+                    mime = "text/javascript" if file_path.suffix == ".mjs" else get_mime(file_path)
+                    route.fulfill(
+                        status=200,
+                        content_type=mime,
+                        body=file_path.read_bytes(),
+                    )
+                else:
+                    route.continue_()
+            
+            context.route(f"{ORIGIN}/**", route_handler)
+            # Wallet with position id=27, no id=32
+            context.add_init_script(MOCK_WALLET_JS.replace("__ADDR__", "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B"))
+            page = context.new_page()
+            
+            # Navigate and open portfolio
+            page.goto(f"{ORIGIN}/index.html", wait_until="networkidle")
+            page.wait_for_timeout(2000)
+            
+            # Click portfolio link then connect
+            page.locator(SEL["hdr_link_portfolio"]).click()
+            page.wait_for_timeout(300)
+            page.locator(SEL["pf_connect"]).click()
+            
+            # Wait for wallet connected (header shows 0x...)
+            page.wait_for_function(
+                """() => {
+                    const b = document.getElementById('hdr-connect');
+                    return b && b.textContent.trim().startsWith('0x');
+                }""",
+                timeout=20000
+            )
+            
+            # Wait for positions to load (up to 20s)
+            page.wait_for_selector("#pf-positions .pf-pos-row", timeout=20000)
+            page.wait_for_timeout(500)  # allow full render
+            
+            # ---- Check row 27 exists with correct amount ----
+            row27 = page.locator('#pf-positions .pf-pos-row[data-id="27"]')
+            ok_row27 = row27.count() == 1
+            amount_ok = False
+            if ok_row27:
+                amount_text = row27.locator('span[data-field=amount]').inner_text()
+                amount_ok = amount_text.strip() == "10075.91"
+            else:
+                amount_text = "missing"
+            
+            # ---- Check row 32 is absent (past decoding bug) ----
+            row32_count = page.locator('#pf-positions .pf-pos-row[data-id="32"]').count()
+            no_row32 = row32_count == 0
+            
+            detail_p1 = f"row27={ok_row27} amount='{amount_text}' (want 10075.91) row32_absent={no_row32}"
+            if not (ok_row27 and amount_ok and no_row32):
+                report(self.results, "POR-04", False, detail_p1)
+                return
+            
+            # ---- Click the row 27 buy/list button (pf-list) ----
+            page.locator('#pf-positions .pf-pos-row[data-id="27"] .pf-list').click()
+            page.wait_for_timeout(300)
+            
+            # Check NFT detail view: id=27, listings tab active, market strip visible
+            nftid_ok = page.locator('#cf-nftid').evaluate(
+                "el => el.value.trim() === '27'"
+            )
+            listings_tab_active = page.locator('.tab[data-tab=listings]').evaluate(
+                "el => el.classList.contains('is-active')"
+            )
+            marstrip_visible = page.locator(SEL["market_strip"]).evaluate(
+                "el => el.offsetParent !== null"
+            )
+            
+            if not (nftid_ok and listings_tab_active and marstrip_visible):
+                report(self.results, "POR-04", False,
+                       f"nft_detail: id27={nftid_ok} tab_listings={listings_tab_active} strip_vis={marstrip_visible}")
+                return
+            
+            # ---- Go back to portfolio and test manage button ----
+            page.locator(SEL["hdr_link_portfolio"]).click()
+            page.wait_for_timeout(300)
+            page.locator('#pf-positions .pf-pos-row[data-id="27"] .pf-manage').click()
+            page.wait_for_timeout(300)
+            
+            mf_posid = page.locator('#mf-posid').evaluate(
+                "el => el.value.trim() === '27'"
+            )
+            
+            if not mf_posid:
+                report(self.results, "POR-04", False,
+                       f"manage_posid={mf_posid} (want 27)")
+                return
+            
+            # Part 1 passed
+            detail_p1_ok = "row27_true_10075.91 row32_absent nftid_27 listings_active strip_visible manage_27"
+            
+            # ===== Part 2: empty wallet 0x00000000000000000000000000000000000B0b01 =====
+            context.close()
+            context = self.browser.new_context(viewport={"width": 1280, "height": 900})
+            context.route(f"{ORIGIN}/**", route_handler)
+            context.add_init_script(MOCK_WALLET_JS.replace("__ADDR__", "0x00000000000000000000000000000000000B0b01"))
+            page2 = context.new_page()
+            
+            page2.goto(f"{ORIGIN}/index.html", wait_until="networkidle")
+            page2.wait_for_timeout(2000)
+            page2.locator(SEL["hdr_link_portfolio"]).click()
+            page2.wait_for_timeout(300)
+            page2.locator(SEL["pf_connect"]).click()
+            
+            # Wait for empty state (no rows, so wait for .pf-empty)
+            page2.wait_for_selector("#pf-positions .pf-empty", timeout=20000)
+            page2.wait_for_timeout(300)
+            
+            empty_text = page2.locator("#pf-positions .pf-empty").inner_text()
+            browse_link_count = page2.locator("#pf-positions .pf-empty a.pf-browse").count()
+            
+            ok_empty_text = "No lANTS positions" in empty_text
+            ok_browse = browse_link_count >= 1
+            
+            detail_p2 = f"empty_text_ok={ok_empty_text} browse_link_count={browse_link_count}"
+            if not (ok_empty_text and ok_browse):
+                report(self.results, "POR-04", False,
+                       f"{detail_p1_ok} | p2 {detail_p2}")
+                return
+            
+            report(self.results, "POR-04", True,
+                   f"{detail_p1_ok} | empty_wallet_ok browse_link_present")
+            
+        except Exception as e:
+            report(self.results, "POR-04", False, f"exception: {str(e)[:100]}")
+        finally:
+            if context:
+                context.close()
+
     def check_dat_chain(self, sample=5):
         """Compare AMOUNT column with chain positions() on 2 RPCs."""
         try:
@@ -1086,6 +1243,7 @@ class QASweep:
         self.check_lst_06()
         self.check_por_02()
         self.check_por_03()
+        self.check_por_04()
         self.check_dat_chain()
         self.check_lst_chain()
         self.check_mock_01()
