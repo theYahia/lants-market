@@ -16,6 +16,8 @@ price and its first seller paying for pool weight?
 | Listings not made by us | not measured | ≥ 1 |
 | Seller perks on the board | 0 | ≥ 1 |
 
+*Note (25.09): "lANTS transfers between wallets" is no longer 0 on-chain — antseedmarkets.com (a community Seaport marketplace) shows 4 lANTS trades on 20–24.09 (positions #46 and #49 between two wallets) plus an open lot #106 (100 ANTS for $300). None of these are on our market; our own first trade is still pending, so the target above tracks the first trade on **our** market.*
+
 **Stop rule.** If both are still zero on **5 November 2026**, the board keeps running as is, and the
 market layer (phase 4) does not start.
 
@@ -30,6 +32,8 @@ market layer (phase 4) does not start.
 | 20.09 | Market contract deployed on Base (USDC-only listings) | 2 | ✅ |
 | 23.09 | Site live at `lants.eth` (IPFS + ENS); auto snapshot 3×/day; AntSeed contest entry on X | 2 · build in public | ✅ |
 | 24.09 | Repo made public; contract source verified on Basescan and Blockscout | 3 | ✅ |
+| 25.09 | Full trade flow through the site (create · buy · cancel · manage position); 8-column listings grid with on-chain fallback; snapshot cross-checked on two RPCs with a freshness gate; portfolio and positions fixes; e2e fork test (injected + Privy) and 19-check QA sweep both pass | 3 | ✅ |
+| 25.09 | First trade on our market (stake buyer reward, split, list, buy) — ready on the site, waiting on the buyer wallet | 3 | 🔜 |
 | this week | Listing on antseed.com/ecosystem | 3 | 🔜 |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
@@ -63,11 +67,12 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Register `lants.eth` and go live on IPFS + ENS | 23.09 | ✅ done |
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
+| Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
 | Seller perks board | — | open |
 | List on antseed.com/ecosystem | this week | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | open |
-| First trade on our market: stake the epoch-23 buyer reward in Apex, split off 50 ANTS, list and buy it (internal test) | 25.09 | open |
+| First trade on our market: stake the epoch-23 buyer reward in Apex, split off 50 ANTS, list and buy it (internal test) — ready on the site, waiting on the buyer wallet | 25.09 | open |
 | Confirm staking decisions: #27 stays in Apex and is not listed; restake its rewards in Apex; small thank-you stake in Open Forge | 25.09 | open |
 | Post on X about the first trade and why unclaimed rewards move to the buyer | 30.09 | open |
 | Restake #27's epoch-24 staker reward in Apex; move a small piece to Open Forge (the free-model network lants.eth was built on) | 01.10 | open |
