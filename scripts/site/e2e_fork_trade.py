@@ -30,7 +30,7 @@ NFT = "0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652"
 USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 USAGE_REWARDS = "0x78330bF154172F1137219Bb559d4F3A270B3201F"
 OPERATOR = "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B"
-BUYER = "0x00000000000000000000000000000000000B0B01"
+BUYER = "0x00000000000000000000000000000000000B0b01"  # EIP-55 checksum (Privy rejects a bad checksum)
 
 ANVIL_PORT = 8545
 ANVIL_URL = f"http://127.0.0.1:{ANVIL_PORT}"
@@ -63,73 +63,132 @@ MOCK_WALLET_JS = """
         constructor() {
             this.isMetaMask = true;
             this.isRabby = true;
+            this.listeners = new Map();
+            this.walletCalls = [];
+            window.__walletCalls = this.walletCalls;
         }
-        on() { return this; }
-        removeListener() { return this; }
+        on(event, fn) {
+            if (!this.listeners.has(event)) this.listeners.set(event, []);
+            this.listeners.get(event).push(fn);
+            return this;
+        }
+        addListener(event, fn) {
+            return this.on(event, fn);
+        }
+        removeListener(event, fn) {
+            if (this.listeners.has(event)) {
+                const arr = this.listeners.get(event);
+                const idx = arr.indexOf(fn);
+                if (idx !== -1) arr.splice(idx, 1);
+            }
+            return this;
+        }
+        off(event, fn) {
+            return this.removeListener(event, fn);
+        }
+        once(event, fn) {
+            const self = this;
+            const wrapper = (...args) => {
+                self.removeListener(event, wrapper);
+                fn(...args);
+            };
+            return this.on(event, wrapper);
+        }
+        emit(event, ...args) {
+            if (this.listeners.has(event)) {
+                for (const fn of this.listeners.get(event)) {
+                    fn(...args);
+                }
+            }
+            return this;
+        }
         async request({method, params}) {
+            this.walletCalls.push(method);
             try {
                 await window.__e2eLog("WALLET_CALL", method, JSON.stringify(params));
             } catch(e) {}
+            
             switch (method) {
                 case "eth_requestAccounts":
-                case "eth_accounts":
+                case "eth_accounts": {
+                    if (method === "eth_requestAccounts") {
+                        setTimeout(() => {
+                            this.emit("connect", {chainId: CHAIN});
+                            this.emit("accountsChanged", [ACTIVE]);
+                        }, 0);
+                    }
                     return [ACTIVE];
+                }
                 case "eth_chainId":
                     return CHAIN;
                 case "wallet_switchEthereumChain":
                 case "wallet_addEthereumChain":
                     return null;
-                default: {
-                    if (method === "eth_sendTransaction") {
-                        // First estimate gas against latest block (like a real wallet)
-                        const tx = {...params[0], from: ACTIVE};
-                        const estimateBody = JSON.stringify({
-                            jsonrpc: "2.0",
-                            method: "eth_estimateGas",
-                            params: [tx, "latest"],
-                            id: 1
-                        });
-                        const estimateResp = await fetch(ANVIL, {
-                            method: "POST",
-                            headers: {"Content-Type": "application/json"},
-                            body: estimateBody
-                        });
-                        const estimateJson = await estimateResp.json();
-                        if (estimateJson.error) {
-                            throw new Error(estimateJson.error.message);
-                        }
-                        
-                        // Now send with the gas estimate
-                        const body = JSON.stringify({
-                            jsonrpc: "2.0",
-                            method: "eth_sendTransaction",
-                            params: [{...tx, gas: estimateJson.result}],
-                            id: 1
-                        });
-                        const resp = await fetch(ANVIL, {
-                            method: "POST",
-                            headers: {"Content-Type": "application/json"},
-                            body: body
-                        });
-                        const json = await resp.json();
-                        if (json.error) throw new Error(json.error.message);
-                        return json.result;
-                    } else {
-                        const body = JSON.stringify({
-                            jsonrpc: "2.0",
-                            method: method,
-                            params: params,
-                            id: 1
-                        });
-                        const resp = await fetch(ANVIL, {
-                            method: "POST",
-                            headers: {"Content-Type": "application/json"},
-                            body: body
-                        });
-                        const json = await resp.json();
-                        if (json.error) throw new Error(json.error.message);
-                        return json.result;
+                case "wallet_requestPermissions":
+                    return [{parentCapability: "eth_accounts", caveats: []}];
+                case "wallet_getPermissions":
+                    return [{parentCapability: "eth_accounts", caveats: []}];
+                case "wallet_getCapabilities":
+                    return {};
+                case "wallet_revokePermissions":
+                    return null;
+                case "eth_coinbase":
+                    return ACTIVE;
+                case "net_version":
+                    return "8453";
+                case "personal_sign":
+                case "eth_signTypedData_v4":
+                    return "0x" + "11".repeat(65);
+                case "eth_sendTransaction": {
+                    // First estimate gas against latest block (like a real wallet)
+                    const tx = {...params[0], from: ACTIVE};
+                    const estimateBody = JSON.stringify({
+                        jsonrpc: "2.0",
+                        method: "eth_estimateGas",
+                        params: [tx, "latest"],
+                        id: 1
+                    });
+                    const estimateResp = await fetch(ANVIL, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: estimateBody
+                    });
+                    const estimateJson = await estimateResp.json();
+                    if (estimateJson.error) {
+                        throw new Error(estimateJson.error.message);
                     }
+                    
+                    // Now send with the gas estimate
+                    const body = JSON.stringify({
+                        jsonrpc: "2.0",
+                        method: "eth_sendTransaction",
+                        params: [{...tx, gas: estimateJson.result}],
+                        id: 1
+                    });
+                    const resp = await fetch(ANVIL, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: body
+                    });
+                    const json = await resp.json();
+                    if (json.error) throw new Error(json.error.message);
+                    return json.result;
+                }
+                default: {
+                    const body = JSON.stringify({
+                        jsonrpc: "2.0",
+                        method: method,
+                        params: params,
+                        id: 1
+                    });
+                    const resp = await fetch(ANVIL, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: body
+                    });
+                    const json = await resp.json();
+                    if (json.error) throw new Error(json.error.message);
+                    return json.result;
                 }
             }
         }
@@ -268,10 +327,11 @@ def setup_privy_route(context) -> None:
 
 
 def connect_privy(page, role: str) -> None:
-    """Click connect button and wait for Privy connection."""
+    """Click connect button and wait for Privy connection, picking Rabby Wallet if needed."""
     page.click("#hdr-connect")
     
     deadline = time.time() + 20
+    rabby_clicked = False
     while time.time() < deadline:
         try:
             btn_text = page.inner_text("#hdr-connect")
@@ -284,6 +344,19 @@ def connect_privy(page, role: str) -> None:
                     return
         except Exception:
             pass
+        
+        # Check if Rabby Wallet is visible and click it once
+        if not rabby_clicked:
+            try:
+                rabby_wallet = page.get_by_text("Rabby Wallet", exact=True)
+                if rabby_wallet.is_visible():
+                    rabby_wallet.click()
+                    rabby_clicked = True
+                    print(f"PRIVY_PICKED_RABBY_{role}=1")
+                    # Continue polling for connection
+            except Exception:
+                pass
+        
         page.wait_for_timeout(500)
     
     # Diagnostic output on failure
@@ -316,10 +389,10 @@ def connect_privy(page, role: str) -> None:
     except Exception:
         print("PRIVY_FRAMES=<error>")
     
-    # Get wallet calls from the mock
+    # Get wallet calls from window.__walletCalls
     try:
-        wallet_calls = page.evaluate("window.__e2eWalletCalls || []")
-        print(f"PRIVY_WALLET_CALLS={','.join(wallet_calls[-10:])}")
+        wallet_calls = page.evaluate("() => (window.__walletCalls||[]).join(',')")
+        print(f"PRIVY_WALLET_CALLS={wallet_calls}")
     except Exception:
         print("PRIVY_WALLET_CALLS=<error>")
     
@@ -334,8 +407,6 @@ def connect_privy(page, role: str) -> None:
     
     # This will be overridden by the actual logger, but let's try to get page errors
     try:
-        # We need to access the logs that were set up - but we don't have access to them here
-        # Instead, we'll just report that we've captured the diagnostics
         print(f"PRIVY_DIAGNOSTICS_CAPTURED={role}")
     except Exception:
         pass
@@ -469,8 +540,6 @@ def set_usdc_balance(addr: str, amount_wei: int) -> None:
 def add_init_script(page, addr: str) -> None:
     """Inject mock window.ethereum before page scripts."""
     js = MOCK_WALLET_JS.replace("__ACTIVE__", addr).replace("__ANVIL_PORT__", str(ANVIL_PORT)).replace("__CHAIN_ID_HEX__", CHAIN_ID_HEX)
-    # Also add a global array to track wallet calls
-    js += "\nwindow.__e2eWalletCalls = window.__e2eWalletCalls || [];"
     page.add_init_script(js)
 
 
