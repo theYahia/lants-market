@@ -247,9 +247,9 @@ function renderSnapshot(snapshot, opts = {}) {
     const idCell = document.createElement('td');
     idCell.textContent = pos.id;
 if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
-  idCell.classList.add('is-pending');
-  idCell.dataset.start = String(pos.stakeStartEpoch);
-  idCell.title = 'Staking power activates at epoch ' + pos.stakeStartEpoch;
+  row.classList.add('is-pending');
+  row.style.setProperty('--pending-start', JSON.stringify(String(pos.stakeStartEpoch)));
+  row.title = 'Reward starts at epoch ' + pos.stakeStartEpoch + '; staking power activates then.';
 }
     // Badge rendering removed; class badge-deal is no longer applied here.
     row.appendChild(idCell);

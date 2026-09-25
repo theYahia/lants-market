@@ -186,6 +186,93 @@ def _read_lock_texts_in_order(page):
     return page.evaluate(script)
 
 
+def _read_pending_marker_info(page):
+    """Return dict with pending‑marker related checks for the positions table."""
+    script = """
+    () => {
+        const tables = document.querySelectorAll('table');
+        let target = null;
+        for (const tbl of tables) {
+            const ths = tbl.querySelectorAll('thead th');
+            for (let i = 0; i < ths.length; i++) {
+                if (ths[i].textContent.trim().startsWith('LOCK')) {
+                    target = tbl;
+                    break;
+                }
+            }
+            if (target) break;
+        }
+        if (!target) {
+            return {
+                pending_count: 0,
+                pending_id_numeric: 0,
+                reward_sortable: 0,
+                pending_marker_in_reward: 0,
+                marker_not_in_id: 0,
+                marker_only_pending: 0
+            };
+        }
+        const rows = Array.from(target.querySelectorAll('tbody tr'));
+        let pendingCount = 0;
+        let allIdNumeric = true;
+        let allRewardSortable = true;
+        let pendingMarkerInReward = 0;
+        let anyIdHasFrom = false;
+        let anyNonPendingRewardHasFrom = false;
+
+        for (const tr of rows) {
+            const first = tr.cells[0].textContent.trim().toLowerCase();
+            if (first === 'dust') continue;
+
+            const idCell = tr.cells[0];
+            const rewardCell = tr.cells[3];
+
+            const idText = idCell.textContent.trim();
+            if (!/^\\d+$/.test(idText)) {
+                allIdNumeric = false;
+            }
+
+            const rewardText = rewardCell.textContent.trim();
+            if (Number(rewardText) !== Number(rewardText)) { // NaN check
+                allRewardSortable = false;
+            }
+
+            const isPending = tr.classList.contains('is-pending');
+            if (isPending) {
+                pendingCount++;
+                const after = getComputedStyle(rewardCell, '::after').content;
+                const cleaned = after.replace(/^["']|["']$/g, '').trim();
+                if (/^from e\\d+$/.test(cleaned)) {
+                    pendingMarkerInReward++;
+                }
+            } else {
+                const after = getComputedStyle(rewardCell, '::after').content;
+                const cleaned = after.replace(/^["']|["']$/g, '').trim();
+                if (cleaned.includes('from')) {
+                    anyNonPendingRewardHasFrom = true;
+                }
+            }
+
+            const idAfter = getComputedStyle(idCell, '::after').content;
+            const idCleaned = idAfter.replace(/^["']|["']$/g, '').trim();
+            if (idCleaned.includes('from')) {
+                anyIdHasFrom = true;
+            }
+        }
+
+        return {
+            pending_count: pendingCount,
+            pending_id_numeric: allIdNumeric ? 1 : 0,
+            reward_sortable: allRewardSortable ? 1 : 0,
+            pending_marker_in_reward: pendingMarkerInReward,
+            marker_not_in_id: anyIdHasFrom ? 0 : 1,
+            marker_only_pending: anyNonPendingRewardHasFrom ? 0 : 1
+        };
+    }
+    """
+    return page.evaluate(script)
+
+
 def main() -> int:
     """Run the guard logic, print signals, and return appropriate exit code."""
     port = _find_free_port()
@@ -200,6 +287,14 @@ def main() -> int:
     distinct_texts = ""
     sort_asc_last = ""
     sort_desc_first = ""
+
+    # Pending‑marker related defaults
+    pending_count = 0
+    pending_id_numeric = 0
+    reward_sortable = 0
+    pending_marker_in_reward = 0
+    marker_not_in_id = 0
+    marker_only_pending = 0
 
     try:
         with sync_playwright() as p:
@@ -236,6 +331,17 @@ def main() -> int:
                 distinct_texts = ",".join(distinct_set)
 
                 # -----------------------------------------------------------------
+                # Pending‑marker checks (must be read before any sorting)
+                # -----------------------------------------------------------------
+                pending_info = _read_pending_marker_info(page)
+                pending_count = pending_info["pending_count"]
+                pending_id_numeric = pending_info["pending_id_numeric"]
+                reward_sortable = pending_info["reward_sortable"]
+                pending_marker_in_reward = pending_info["pending_marker_in_reward"]
+                marker_not_in_id = pending_info["marker_not_in_id"]
+                marker_only_pending = pending_info["marker_only_pending"]
+
+                # -----------------------------------------------------------------
                 # LOCK column sorting checks
                 # -----------------------------------------------------------------
                 # Click once – ascending
@@ -251,7 +357,7 @@ def main() -> int:
                 sort_desc_first = desc_texts[0] if desc_texts else ""
 
                 # -----------------------------------------------------------------
-                # Determine lock_ok according to specification (including sort checks)
+                # Determine lock_ok according to specification (including sort & pending checks)
                 # -----------------------------------------------------------------
                 lock_ok = 1 if (
                     rows_total > 0
@@ -261,6 +367,12 @@ def main() -> int:
                     and right_edges_aligned == 1
                     and sort_asc_last == "max"
                     and sort_desc_first == "max"
+                    and pending_count > 0
+                    and pending_id_numeric == 1
+                    and reward_sortable == 1
+                    and pending_marker_in_reward == pending_count
+                    and marker_not_in_id == 1
+                    and marker_only_pending == 1
                 ) else 0
 
             except PlaywrightTimeoutError:
@@ -282,6 +394,13 @@ def main() -> int:
     # New lines for sorting checks
     print(f"sort_asc_last={sort_asc_last}")
     print(f"sort_desc_first={sort_desc_first}")
+    # Pending‑marker lines (must appear before lock_ok)
+    print(f"pending_count={pending_count}")
+    print(f"pending_id_numeric={pending_id_numeric}")
+    print(f"reward_sortable={reward_sortable}")
+    print(f"pending_marker_in_reward={pending_marker_in_reward}")
+    print(f"marker_not_in_id={marker_not_in_id}")
+    print(f"marker_only_pending={marker_only_pending}")
     print(f"lock_ok={lock_ok}")
 
     return 0 if lock_ok == 1 else 1
