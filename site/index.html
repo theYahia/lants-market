@@ -10,10 +10,10 @@
 <body>
     <div class="container">
         <header>
-            <div style="display:flex;align-items:center;gap:10px;">
+            <a href="#tabs" class="brand" aria-label="Home: all positions" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
                 <span data-logo="square" style="display:inline-block;width:24px;height:24px;background:oklch(0.85 0.19 130);border-radius:6px;"></span>
                 <span style="font-family:var(--font-mono);font-weight:900;font-size:20px;letter-spacing:1px;color:var(--accent);white-space:nowrap;">lANTS</span>
-            </div>
+            </a>
             <nav class="hdr-nav">
               <a class="hdr-link is-on" href="#tabs">Market</a>
               <a class="hdr-link" href="#portfolio">My Portfolio</a>
@@ -235,6 +235,8 @@
         panels.forEach(function(p){p.classList.toggle('is-open',p.dataset.panel===name);});
       }
       tabs.forEach(function(t){t.addEventListener('click',function(){open(t.dataset.tab);});});
+      var brand=document.querySelector('.brand');
+      if(brand)brand.addEventListener('click',function(){open('all');});
       open('all');
     })();
     </script>
