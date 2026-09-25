@@ -262,22 +262,23 @@ async function readListings() {
       }
     }
     const ownerMismatch = isLive && (!owner || owner.toLowerCase() !== seller.toLowerCase());
-    // read the on‑chain position data for fresh listings that are not yet in the snapshot
+    // read the on-chain position for every listing (live and sold): the snapshot lacks fresh split positions
     let chainAmount = null;
     let chainClosed = false;
-    if (isLive) {
-      try {
-        const pRaw = await ethCallTo(MARKET.nft,
-          '0x99fbab88' + encUint(nftId)); // positions(uint256)
-        const words = decodeWords(pRaw);
-        chainAmount = wordToBigInt(words[2]); // amount
-        const closedAt = wordToBigInt(words[6]);
-        const withdrawn = wordToBigInt(words[7]);
-        chainClosed = closedAt > 0n || withdrawn > 0n;
-      } catch {
-        chainAmount = null;
-        chainClosed = false;
-      }
+    let chainStakeEnd = null;
+    try {
+      const pRaw = await ethCallTo(MARKET.nft,
+        '0x99fbab88' + encUint(nftId)); // positions(uint256)
+      const words = decodeWords(pRaw);
+      chainAmount = wordToBigInt(words[2]); // amount
+      chainStakeEnd = wordToBigInt(words[5]); // stakeEndEpoch
+      const closedAt = wordToBigInt(words[6]);
+      const withdrawn = wordToBigInt(words[7]);
+      chainClosed = closedAt > 0n || withdrawn > 0n;
+    } catch {
+      chainAmount = null;
+      chainClosed = false;
+      chainStakeEnd = null;
     }
     out.push({
       listingId,
@@ -290,7 +291,8 @@ async function readListings() {
       isLive,
       ownerMismatch,
       chainAmount,
-      chainClosed
+      chainClosed,
+      chainStakeEnd
     });
   }
 
@@ -335,95 +337,128 @@ function render(snapshot, items) {
   const table = tableEl();
   table.textContent = '';
   if (!items.length) {
-    table.textContent = 'no active listings';
+    const empty = document.createElement('div');
+    empty.className = 'market-empty';
+    empty.textContent = 'no active listings';
+    table.appendChild(empty);
     return;
   }
 
   const epoch = String(Number(snapshot.epoch) + 1);
 
+  // Header row
+  const head = document.createElement('div');
+  head.className = 'market-head';
+  
+  const headers = ['LOT', 'POSITION', 'PRICE', 'ANTS', 'USDC/ANTS', 'LOCK', 'STATUS', ''];
+  for (let i = 0; i < headers.length; i++) {
+    const th = document.createElement('span');
+    if (i === 4) {
+      th.textContent = 'USDC/ANTS';
+      const info = document.createElement('span');
+      info.className = 'info';
+      info.dataset.tip = 'USDC price per 1 ANT.';
+      info.textContent = 'ⓘ';
+      th.appendChild(info);
+    } else if (i === 6) {
+      th.textContent = 'STATUS';
+      const info = document.createElement('span');
+      info.className = 'info';
+      info.dataset.tip = 'live = buyable · sold · sold · internal = platform listing · expired · invalid = position closed/split/moved/transferred or owner mismatch.';
+      info.textContent = 'ⓘ';
+      th.appendChild(info);
+    } else {
+      th.textContent = headers[i];
+    }
+    head.appendChild(th);
+  }
+  table.appendChild(head);
+
+  const me = ((window.ethereum && window.ethereum.selectedAddress) || '').toLowerCase();
+
   for (const item of items) {
     const pos = findPos(snapshot, item.nftId);
     const row = document.createElement('div');
     row.className = 'market-row';
-    row.dataset.listingId = item.listingId.toString(); // for possible CSS
-    row.dataset.listingId = item.listingId; // keep attribute as in spec
+    row.dataset.listingId = item.listingId.toString();
     row.setAttribute('data-listing-id', item.listingId.toString());
 
-    // ---- values for the fields ----
-    const listingIdVal = item.listingId.toString();
-    const nftIdVal = item.nftId.toString();
-    const priceVal = fmtPrice(item.price);
+    // LOT
+    const lotSpan = document.createElement('span');
+    lotSpan.dataset.field = 'listingId';
+    lotSpan.textContent = `#${item.listingId.toString()}`;
+    row.appendChild(lotSpan);
 
-    // defaults for non-live rows
-    let lockedVal = '\u2014';
-    let lockVal = '\u2014';
-    let rewardVal = '\u2014';
-    let slashVal = '\u2014';
-    let unclaimedVal = '\u2014';
+    // POSITION
+    const posSpan = document.createElement('span');
+    posSpan.dataset.field = 'nftId';
+    posSpan.textContent = item.nftId.toString();
+    row.appendChild(posSpan);
 
-    if (item.isLive && pos) {
-      const ants = Number(pos.amount) / 1e18;
-      lockedVal = ants.toFixed(2);
-      lockVal = isMaxLock(pos, epoch) ? 'max' : 'fading';
-      const rew = expectedReward(snapshot, pos, epoch);
-      rewardVal = Number(rew).toFixed(2);
-      // add percent sign to slash value (null = exit not computable yet)
-      slashVal = exitSlash(pos) == null ? '—' : `${exitSlash(pos)}%`;
-      const cur = String(Number(snapshot.epoch));
-      const prev = String(Number(snapshot.epoch) - 1);
-      const unclaimed = (Number(BigInt(pos.rewardByEpoch?.[prev] ?? 0)) + Number(BigInt(pos.rewardByEpoch?.[cur] ?? 0))) / 1e18;
-      unclaimedVal = unclaimed.toFixed(2);
+    // PRICE
+    const priceSpan = document.createElement('span');
+    priceSpan.dataset.field = 'price';
+    priceSpan.textContent = `${(Number(formatUnits(item.price, MARKET.usdcDecimals))).toFixed(2)} USDC`;
+    row.appendChild(priceSpan);
+
+    // ANTS
+    const antsSpan = document.createElement('span');
+    antsSpan.dataset.field = 'ants';
+    let antsNumeric = null;
+    if (pos) {
+      antsNumeric = Number(pos.amount) / 1e18;
+    } else if (item.chainAmount != null) {
+      antsNumeric = Number(item.chainAmount) / 1e18;
     }
+    antsSpan.textContent = antsNumeric != null ? antsNumeric.toFixed(2) : '—';
+    row.appendChild(antsSpan);
 
-    // a position is dead if the snapshot says so, otherwise fall back to the on‑chain flag
+    // USDC/ANTS
+    const unitPriceSpan = document.createElement('span');
+    unitPriceSpan.dataset.field = 'unitPrice';
+    const usdcPrice = Number(formatUnits(item.price, MARKET.usdcDecimals));
+    if (antsNumeric != null && antsNumeric > 0) {
+      unitPriceSpan.textContent = (usdcPrice / antsNumeric).toFixed(4);
+    } else {
+      unitPriceSpan.textContent = '—';
+    }
+    row.appendChild(unitPriceSpan);
+
+    // LOCK
+    const lockSpan = document.createElement('span');
+    lockSpan.dataset.field = 'lock';
+    const weeksFrom = (end) => `${Math.max(0, Number(end) - Number(epoch))}w`;
+    let lockVal = '—';
+    if (item.isLive) {
+      if (pos) {
+        lockVal = isMaxLock(pos, epoch) ? 'max' : weeksFrom(pos.stakeEndEpoch);
+      } else if (item.chainStakeEnd != null) {
+        lockVal = weeksFrom(item.chainStakeEnd);
+      }
+    }
+    lockSpan.textContent = lockVal;
+    row.appendChild(lockSpan);
+
+    // STATUS
+    const stateSpan = document.createElement('span');
+    stateSpan.dataset.field = 'state';
     const dead = pos ? (pos.withdrawn || Number(pos.closedAtEpoch) > 0) : !!item.chainClosed;
-    // a live listing is invalid only when it is dead or the owner mismatches; missing snapshot data is now allowed
     const invalid = item.isLive && (dead || item.ownerMismatch);
-    // if we have on‑chain amount but no snapshot entry, show it as a locked value
-    if (item.isLive && !pos && item.chainAmount != null) {
-      lockedVal = (Number(item.chainAmount) / 1e18).toFixed(2);
+    let stateVal;
+    if (invalid) {
+      stateVal = 'invalid';
+    } else if (item.isLive) {
+      stateVal = 'live';
+    } else if (item.soldTime !== 0n) {
+      stateVal = INTERNAL_LISTING_IDS.map(String).includes(String(item.listingId)) ? 'sold · internal' : 'sold';
+    } else {
+      stateVal = 'expired';
     }
-    const stateVal = invalid ? 'invalid' :
-      (item.isLive ? 'live' :
-        (item.soldTime !== 0n ? (INTERNAL_LISTING_IDS.map(String).includes(String(item.listingId)) ? 'sold · internal' : 'sold') : 'expired'));
+    stateSpan.textContent = stateVal;
+    row.appendChild(stateSpan);
 
-    // ---- build DOM ----
-    // "#<listingId>"
-    row.appendChild(document.createTextNode('#'));
-    row.appendChild(makeSpan('listingId', listingIdVal));
-
-    // " <nftId>"
-    row.appendChild(document.createTextNode(' '));
-    row.appendChild(makeSpan('nftId', nftIdVal));
-
-    // " · price <price>"
-    row.appendChild(document.createTextNode(' \u00b7 price '));
-    row.appendChild(makeSpan('price', priceVal));
-
-    // " · locked <locked>"
-    row.appendChild(document.createTextNode(' \u00b7 locked '));
-    row.appendChild(makeSpan('locked', lockedVal));
-
-    // " \u00b7 <lock>"
-    row.appendChild(document.createTextNode(' \u00b7 '));
-    row.appendChild(makeSpan('lock', lockVal));
-
-    // " \u00b7 reward <reward>"
-    row.appendChild(document.createTextNode(' \u00b7 reward '));
-    row.appendChild(makeSpan('reward', rewardVal));
-    row.appendChild(document.createTextNode(' \u00b7 unclaimed '));
-    row.appendChild(makeSpan('unclaimed', unclaimedVal));
-    row.appendChild(document.createTextNode(' \u2192 buyer'));
-
-    // " \u00b7 slash <slash>"
-    row.appendChild(document.createTextNode(' \u00b7 slash '));
-    row.appendChild(makeSpan('slash', slashVal));
-
-    // " \u00b7 <state>"
-    row.appendChild(document.createTextNode(' \u00b7 '));
-    row.appendChild(makeSpan('state', stateVal));
-
-    // button for live rows - Buy
+    // Action cell
+    const actionSpan = document.createElement('span');
     if (item.isLive) {
       if (!invalid) {
         const btnBuy = document.createElement('button');
@@ -432,44 +467,36 @@ function render(snapshot, items) {
         btnBuy.dataset.price = item.price.toString();
         btnBuy.dataset.currency = item.currency;
         btnBuy.textContent = 'Buy';
-        row.appendChild(document.createTextNode(' '));
-        row.appendChild(btnBuy);
+        actionSpan.appendChild(btnBuy);
       }
-
-      // button for cancelling the listing - Cancel
-      const btnCancel = document.createElement('button');
-      btnCancel.className = 'cancel';
-      btnCancel.dataset.id = item.listingId.toString();
-      // calldata for cancelNftListings(address nftCollection, uint256 nftId)
-      btnCancel.dataset.calldata = cancelNftListings(MARKET.nft, item.nftId);
-      btnCancel.textContent = 'Cancel';
-      row.appendChild(document.createTextNode(' '));
-      row.appendChild(btnCancel);
+      if (me && me === item.seller.toLowerCase()) {
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'cancel';
+        btnCancel.dataset.id = item.listingId.toString();
+        btnCancel.dataset.calldata = cancelNftListings(MARKET.nft, item.nftId);
+        btnCancel.textContent = 'Cancel';
+        actionSpan.appendChild(btnCancel);
+      }
     }
+    row.appendChild(actionSpan);
 
     table.appendChild(row);
   }
 
-  // Add caveat nodes as separate elements
-  const caveat1 = document.createElement('div');
-  caveat1.dataset.caveat = 'Listing contents shown as of purchase and may change before the sale.';
-  caveat1.textContent = caveat1.dataset.caveat;
-  table.appendChild(caveat1);
-
-  const caveat2 = document.createElement('div');
-  caveat2.dataset.caveat = 'Only one active listing per NFT.';
-  caveat2.textContent = caveat2.dataset.caveat;
-  table.appendChild(caveat2);
-
-  const caveat3 = document.createElement('div');
-  caveat3.dataset.caveat = 'Unclaimed staker rewards transfer to the buyer with the NFT. Sellers: claim before listing. Only the previous and current epoch are counted here.';
-  caveat3.textContent = caveat3.dataset.caveat;
-  table.appendChild(caveat3);
-
-  const caveat4 = document.createElement('div');
-  caveat4.dataset.caveat = 'A listing on a closed, split, moved or transferred position is invalid and cannot be bought.';
-  caveat4.textContent = caveat4.dataset.caveat;
-  table.appendChild(caveat4);
+  // Caveats
+  const caveats = [
+    'Listing contents shown as of purchase and may change before the sale.',
+    'Only one active listing per NFT.',
+    "Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT.",
+    'A listing on a closed, split, moved or transferred position is invalid and cannot be bought.'
+  ];
+  for (const caveatText of caveats) {
+    const caveat = document.createElement('div');
+    caveat.className = 'market-caveat';
+    caveat.dataset.caveat = caveatText;
+    caveat.textContent = caveatText;
+    table.appendChild(caveat);
+  }
 }
 
 // Fill the data-panel="my-listings" panel with the current wallet's own lots

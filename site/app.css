@@ -702,3 +702,72 @@ th.sort-desc {
   pointer-events: none; opacity: 0; transition: opacity .1s;
 }
 #tip.show { opacity: 1; }
+/* market listing table: 8-column grid */
+#market-list .market-head,
+#market-list .market-row {
+    display: grid;
+    grid-template-columns: 4ch 9ch 11ch 9ch 10ch 6ch 14ch 1fr;
+    gap: 8px 12px;
+    align-items: center;
+    padding: 4px 0;
+}
+#market-list .market-head > span { white-space: nowrap; }
+#market-list .market-head > span:nth-child(3), #market-list .market-head > span:nth-child(4), #market-list .market-head > span:nth-child(5), #market-list .market-head > span:nth-child(6),
+#market-list .market-row > span:nth-child(3), #market-list .market-row > span:nth-child(4), #market-list .market-row > span:nth-child(5), #market-list .market-row > span:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
+#market-list .market-row > span:nth-child(8) { justify-self: end; }
+#market-list .market-head {
+    color: var(--ink);
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+}
+#market-list .market-row + .market-row {
+    border-top: 1px solid var(--line);
+}
+#market-list .market-row span[data-field] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#market-list .info {
+    color: var(--muted);
+    cursor: help;
+    margin-left: 4px;
+}
+#market-list .market-caveat {
+    color: var(--muted);
+    font-size: var(--fs-12);
+    margin-top: 6px;
+}
+#market-list .market-empty {
+    color: var(--muted);
+    padding: 8px 0;
+}
+#market-list .buy,
+#market-list .cancel {
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: var(--fs-12);
+    cursor: pointer;
+}
+#market-list .cancel {
+    border-color: var(--line);
+    color: var(--muted);
+    margin-left: 6px;
+}
+
+/* mobile 390px: horizontal scroll, do NOT wrap the grid */
+@media (max-width: 480px) {
+    #market-list {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    #market-list .market-head,
+    #market-list .market-row {
+        min-width: 620px; /* keep 8 columns intact, scroll instead of reflow */
+    }
+}
