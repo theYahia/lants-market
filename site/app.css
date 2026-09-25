@@ -785,3 +785,14 @@ th.sort-desc {
 button.cancel{padding:4px 10px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;margin-left:6px;}
 button.cancel:hover{color:var(--ink);border-color:var(--muted);}
 [data-panel="my-listings"] .market-row{font-family:var(--font-mono);font-size:var(--fs-13);padding:6px 0;}
+/* compact forms */
+#create-form,#manage-form{max-width:760px;}
+.cf-row{display:flex;gap:12px;align-items:flex-end;}
+.cf-row .cf-field{flex:1;}
+.cf-row-4{margin-top:0;}
+.cf-actions{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
+.cf-actions .cf-field{flex:1;max-width:340px;}
+.cf-row button{margin-top:0;}
+.cf-grid-4{grid-template-columns:2fr 1fr 1fr 1fr;}
+.cf-note{font-size:11px;margin:2px 0 8px;}
+@media (max-width:560px){.cf-row{flex-direction:column;align-items:stretch;}.cf-row button{align-self:start;}.cf-actions .cf-field{max-width:none;}.cf-grid-4{grid-template-columns:minmax(0,1fr);}}

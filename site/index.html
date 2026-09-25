@@ -123,12 +123,12 @@
                   <div class="cf-title">List a position</div>
 <div class="cf-note">Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT. Claim now for non-transferable ANTS, or restake to mint a sellable position.</div>
 <div class="cf-note">Marketplace fee is 1%: the seller receives the price minus 1%.</div>
-                  <div class="cf-grid">
+                  <div class="cf-row cf-row-4">
                     <label class="cf-field"><span>NFT id</span><input id="cf-nftid" type="number" min="0" step="1" placeholder="106"></label>
                     <label class="cf-field"><span>Price (USDC)</span><input id="cf-price" type="number" min="0.01" step="0.01" placeholder="2.00"></label>
                     <label class="cf-field"><span>Duration (days)</span><input id="cf-days" type="number" min="1" max="60" step="1" value="30"></label>
+                    <button id="cf-submit" type="button">Create listing</button>
                   </div>
-                  <button id="cf-submit" type="button">Create listing</button>
                   <div id="cf-summary" class="cf-summary"></div>
                   <div id="create-status" class="cf-status"></div>
                 </form>
@@ -139,17 +139,15 @@
                     <label class="cf-field"><span>Position id</span><input id="mf-posid" type="number" min="0" step="1" placeholder="106"></label>
                   </div>
                   <div id="mf-card" class="cf-summary"></div>
-                  <div class="cf-grid">
-                    <label class="cf-field"><span>Split amount (ANTS)</span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label>
-                    <button id="mf-split-btn" type="button">Split</button>
-                    <label class="cf-field"><span>Move to pool (agent id)</span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label>
-                    <button id="mf-move-btn" type="button">Move</button>
-                    <button id="mf-maxlock-btn" type="button">Enable max-lock</button>
+                  <div class="cf-actions">
+                    <div class="cf-row"><label class="cf-field"><span>Split amount (ANTS)</span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label><button id="mf-split-btn" type="button">Split</button></div>
+                    <div class="cf-row"><label class="cf-field"><span>Move to pool (agent id)</span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label><button id="mf-move-btn" type="button">Move</button></div>
+                    <div class="cf-row"><button id="mf-maxlock-btn" type="button">Enable max-lock</button></div>
                   </div>
                   <div id="manage-status" class="cf-status"></div>
                   <div class="cf-title">Stake buyer reward</div>
                   <div class="cf-note">Restake pending buyer rewards for an epoch into a seller pool (mints a new position). Callable by the buyer or its operator.</div>
-                  <div class="cf-grid">
+                  <div class="cf-grid cf-grid-4">
                     <label class="cf-field"><span>Buyer address</span><input id="br-buyer" type="text" placeholder="0x…"></label>
                     <label class="cf-field"><span>Epoch</span><input id="br-epoch" type="number" min="0" step="1" placeholder="23"></label>
                     <label class="cf-field"><span>Pool (agent id)</span><input id="br-agent" type="number" min="0" step="1" placeholder="52894"></label>
