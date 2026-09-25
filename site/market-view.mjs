@@ -696,19 +696,22 @@ export function initCreateListing() {
   const status = document.getElementById('create-status');
   const say = (t) => { if (status) status.textContent = t; };
   btn.addEventListener('click', async () => {
-    if (!(selectedProvider ?? window.ethereum)) { say('Connect a wallet first'); return; }
     const nftId = document.getElementById('cf-nftid').value;
     const priceHuman = document.getElementById('cf-price').value;
     const secs = daysToSeconds(document.getElementById('cf-days').value);
     if (!nftId) { say('Enter the NFT id'); return; }
-    if (!priceHuman) { say('Enter the price in USDC'); return; }
+    if (!priceHuman || Number(priceHuman) <= 0) { say('Price must be greater than 0'); return; }
     if (secs === null) { say('Duration must be between 1 and 60 days'); return; }
+    if (!(selectedProvider ?? window.ethereum)) { say('Connect a wallet first'); return; }
     const price = BigInt(Math.round(Number(priceHuman) * 10 ** MARKET.usdcDecimals));
     btn.disabled = true;
     try {
       const accounts = await walletRequest({ method: 'eth_requestAccounts' });
       const from = accounts && accounts[0];
       if (!from) { say('No account'); btn.disabled = false; return; }
+      const oRaw = await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(BigInt(nftId)));
+      const owner = wordToAddr(decodeWords(oRaw)[0]);
+      if (owner.toLowerCase() !== from.toLowerCase()) { say('You do not own this NFT'); btn.disabled = false; return; }
       say('Checking marketplace approval...');
       const aRaw = await ethCallTo(MARKET.nft, SEL.isApprovedForAll + encAddr(from) + encAddr(MARKET.market));
       const approved = wordToBigInt(decodeWords(aRaw)[0]) !== 0n;
