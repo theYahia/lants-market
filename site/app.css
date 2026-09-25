@@ -796,3 +796,28 @@ button.cancel:hover{color:var(--ink);border-color:var(--muted);}
 .cf-grid-4{grid-template-columns:2fr 1fr 1fr 1fr;}
 .cf-note{font-size:11px;margin:2px 0 8px;}
 @media (max-width:560px){.cf-row{flex-direction:column;align-items:stretch;}.cf-row button{align-self:start;}.cf-actions .cf-field{max-width:none;}.cf-grid-4{grid-template-columns:minmax(0,1fr);}}
+
+/* Listings rendered as the positions table */
+#market-list{font-family:var(--font-sans);background-color:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;}
+#market-list .market-head,#market-list .market-row{grid-template-columns:4ch 9ch 10ch 9ch 10ch 6ch 11ch 12ch 1fr;padding:8px 12px;gap:8px 12px;}
+#market-list .market-head{color:var(--muted);font-weight:500;font-size:var(--fs-10);text-transform:uppercase;border-bottom:1px solid var(--line);}
+#market-list .market-head .th-note{display:block;color:var(--muted);font-weight:400;font-size:var(--fs-10);letter-spacing:0;text-transform:none;}
+#market-list .market-row > span:nth-child(3),#market-list .market-row > span:nth-child(4),#market-list .market-row > span:nth-child(5),#market-list .market-row > span:nth-child(6),#market-list .market-row > span:nth-child(7){text-align:right;font-variant-numeric:tabular-nums;}
+#market-list .market-head > span:nth-child(8),#market-list .market-row > span:nth-child(8){justify-self:start;}
+#market-list .market-head > span:nth-child(9),#market-list .market-row > span:nth-child(9){justify-self:end;}
+@media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:700px;}}
+/* listings table alignment: header over values, wider columns, padded caveats */
+#market-list .market-head,#market-list .market-row{grid-template-columns:5ch 10ch 12ch 10ch 13ch 7ch 11ch 13ch 1fr;}
+#market-list .market-head > span:nth-child(3),#market-list .market-head > span:nth-child(4),#market-list .market-head > span:nth-child(5),#market-list .market-head > span:nth-child(6),#market-list .market-head > span:nth-child(7){text-align:right;}
+#market-list .market-head > span{white-space:nowrap;}
+#market-list .market-caveat{padding:0 12px;}
+#market-list .market-caveat:first-of-type{margin-top:10px;}
+#market-list .market-caveat:last-child{padding-bottom:12px;}
+#market-list .market-empty{padding:12px;}
+@media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:780px;}}
+/* grid columns are in ch, which follows the container font: keep the header container at the row font size, shrink only its cells */
+#market-list .market-head{font-size:inherit;}
+#market-list .market-head > span{font-size:var(--fs-10);}
+/* font-independent column widths so header and rows line up exactly */
+#market-list .market-head,#market-list .market-row{grid-template-columns:48px 96px 112px 96px 120px 64px 104px 120px 1fr;}
+@media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:860px;}}

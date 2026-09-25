@@ -10,7 +10,7 @@ import {
   cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS
 } from './market-config.mjs';
 import { computeMarketStats } from './market-stats.mjs';
-import { isMaxLock, expectedReward, exitSlash } from './metrics.mjs';
+import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn } from './metrics.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
 // pulled in via a static import at module load (a headless watchdog that does
@@ -372,25 +372,32 @@ function render(snapshot, items) {
   const head = document.createElement('div');
   head.className = 'market-head';
   
-  const headers = ['LOT', 'POSITION', 'PRICE', 'ANTS', 'USDC/ANTS', 'LOCK', 'STATUS', ''];
+  const headers = [
+    { label: 'LOT', tip: 'Marketplace lot id; buy or cancel this listing.' },
+    { label: 'POSITION', tip: 'lANTS position id backing this lot on Base.' },
+    { label: 'PRICE', tip: 'Asking price in the listing currency.' },
+    { label: 'ANTS', tip: 'ANTS locked in the listed position.' },
+    { label: 'USDC/ANTS', tip: 'Price in USDC per 1 locked ANTS.' },
+    { label: 'LOCK', tip: "Weeks left in the lock; 'max' never counts down." },
+    { label: 'EXIT', tip: 'ANTS returned on early exit after the slash burn.', note: 'net' },
+    { label: 'STATUS', tip: 'live can be bought; sold, internal = between our own wallets, not in volume.' },
+    { label: '', tip: '' },
+  ];
   for (let i = 0; i < headers.length; i++) {
     const th = document.createElement('span');
-    if (i === 4) {
-      th.textContent = 'USDC/ANTS';
+    th.textContent = headers[i].label;
+    if (headers[i].tip) {
       const info = document.createElement('span');
       info.className = 'info';
-      info.dataset.tip = 'Price in USDC per 1 locked ANTS.';
+      info.dataset.tip = headers[i].tip;
       info.textContent = 'ⓘ';
       th.appendChild(info);
-    } else if (i === 6) {
-      th.textContent = 'STATUS';
-      const info = document.createElement('span');
-      info.className = 'info';
-      info.dataset.tip = 'live can be bought; sold · internal = between our own wallets, not in volume.';
-      info.textContent = 'ⓘ';
-      th.appendChild(info);
-    } else {
-      th.textContent = headers[i];
+    }
+    if (headers[i].note) {
+      const note = document.createElement('span');
+      note.className = 'th-note';
+      note.textContent = headers[i].note;
+      th.appendChild(note);
     }
     head.appendChild(th);
   }
@@ -472,6 +479,22 @@ function render(snapshot, items) {
     row.appendChild(lockSpan);
 
     // STATUS
+    // EXIT net: what the position returns on early exit after the slash (same rule as the positions table)
+    const exitSpan = document.createElement('span');
+    exitSpan.dataset.field = 'exit';
+    if (!pos) {
+      exitSpan.textContent = '—';
+      exitSpan.title = 'Appears after the next snapshot';
+    } else {
+      const fl = floorPrice(pos);
+      exitSpan.textContent = typeof fl === 'number' ? fl.toFixed(2) : '—';
+      const burn = exitBurn(pos);
+      exitSpan.title = (burn == null || Number.isNaN(burn))
+        ? (pos.exitOpensEpoch != null ? 'Exit locked until epoch ' + pos.exitOpensEpoch + '.' : 'Exit data unavailable.')
+        : 'Early exit burns ~' + burn.toFixed(2) + ' ANTS (' + exitSlash(pos) + '%). No burn after the lock ends.';
+    }
+    row.appendChild(exitSpan);
+
     const stateSpan = document.createElement('span');
     stateSpan.dataset.field = 'state';
     const dead = pos ? (pos.withdrawn || Number(pos.closedAtEpoch) > 0) : !!item.chainClosed;

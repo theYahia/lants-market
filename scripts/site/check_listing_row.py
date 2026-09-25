@@ -246,9 +246,12 @@ def main() -> None:
                     
                     # Extract field values
                     fields = {}
-                    for field in ["listingId", "nftId", "price", "ants", "unitPrice", "lock", "state"]:
+                    for field in ["listingId", "nftId", "price", "ants", "unitPrice", "lock", "exit", "state"]:
                         value = row.locator(f'span[data-field="{field}"]').text_content() or ""
+                        title = row.locator(f'span[data-field="{field}"]').get_attribute("title") or ""
                         fields[field] = value
+                        if field == "exit":
+                            fields["exit_title"] = title
                     
                     # Count text nodes (must be 0)
                     text_nodes = row.evaluate("""el => {
@@ -259,7 +262,7 @@ def main() -> None:
                         return count;
                     }""")
                     
-                    # Count children elements (must be 8)
+                    # Count children elements (must be 9)
                     children_count = row.locator(":scope > *").count()
                     
                     # Check buy and cancel buttons
@@ -269,6 +272,7 @@ def main() -> None:
                     # Check header
                     head_present = page.locator("#market-list .market-head").count() > 0
                     head_children = page.locator("#market-list .market-head").first.locator(":scope > *").count() if head_present else 0
+                    head_col7 = page.locator("#market-list .market-head").first.locator(":scope > *").nth(6).text_content() if head_present else ""
                     
                     # Get caveats
                     caveats = page.locator("#market-list .market-caveat")
@@ -281,12 +285,14 @@ def main() -> None:
                     results[f"{prefix}ants"] = fields["ants"]
                     results[f"{prefix}unitPrice"] = fields["unitPrice"]
                     results[f"{prefix}lock"] = fields["lock"]
+                    results[f"{prefix}exit"] = fields["exit"]
+                    results[f"{prefix}exit_title"] = fields["exit_title"]
                     results[f"{prefix}state"] = fields["state"]
                     results[f"{prefix}buy"] = "1" if buy_present else "0"
                     results[f"{prefix}cancel"] = "1" if cancel_present else "0"
                     results[f"{prefix}text_nodes"] = str(text_nodes)
                     results[f"{prefix}children"] = str(children_count)
-                    results[f"{prefix}head_ok"] = "1" if head_present and head_children == 8 else "0"
+                    results[f"{prefix}head_ok"] = "1" if head_present and head_children == 9 and head_col7.startswith("EXIT") else "0"
                     results[f"{prefix}caveats_ok"] = "1" if (
                         "Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT." in caveat_texts
                         and "claim before listing" not in caveat_texts
@@ -325,6 +331,8 @@ def main() -> None:
         if results["a_ants"] != "50.00": listing_ok = 0
         if results["a_unitPrice"] != "0.0400": listing_ok = 0
         if results["a_lock"] != "104w": listing_ok = 0
+        if results["a_exit"] != "—": listing_ok = 0
+        if results["a_exit_title"] != "Appears after the next snapshot": listing_ok = 0
         if results["a_state"] != "live": listing_ok = 0
         if results["a_buy"] != "1": listing_ok = 0
         if results["a_cancel"] != "0": listing_ok = 0
@@ -333,6 +341,8 @@ def main() -> None:
         if results["b_state"] != "sold": listing_ok = 0
         if results["b_ants"] != "50.00": listing_ok = 0
         if results["b_lock"] != "—": listing_ok = 0
+        if results["b_exit"] != "—": listing_ok = 0
+        if results["b_exit_title"] != "Appears after the next snapshot": listing_ok = 0
         if results["b_buy"] != "0": listing_ok = 0
         if results["b_cancel"] != "0": listing_ok = 0
         
@@ -340,13 +350,15 @@ def main() -> None:
         if results["c_state"] != "cancelled": listing_ok = 0
         if results["c_ants"] != "50.00": listing_ok = 0
         if results["c_lock"] != "—": listing_ok = 0
+        if results["c_exit"] != "—": listing_ok = 0
+        if results["c_exit_title"] != "Appears after the next snapshot": listing_ok = 0
         if results["c_buy"] != "0": listing_ok = 0
         if results["c_cancel"] != "0": listing_ok = 0
         
         # All runs common checks
         for prefix in ["a_", "b_", "c_"]:
             if results[f"{prefix}text_nodes"] != "0": listing_ok = 0
-            if results[f"{prefix}children"] != "8": listing_ok = 0
+            if results[f"{prefix}children"] != "9": listing_ok = 0
             if results[f"{prefix}head_ok"] != "1": listing_ok = 0
             if results[f"{prefix}caveats_ok"] != "1": listing_ok = 0
     except KeyError:
