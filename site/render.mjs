@@ -353,7 +353,7 @@ if (isPending) {
       } else {
         // Live-data blurb shown alongside the Snapshot line.
         blurbLine.textContent =
-          'Live from Base - two RPCs cross-checked, sales from antscan. Auto-refreshed 3x/day (06:00 / 14:00 / 22:00 UTC).';
+          'Live from Base - every number cross-checked on two RPCs at one block, sales from antscan. Auto-refreshed 3x/day (06:00 / 14:00 / 22:00 UTC).';
       }
 
       snapFooter.appendChild(originLine);
