@@ -75,6 +75,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | First trade on our market: stake the epoch-23 buyer reward in Apex, split off 50 ANTS, list and buy it (internal test) — ready on the site, waiting on the buyer wallet | 25.09 | open |
 | Confirm staking decisions: #27 stays in Apex and is not listed; restake its rewards in Apex; small thank-you stake in Open Forge | 25.09 | open |
 | Post on X about the first trade and why unclaimed rewards move to the buyer | 30.09 | open |
+| Claim and Restake staker rewards with buttons in My Positions (fork e2e covers Restake) | 30.09 | open |
 | Restake #27's epoch-24 staker reward in Apex; move a small piece to Open Forge (the free-model network lants.eth was built on) | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
