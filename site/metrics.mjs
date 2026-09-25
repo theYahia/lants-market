@@ -107,7 +107,7 @@ export function exitSlash(pos) {
  * Returns a number rounded to two decimal places, or null if data is missing.
  */
 export function floorPrice(pos) {
-  if (!pos || pos.amount == null) return null;
+  if (!pos || pos.amount == null || pos.slashBps == null) return null;
   const amountWei = weiToBigInt(pos.amount);
   // Convert wei to ANTS
   const amount = Number(amountWei) / 1e18;
@@ -171,7 +171,7 @@ export function lockLabel(pos, currentEpoch) {
   return label;
 }
 
-export function exitBurn(pos) { if (!pos) return 0; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps || 0) / 10000); }
+export function exitBurn(pos) { if (!pos || pos.slashBps == null) return null; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps) / 10000); }
 
 export default {
   expectedReward,

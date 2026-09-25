@@ -280,7 +280,12 @@ if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
 
     row.appendChild(makeCell(reward));
     const exitTd = makeCell(floor);
-    exitTd.title = 'Early exit burns ~' + exitBurn(pos).toFixed(2) + ' ANTS (' + exitSlash(pos) + '%). No burn after the lock ends.';
+    const exitBurnVal = exitBurn(pos);
+    exitTd.title = exitBurnVal == null
+      ? (pos.exitOpensEpoch != null
+          ? 'Exit locked until epoch ' + pos.exitOpensEpoch + '.'
+          : 'Exit data unavailable.')
+      : 'Early exit burns ~' + exitBurnVal.toFixed(2) + ' ANTS (' + exitSlash(pos) + '%). No burn after the lock ends.';
     row.appendChild(exitTd);
 
     tbody.appendChild(row);

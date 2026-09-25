@@ -367,8 +367,8 @@ function render(snapshot, items) {
       lockVal = isMaxLock(pos, epoch) ? 'max' : 'fading';
       const rew = expectedReward(snapshot, pos, epoch);
       rewardVal = Number(rew).toFixed(2);
-      // add percent sign to slash value
-      slashVal = `${exitSlash(pos)}%`;
+      // add percent sign to slash value (null = exit not computable yet)
+      slashVal = exitSlash(pos) == null ? '—' : `${exitSlash(pos)}%`;
       const cur = String(Number(snapshot.epoch));
       const prev = String(Number(snapshot.epoch) - 1);
       const unclaimed = (Number(BigInt(pos.rewardByEpoch?.[prev] ?? 0)) + Number(BigInt(pos.rewardByEpoch?.[cur] ?? 0))) / 1e18;

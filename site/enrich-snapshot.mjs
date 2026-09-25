@@ -16,6 +16,7 @@ const POOLS_ABI = parseAbi([
   'function positionWeightAtEpoch(uint256, uint256) view returns (uint256)',
   'function positionMaxLockPowerAtEpoch(uint256, uint256) view returns (uint256)',
   'function earlyExitSlashBps(uint256) view returns (uint256)',
+  'function positionWithdrawableEpoch(uint256) view returns (uint64)',
   'function poolWeightAtEpoch(uint256, uint256) view returns (uint256)',
 ])
 
@@ -78,11 +79,17 @@ async function main() {
     }
 
     let slashBps = null
+    let exitOpensEpoch = null
     try {
       const slash = await callPools('earlyExitSlashBps', [posId])
       slashBps = String(slash)
     } catch (e) {
       console.warn('Slash read failed', e.message)
+      try {
+        const epochVal = await callPools('positionWithdrawableEpoch', [posId])
+        const epochNum = Number(epochVal)
+        if (epochNum > currentEpoch) exitOpensEpoch = epochNum
+      } catch (_) {}
     }
 
     const rewardByEpoch = {}
@@ -101,6 +108,7 @@ async function main() {
       agentId: p.agentId,
       amount: p.amount,
       slashBps,
+      exitOpensEpoch,
       weightsByEpoch,
       maxLockPowerByEpoch,
       rewardByEpoch,

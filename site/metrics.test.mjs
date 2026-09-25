@@ -127,3 +127,15 @@ test('expectedReward – missing data returns 0', () => {
   const r2 = metrics.expectedReward(null, posNoReward, 'any');
   assert.strictEqual(r2, 0, 'expectedReward should be 0 when snapshot is null');
 });
+
+test('unknown slash (PositionChangePending) returns null, not a free exit', () => {
+  const nullPos = { amount: '27065300000000000000000', slashBps: null, stakeStartEpoch: 25, stakeEndEpoch: 40 };
+  assert.strictEqual(metrics.floorPrice(nullPos), null);
+  assert.strictEqual(metrics.exitBurn(nullPos), null);
+  assert.strictEqual(metrics.exitSlash(nullPos), null);
+
+  // control: a normal position is still computed
+  const okPos = { amount: '27065300000000000000000', slashBps: 5000 };
+  assert.strictEqual(metrics.floorPrice(okPos), 13532.65);
+  assert.ok(Math.abs(metrics.exitBurn(okPos) - 13532.65) < 1e-6);
+});
