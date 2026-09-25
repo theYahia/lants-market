@@ -739,6 +739,7 @@ async function onConnect() {
 
 export async function loadPublicMarket() {
   if (MARKET.market === ZERO) return;
+  if (connectedAccount) return onConnect(); // re-read the wallet's positions after a buy, split or stake
   try {
     const snapshot = await loadSnapshot();
     const items = await readListings();
@@ -1141,9 +1142,9 @@ export async function renderMyPositions(account, ids, snapshot) {
   for (const id of ids) {
     let amount, lockWeeks, rewardText, exitText, exitTitle = '', skip = false;
 
-    if (snapshot) {
-      const pos = findPos(snapshot, id);
-      if (!pos) continue;
+    // a position newer than the snapshot (bought or split since the last run) is read from the chain below
+    const pos = snapshot ? findPos(snapshot, id) : null;
+    if (pos) {
 
       // Closed filter
       if (pos.withdrawn || (Number(pos.closedAtEpoch) > 0 && Number(pos.closedAtEpoch) <= Number(snapshot.epoch))) continue;

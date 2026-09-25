@@ -845,3 +845,5 @@ body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio 
 #pf-positions .pf-empty a{color:var(--accent);}
 [data-panel="my-listings"] .market-row,[data-panel="my-listings"] .feed-empty{padding:8px 12px;}
 @media (max-width:640px){#pf-positions .pf-pos-head,#pf-positions .pf-pos-row{min-width:620px;}}
+/* buy/approve status: the 10th child of a 9-column row wrapped into the 48px LOT column; give it the whole row */
+#market-list .market-row > span.msg{grid-column:1/-1;margin-left:0 !important;color:var(--muted);font-family:var(--font-mono);font-size:var(--fs-12);overflow-wrap:anywhere;}
