@@ -80,8 +80,8 @@ function sortPositions(positions, col, dir) {
         bVal = b.lockLeft;
         break;
       case 3:
-        aVal = Number(a.reward);
-        bVal = Number(b.reward);
+        aVal = /^from e\d+$/.test(a.reward) ? 0 : Number(a.reward);
+        bVal = /^from e\d+$/.test(b.reward) ? 0 : Number(b.reward);
         break;
       case 4:
         aVal = a.floor === '—' ? Infinity : Number(a.floor);
@@ -246,9 +246,9 @@ function renderSnapshot(snapshot, opts = {}) {
     // First cell – pure position number
     const idCell = document.createElement('td');
     idCell.textContent = pos.id;
-if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
+const isPending = Number(pos.stakeStartEpoch) > Number(snapshot.epoch);
+if (isPending) {
   row.classList.add('is-pending');
-  row.style.setProperty('--pending-start', JSON.stringify(String(pos.stakeStartEpoch)));
   row.title = 'Reward starts at epoch ' + pos.stakeStartEpoch + '; staking power activates then.';
 }
     // Badge rendering removed; class badge-deal is no longer applied here.
@@ -278,7 +278,7 @@ if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
     }
     row.appendChild(lockTd);
 
-    row.appendChild(makeCell(reward));
+    row.appendChild(makeCell(isPending ? 'from e' + pos.stakeStartEpoch : reward));
     const exitTd = makeCell(floor);
     const exitBurnVal = exitBurn(pos);
     exitTd.title = (exitBurnVal == null || Number.isNaN(exitBurnVal))

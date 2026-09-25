@@ -192,22 +192,29 @@ def _read_pending_marker_info(page):
     () => {
         const tables = document.querySelectorAll('table');
         let target = null;
+        let lockIdx = -1;
+        let rewardIdx = -1;
         for (const tbl of tables) {
             const ths = tbl.querySelectorAll('thead th');
             for (let i = 0; i < ths.length; i++) {
                 if (ths[i].textContent.trim().startsWith('LOCK')) {
                     target = tbl;
-                    break;
+                    lockIdx = i;
+                }
+                if (ths[i].textContent.trim().startsWith('REWARD')) {
+                    rewardIdx = i;
                 }
             }
-            if (target) break;
+            if (target && rewardIdx >= 0) break;
         }
-        if (!target) {
+        if (!target || rewardIdx < 0) {
             return {
                 pending_count: 0,
                 pending_id_numeric: 0,
+                pending_reward_text_ok: 0,
                 reward_sortable: 0,
-                pending_marker_in_reward: 0,
+                reward_right_aligned: 0,
+                maxlock_weight_ok: 0,
                 marker_not_in_id: 0,
                 marker_only_pending: 0
             };
@@ -215,41 +222,59 @@ def _read_pending_marker_info(page):
         const rows = Array.from(target.querySelectorAll('tbody tr'));
         let pendingCount = 0;
         let allIdNumeric = true;
+        let allPendingRewardTextOk = true;
         let allRewardSortable = true;
-        let pendingMarkerInReward = 0;
-        let anyIdHasFrom = false;
         let anyNonPendingRewardHasFrom = false;
+        let allMaxlockWeightOk = true;
+        let maxlockCount = 0;
+        let anyIdHasFrom = false;
 
         for (const tr of rows) {
             const first = tr.cells[0].textContent.trim().toLowerCase();
             if (first === 'dust') continue;
 
             const idCell = tr.cells[0];
-            const rewardCell = tr.cells[3];
+            const rewardCell = tr.cells[rewardIdx];
 
             const idText = idCell.textContent.trim();
             if (!/^\\d+$/.test(idText)) {
                 allIdNumeric = false;
             }
 
-            const rewardText = rewardCell.textContent.trim();
-            if (Number(rewardText) !== Number(rewardText)) { // NaN check
-                allRewardSortable = false;
-            }
-
             const isPending = tr.classList.contains('is-pending');
             if (isPending) {
                 pendingCount++;
+                // Check reward text matches ^from e\\d+$
+                const rewardText = rewardCell.textContent.trim();
+                if (!/^from e\\d+$/.test(rewardText)) {
+                    allPendingRewardTextOk = false;
+                }
+                // Check ::after is none/normal/empty
                 const after = getComputedStyle(rewardCell, '::after').content;
                 const cleaned = after.replace(/^["']|["']$/g, '').trim();
-                if (/^from e\\d+$/.test(cleaned)) {
-                    pendingMarkerInReward++;
+                if (cleaned !== '' && cleaned !== 'none' && cleaned !== 'normal') {
+                    allPendingRewardTextOk = false;
                 }
             } else {
+                // Check reward text is numeric
+                const rewardText = rewardCell.textContent.trim();
+                if (Number(rewardText) !== Number(rewardText)) { // NaN check
+                    allRewardSortable = false;
+                }
                 const after = getComputedStyle(rewardCell, '::after').content;
                 const cleaned = after.replace(/^["']|["']$/g, '').trim();
                 if (cleaned.includes('from')) {
                     anyNonPendingRewardHasFrom = true;
+                }
+            }
+
+            // Check maxlock weights
+            const lockCell = tr.cells[lockIdx];
+            if (lockCell.classList.contains('is-maxlock')) {
+                maxlockCount++;
+                const weight = parseInt(getComputedStyle(lockCell).fontWeight);
+                if (weight >= 600) {
+                    allMaxlockWeightOk = false;
                 }
             }
 
@@ -260,14 +285,105 @@ def _read_pending_marker_info(page):
             }
         }
 
+        // Check reward right alignment (measure text, not td)
+        const nonDustRows = rows.filter(tr => tr.cells[0].textContent.trim().toLowerCase() !== 'dust');
+        let rewardRightAligned = 1;
+        if (nonDustRows.length > 0) {
+            const rights = [];
+            for (const tr of nonDustRows) {
+                const rewardCell = tr.cells[rewardIdx];
+                const range = document.createRange();
+                range.selectNodeContents(rewardCell);
+                const rect = range.getBoundingClientRect();
+                rights.push(rect.right);
+            }
+            const maxRight = Math.max(...rights);
+            const minRight = Math.min(...rights);
+            if (maxRight - minRight > 1.0) {
+                rewardRightAligned = 0;
+            }
+        }
+
         return {
             pending_count: pendingCount,
             pending_id_numeric: allIdNumeric ? 1 : 0,
+            pending_reward_text_ok: allPendingRewardTextOk ? 1 : 0,
             reward_sortable: allRewardSortable ? 1 : 0,
-            pending_marker_in_reward: pendingMarkerInReward,
+            reward_right_aligned: rewardRightAligned,
+            maxlock_weight_ok: (maxlockCount > 0 && allMaxlockWeightOk) ? 1 : 0,
             marker_not_in_id: anyIdHasFrom ? 0 : 1,
             marker_only_pending: anyNonPendingRewardHasFrom ? 0 : 1
         };
+    }
+    """
+    return page.evaluate(script)
+
+
+def _check_reward_sort_desc(page):
+    """Check reward sorting: click REWARD header until sort-desc, verify no pending row above positive reward."""
+    # First, ensure the REWARD column is sorted descending by clicking up to 3 times
+    for _ in range(3):
+        th_class = page.evaluate("""
+            () => {
+                const tables = document.querySelectorAll('table');
+                for (const tbl of tables) {
+                    const ths = tbl.querySelectorAll('thead th');
+                    for (const th of ths) {
+                        if (th.textContent.trim().startsWith('REWARD')) {
+                            return th.className;
+                        }
+                    }
+                }
+                return null;
+            }
+        """)
+        if th_class and 'sort-desc' in th_class:
+            break
+        # Click the REWARD header to toggle sort
+        try:
+            page.locator("table thead th", has_text="REWARD").first.click()
+            page.wait_for_timeout(400)
+        except:
+            # If clicking fails, break and use current state
+            break
+    
+    # Now check the sorted table: once any pending row has been seen,
+    # no later row may have a reward number > 0
+    script = """
+    () => {
+        const tables = document.querySelectorAll('table');
+        let target = null;
+        let rewardIdx = -1;
+        for (const tbl of tables) {
+            const ths = tbl.querySelectorAll('thead th');
+            for (let i = 0; i < ths.length; i++) {
+                if (ths[i].textContent.trim().startsWith('REWARD')) {
+                    target = tbl;
+                    rewardIdx = i;
+                    break;
+                }
+            }
+            if (target) break;
+        }
+        if (!target) return true; // No reward column, treat as ok
+        const rows = Array.from(target.querySelectorAll('tbody tr'));
+        let seenPending = false;
+        for (const tr of rows) {
+            const first = tr.cells[0].textContent.trim().toLowerCase();
+            if (first === 'dust') continue;
+            const isPending = tr.classList.contains('is-pending');
+            if (isPending) {
+                seenPending = true;
+            }
+            if (seenPending && !isPending) {
+                const rewardText = tr.cells[rewardIdx].textContent.trim();
+                const rewardNum = parseFloat(rewardText);
+                if (!isNaN(rewardNum) && rewardNum > 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     """
     return page.evaluate(script)
@@ -291,10 +407,13 @@ def main() -> int:
     # Pending‑marker related defaults
     pending_count = 0
     pending_id_numeric = 0
+    pending_reward_text_ok = 0
     reward_sortable = 0
-    pending_marker_in_reward = 0
+    reward_right_aligned = 0
+    maxlock_weight_ok = 0
     marker_not_in_id = 0
     marker_only_pending = 0
+    reward_sort_desc_ok = 0
 
     try:
         with sync_playwright() as p:
@@ -336,8 +455,10 @@ def main() -> int:
                 pending_info = _read_pending_marker_info(page)
                 pending_count = pending_info["pending_count"]
                 pending_id_numeric = pending_info["pending_id_numeric"]
+                pending_reward_text_ok = pending_info["pending_reward_text_ok"]
                 reward_sortable = pending_info["reward_sortable"]
-                pending_marker_in_reward = pending_info["pending_marker_in_reward"]
+                reward_right_aligned = pending_info["reward_right_aligned"]
+                maxlock_weight_ok = pending_info["maxlock_weight_ok"]
                 marker_not_in_id = pending_info["marker_not_in_id"]
                 marker_only_pending = pending_info["marker_only_pending"]
 
@@ -357,6 +478,11 @@ def main() -> int:
                 sort_desc_first = desc_texts[0] if desc_texts else ""
 
                 # -----------------------------------------------------------------
+                # Reward sorting check (must be done after LOCK sorts)
+                # -----------------------------------------------------------------
+                reward_sort_desc_ok = 1 if _check_reward_sort_desc(page) else 0
+
+                # -----------------------------------------------------------------
                 # Determine lock_ok according to specification (including sort & pending checks)
                 # -----------------------------------------------------------------
                 lock_ok = 1 if (
@@ -369,10 +495,13 @@ def main() -> int:
                     and sort_desc_first == "max"
                     and pending_count > 0
                     and pending_id_numeric == 1
+                    and pending_reward_text_ok == 1
                     and reward_sortable == 1
-                    and pending_marker_in_reward == pending_count
+                    and reward_right_aligned == 1
+                    and maxlock_weight_ok == 1
                     and marker_not_in_id == 1
                     and marker_only_pending == 1
+                    and reward_sort_desc_ok == 1
                 ) else 0
 
             except PlaywrightTimeoutError:
@@ -397,10 +526,13 @@ def main() -> int:
     # Pending‑marker lines (must appear before lock_ok)
     print(f"pending_count={pending_count}")
     print(f"pending_id_numeric={pending_id_numeric}")
+    print(f"pending_reward_text_ok={pending_reward_text_ok}")
     print(f"reward_sortable={reward_sortable}")
-    print(f"pending_marker_in_reward={pending_marker_in_reward}")
+    print(f"reward_right_aligned={reward_right_aligned}")
+    print(f"maxlock_weight_ok={maxlock_weight_ok}")
     print(f"marker_not_in_id={marker_not_in_id}")
     print(f"marker_only_pending={marker_only_pending}")
+    print(f"reward_sort_desc_ok={reward_sort_desc_ok}")
     print(f"lock_ok={lock_ok}")
 
     return 0 if lock_ok == 1 else 1
