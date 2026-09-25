@@ -5,9 +5,10 @@ The script starts a temporary HTTP server that serves the `site/` directory,
 opens the page in a headless Chromium browser, intercepts all HTTPS requests,
 mocks the blockchain RPC calls, and validates the listing row rendering.
 
-Two runs are performed:
+Three runs are performed:
 - Run A: "live" state (soldTime = 0)
 - Run B: "sold" state (soldTime = now-60)
+- Run C: "cancelled" state (soldTime = 0, but sellerNftNonce = 2)
 
 Expected signals are printed as KEY=VALUE lines and a final listing_ok=1/0.
 """
@@ -51,6 +52,7 @@ SELECTORS = {
     "listingPrice": "0x115bc936",
     "ownerOf": "0x6352211e",
     "positions": "0x99fbab88",
+    "sellerNftNonce": "0x444c74aa",
 }
 
 # Timeout for waiting for selectors (milliseconds)
@@ -135,7 +137,7 @@ def _build_mock_response(method: str, params: list, run_type: str) -> str:
                         _pad_word(0),
                         _pad_word(2592000),
                         _pad_word(now + 86400),
-                        _pad_word(0 if run_type == "A" else now - 60),
+                        _pad_word(0 if run_type in ["A", "C"] else now - 60),
                     ]
                     return "0x" + "".join(words)
         
@@ -145,6 +147,11 @@ def _build_mock_response(method: str, params: list, run_type: str) -> str:
                 arg = int(data[10:74], 16)
                 if arg == 0:
                     return "0x" + _pad_word(2000000)
+        
+        # sellerNftNonce(address,address,uint256)
+        elif to == MARKET and data.startswith(SELECTORS["sellerNftNonce"]):
+            # Return 2 for all runs in run type C, 1 otherwise
+            return "0x" + _pad_word(2 if run_type == "C" else 1)
         
         # NFT ownerOf
         elif to == NFT and data.startswith(SELECTORS["ownerOf"]):
@@ -186,7 +193,7 @@ def main() -> None:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             
-            for run_type in ["A", "B"]:
+            for run_type in ["A", "B", "C"]:
                 page = browser.new_page()
                 
                 # Set up route interception
@@ -329,8 +336,15 @@ def main() -> None:
         if results["b_buy"] != "0": listing_ok = 0
         if results["b_cancel"] != "0": listing_ok = 0
         
-        # Both runs common checks
-        for prefix in ["a_", "b_"]:
+        # Run C checks
+        if results["c_state"] != "cancelled": listing_ok = 0
+        if results["c_ants"] != "50.00": listing_ok = 0
+        if results["c_lock"] != "—": listing_ok = 0
+        if results["c_buy"] != "0": listing_ok = 0
+        if results["c_cancel"] != "0": listing_ok = 0
+        
+        # All runs common checks
+        for prefix in ["a_", "b_", "c_"]:
             if results[f"{prefix}text_nodes"] != "0": listing_ok = 0
             if results[f"{prefix}children"] != "8": listing_ok = 0
             if results[f"{prefix}head_ok"] != "1": listing_ok = 0

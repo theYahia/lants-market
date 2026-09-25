@@ -270,7 +270,17 @@ async function readListings() {
       );
     }
 
-    const isLive = (soldTime === 0n && endTime >= now);
+    // A cancel (or a newer listing of the same NFT) bumps the seller's nonce; the old lot can no longer be bought.
+    let cancelled = false;
+    if (soldTime === 0n) {
+      try {
+        const nRaw = await ethCall('0x444c74aa' + encAddr(seller) + encAddr(MARKET.nft) + encUint(nftId)); // sellerNftNonce(address,address,uint256)
+        cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[2]);
+      } catch {
+        cancelled = false;
+      }
+    }
+    const isLive = (soldTime === 0n && endTime >= now && !cancelled);
     let owner = null;
     if (isLive) {
       try {
@@ -312,7 +322,8 @@ async function readListings() {
       ownerMismatch,
       chainAmount,
       chainClosed,
-      chainStakeEnd
+      chainStakeEnd,
+      cancelled
     });
   }
 
@@ -472,6 +483,8 @@ function render(snapshot, items) {
       stateVal = 'live';
     } else if (item.soldTime !== 0n) {
       stateVal = INTERNAL_LISTING_IDS.map(String).includes(String(item.listingId)) ? 'sold · internal' : 'sold';
+    } else if (item.cancelled) {
+      stateVal = 'cancelled';
     } else {
       stateVal = 'expired';
     }
@@ -560,11 +573,11 @@ export async function renderMyListingsPanel() {
     row.appendChild(document.createTextNode(' '));
     row.appendChild(makeSpan('nftId', item.nftId.toString()));
 
-    row.appendChild(document.createTextNode(' \u00b7 price '));
-    row.appendChild(makeSpan('price', fmtPrice(item.price)));
+    row.appendChild(document.createTextNode(' \u00b7 '));
+    row.appendChild(makeSpan('price', (Number(item.price) / 1e6).toFixed(2) + ' USDC'));
 
     const stateVal = item.isLive ? 'live' :
-      (item.soldTime !== 0n ? 'sold' : 'expired');
+      (item.soldTime !== 0n ? 'sold' : (item.cancelled ? 'cancelled' : 'expired'));
     row.appendChild(document.createTextNode(' \u00b7 '));
     row.appendChild(makeSpan('state', stateVal));
 
@@ -634,10 +647,7 @@ async function onConnect() {
 
       try {
         // stakerPositionCount
-        const countRaw = await walletRequest({
-          method: 'eth_call',
-          params: [{ to: POSITIONS_CONTRACT, data: stakerPositionCount + encAddress(account) }, 'latest']
-        });
+        const countRaw = await ethCallTo(POSITIONS_CONTRACT, stakerPositionCount + encAddress(account));
         const count = countRaw === '0x' ? 0 : parseInt(countRaw, 16);
 
         if (count === 0) {
@@ -651,17 +661,11 @@ async function onConnect() {
           }
         } else {
           // stakerTotalActiveStake
-          const totalRaw = await walletRequest({
-            method: 'eth_call',
-            params: [{ to: POSITIONS_CONTRACT, data: stakerTotalActiveStake + encAddress(account) }, 'latest']
-          });
+          const totalRaw = await ethCallTo(POSITIONS_CONTRACT, stakerTotalActiveStake + encAddress(account));
           const totalStake = totalRaw === '0x' ? 0n : BigInt(totalRaw);
 
           // stakerPositionIds
-          const idsRaw = await walletRequest({
-            method: 'eth_call',
-            params: [{ to: POSITIONS_CONTRACT, data: stakerPositionIds + encAddress(account) + encUint256(0) + encUint256(count) }, 'latest']
-          });
+          const idsRaw = await ethCallTo(POSITIONS_CONTRACT, stakerPositionIds + encAddress(account) + encUint256(0) + encUint256(count));
           const idsWords = decodeWords(idsRaw);
           const ids = [];
           for (let i = 0; i < count; i++) {
@@ -671,10 +675,7 @@ async function onConnect() {
           // Sum pending rewards
           let rewardsSum = 0n;
           for (const id of ids) {
-            const rewardRaw = await walletRequest({
-              method: 'eth_call',
-              params: [{ to: REWARDS_CONTRACT, data: pendingIndexedStakerReward + encUint256(id) }, 'latest']
-            });
+            const rewardRaw = await ethCallTo(REWARDS_CONTRACT, pendingIndexedStakerReward + encUint256(id));
             if (rewardRaw !== '0x') {
               rewardsSum += BigInt(rewardRaw);
             }
@@ -1036,6 +1037,60 @@ export function initManagePosition() {
   }
 }
 
+export function initCancelHandler() {
+  document.addEventListener('click', async (event) => {
+    const btn = event.target.closest('button.cancel');
+    if (!btn) return;
+
+    const row = btn.closest('.market-row');
+    let msgEl = row?.querySelector('.msg');
+    if (row && !msgEl) {
+      msgEl = document.createElement('span');
+      msgEl.className = 'msg';
+      row.appendChild(msgEl);
+    }
+    const setMessage = (text) => {
+      if (msgEl) msgEl.textContent = text;
+    };
+
+    btn.disabled = true;
+    try {
+      const accounts = await walletRequest({ method: 'eth_requestAccounts' });
+      if (!accounts || accounts.length === 0) {
+        setMessage('connect wallet first');
+        return;
+      }
+      const from = accounts[0];
+
+      if (!(await ensureChain())) {
+        setMessage('wrong network');
+        return;
+      }
+
+      const tx = await walletRequest({
+        method: 'eth_sendTransaction',
+        params: [{ from, to: MARKET.market, data: btn.dataset.calldata }]
+      });
+      setMessage('cancel sent, waiting…');
+
+      const r = await waitReceipt(tx);
+      if (r && r.status === '0x1') {
+        setMessage('cancelled');
+        await loadPublicMarket();
+        if (typeof renderMyListingsPanel === 'function') {
+          await renderMyListingsPanel();
+        }
+      } else {
+        setMessage('cancel failed');
+      }
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 export function initCreateListing() {
   const btn = document.getElementById('cf-submit');
   if (!btn) return;
@@ -1190,6 +1245,7 @@ export function initOfferForm() {
 if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initMarketView();
   initCreateListing();
+  initCancelHandler();
   initManagePosition();
   initOfferForm();
   updateTiles([], null);

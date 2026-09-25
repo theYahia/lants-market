@@ -265,6 +265,10 @@
       tabs.forEach(function(t){t.addEventListener('click',function(){open(t.dataset.tab);});});
       var brand=document.querySelector('.brand');
       if(brand)brand.addEventListener('click',function(){open('all');});
+      var pfLinks=document.querySelectorAll('.hdr-link');
+      var pfPanel=document.getElementById('portfolio');
+      function showPortfolio(on){ if(pfPanel)pfPanel.hidden=!on; pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);}); }
+      pfLinks.forEach(function(l){l.addEventListener('click',function(){showPortfolio(l.getAttribute('href')==='#portfolio');});});
       open('all');
     })();
     </script>

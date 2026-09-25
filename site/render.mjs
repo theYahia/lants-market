@@ -363,18 +363,8 @@ if (isPending) {
   // ---------------------------------------------------------------------------
 
   // portfolio-fill
-  const pfValues = document.querySelectorAll('#portfolio .pf-value');
-  if (pfValues.length >= 3) {
-    // Positions: number of positions in snapshot
-    pfValues[0].textContent = String(positions.length);
-
-    // Total Staked: sum of live positions amount / 1e18, toFixed(2)
-    const totalStakedWei = livePositions.reduce((acc, p) => acc + Number(p.amount), 0);
-    pfValues[1].textContent = (totalStakedWei / 1e18).toFixed(2);
-
-    // Claimable Rewards: leave as "—" (undefined without wallet)
-    // pfValues[2].textContent = '—'; // already set, no change
-  }
+  // My Portfolio stays empty until a wallet connects (market-view.mjs fills it);
+  // network totals must not appear under a "My" heading.
 
   const pfSnapshot = document.querySelector('.pf-snapshot');
   if (pfSnapshot && snapshot.snapshotBlock !== undefined) {

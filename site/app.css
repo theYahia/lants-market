@@ -772,3 +772,16 @@ th.sort-desc {
         min-width: 620px; /* keep 8 columns intact, scroll instead of reflow */
     }
 }
+/* Manage a position / Stake buyer reward buttons: same look as Create listing */
+#mf-split-btn,#mf-move-btn,#mf-maxlock-btn,#br-submit{margin-top:12px;padding:10px 16px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-13);cursor:pointer;justify-self:start;align-self:end;}
+#mf-split-btn,#mf-move-btn,#mf-maxlock-btn{grid-column:1/-1;}
+#mf-split-btn:disabled,#mf-move-btn:disabled,#mf-maxlock-btn:disabled,#br-submit:disabled{opacity:.5;cursor:default;}
+#manage-form{margin-top:32px;}
+/* listing caveats: quiet sans text instead of mono lines */
+#market-list .market-caveat{font-family:var(--font-sans);line-height:1.5;margin-top:4px;}
+/* phone header on one row */
+@media (max-width:480px){header{display:grid;flex-direction:initial;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;}.hdr-nav{justify-self:center;gap:12px;}.hdr-link{font-size:var(--fs-13);}#hdr-connect{padding:6px 10px;font-size:var(--fs-12);}}
+/* Cancel buttons (listing grid and My Listings) */
+button.cancel{padding:4px 10px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;margin-left:6px;}
+button.cancel:hover{color:var(--ink);border-color:var(--muted);}
+[data-panel="my-listings"] .market-row{font-family:var(--font-mono);font-size:var(--fs-13);padding:6px 0;}
