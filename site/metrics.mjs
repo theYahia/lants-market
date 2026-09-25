@@ -171,7 +171,8 @@ export function lockLabel(pos, currentEpoch) {
   return label;
 }
 
-export function exitBurn(pos) { if (!pos || pos.slashBps == null) return null; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps) / 10000); }
+// Returns NaN (a number), not null, when slash is unknown: legacy callers do exitBurn(pos).toFixed(2) and NaN.toFixed(2) === 'NaN' (no crash, no false 'free exit'). New callers must use Number.isNaN().
+export function exitBurn(pos) { if (!pos || pos.slashBps == null) return Number.NaN; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps) / 10000); }
 
 export default {
   expectedReward,

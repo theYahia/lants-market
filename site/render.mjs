@@ -281,7 +281,7 @@ if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
     row.appendChild(makeCell(reward));
     const exitTd = makeCell(floor);
     const exitBurnVal = exitBurn(pos);
-    exitTd.title = exitBurnVal == null
+    exitTd.title = (exitBurnVal == null || Number.isNaN(exitBurnVal))
       ? (pos.exitOpensEpoch != null
           ? 'Exit locked until epoch ' + pos.exitOpensEpoch + '.'
           : 'Exit data unavailable.')

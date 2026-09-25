@@ -131,7 +131,7 @@ test('expectedReward – missing data returns 0', () => {
 test('unknown slash (PositionChangePending) returns null, not a free exit', () => {
   const nullPos = { amount: '27065300000000000000000', slashBps: null, stakeStartEpoch: 25, stakeEndEpoch: 40 };
   assert.strictEqual(metrics.floorPrice(nullPos), null);
-  assert.strictEqual(metrics.exitBurn(nullPos), null);
+  assert.ok(Number.isNaN(metrics.exitBurn(nullPos)), 'unknown slash: exitBurn is NaN, never a number (no free-exit lie), and never null (legacy .toFixed must not crash)');
   assert.strictEqual(metrics.exitSlash(nullPos), null);
 
   // control: a normal position is still computed
