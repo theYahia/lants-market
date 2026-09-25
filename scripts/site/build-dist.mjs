@@ -12,6 +12,7 @@ const FILES = [
   ['site/render.mjs', 'dist/render.mjs'],
   ['site/metrics.mjs', 'dist/metrics.mjs'],
   ['site/market-config.mjs', 'dist/market-config.mjs'],
+  ['site/market-stats.mjs', 'dist/market-stats.mjs'],
   ['site/market-view.mjs', 'dist/market-view.mjs'],
   ['site/market-buy.mjs', 'dist/market-buy.mjs'],
   ['site/fixtures/snapshot-e23.full.json', 'dist/fixtures/snapshot-e23.full.json'],
@@ -45,6 +46,34 @@ for (const [src] of FILES) {
 for (const [src, dest] of FILES) {
   const destPath = join(DIST_ROOT, dest.replace(/^dist\//, ''));
   copyFileSync(src, destPath);
+}
+
+// 2a. Integrity gate: every local ./<name>.mjs|.css reference must resolve to a file in dist/.
+const LOCAL_REF_RE = /(?:from\s*|import\s*\(\s*|src=|href=)['"]\.\/([A-Za-z0-9_-]+\.(?:mjs|css))['"]/g;
+const distNames = new Set(readdirSync(DIST_ROOT));
+for (const [, dest] of FILES) {
+  const rel = dest.replace(/^dist\//, '');
+  if (!/\.(mjs|html)$/.test(rel)) continue;
+  const txt = readFileSync(join(DIST_ROOT, rel), 'utf8');
+  for (const m of txt.matchAll(LOCAL_REF_RE)) {
+    if (!distNames.has(m[1])) fail(`dangling reference './${m[1]}' in ${rel} (not copied to dist/)`);
+  }
+}
+
+// 2c. Cache-busting: stamp ?v=<content hash> onto local .mjs/.css references so
+// stale per-file copies across IPNS gateways cannot combine into a broken page.
+import { createHash } from 'node:crypto';
+const VERSIONABLE = [...readdirSync(DIST_ROOT).filter((f) => f.endsWith('.mjs')), 'app.css'];
+const { writeFileSync } = await import('node:fs');
+const versions = {};
+for (const name of VERSIONABLE) {
+  versions[name] = createHash('sha256').update(readFileSync(join(DIST_ROOT, name))).digest('hex').slice(0, 8);
+}
+const RE = /(\.\/)?([A-Za-z0-9_-]+)\.mjs|app\.css/g;
+const stamp = (txt) => txt.replace(RE, (m) => { if (m.includes('?v=')) return m; const key = m.replace('./', ''); return versions[key] ? m + '?v=' + versions[key] : m; });
+for (const name of ['index.html', ...VERSIONABLE.filter((n) => n.endsWith('.mjs'))]) {
+  const p = join(DIST_ROOT, name);
+  writeFileSync(p, stamp(readFileSync(p, 'utf8')));
 }
 
 // 2b. Optional live fixture (not included in FILES and does not affect dist_files).
