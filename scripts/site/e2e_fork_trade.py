@@ -10,6 +10,7 @@ Preconditions (assumes these fixes are merged):
 """
 
 import json
+import mimetypes
 import os
 import subprocess
 import sys
@@ -49,16 +50,20 @@ TX_POLL_TIMEOUT = 60  # seconds - for 2s block time
 anvil_proc: Optional[subprocess.Popen] = None
 httpd: Optional[HTTPServer] = None
 http_thread: Optional[threading.Thread] = None
+privy_mode = False
 
 # ── Mock wallet JS (never use f-string - braces) ───────────────────────
 MOCK_WALLET_JS = """
 (() => {
-    const ANVIL = "http://127.0.0.1:__ANVIL_PORT__";
+    const ANVIL = "https://anvil.e2e.invalid/";
     const ACTIVE = "__ACTIVE__";
     const CHAIN = "__CHAIN_ID_HEX__";
 
     class MockProvider {
-        constructor() {}
+        constructor() {
+            this.isMetaMask = true;
+            this.isRabby = true;
+        }
         on() { return this; }
         removeListener() { return this; }
         async request({method, params}) {
@@ -131,6 +136,25 @@ MOCK_WALLET_JS = """
     }
 
     window.ethereum = new MockProvider();
+
+    // EIP-6963 announcement
+    const provider = new MockProvider();
+    const announce = () => {
+        const event = new CustomEvent("eip6963:announceProvider", {
+            detail: {
+                info: {
+                    uuid: "e2e-rabby",
+                    name: "Rabby Wallet",
+                    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>",
+                    rdns: "io.rabby"
+                },
+                provider: provider
+            }
+        });
+        window.dispatchEvent(event);
+    };
+    window.addEventListener("eip6963:requestProvider", announce);
+    announce();
 })();
 """
 
@@ -211,6 +235,112 @@ def stop_all() -> None:
         except subprocess.TimeoutExpired:
             anvil_proc.kill()
         anvil_proc = None
+
+
+def setup_privy_route(context) -> None:
+    """Route lants.eth.limo requests to dist/ files."""
+    dist_dir = Path(SITE_DIR + "/../dist").resolve()
+    
+    def handle_route(route):
+        url = route.request.url
+        # Parse URL
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        path = parsed.path
+        if path == "/":
+            path = "/index.html"
+        
+        file_path = dist_dir / path.lstrip("/")
+        
+        if file_path.exists() and file_path.is_file():
+            content_type = "text/javascript" if file_path.suffix == ".mjs" else mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            with open(file_path, "rb") as f:
+                body = f.read()
+            route.fulfill(
+                status=200,
+                content_type=content_type,
+                body=body
+            )
+        else:
+            route.continue_()
+    
+    context.route("https://lants.eth.limo/**", handle_route)
+
+
+def connect_privy(page, role: str) -> None:
+    """Click connect button and wait for Privy connection."""
+    page.click("#hdr-connect")
+    
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        try:
+            btn_text = page.inner_text("#hdr-connect")
+            # Check if button text starts with 0x (connected address)
+            if btn_text.strip().startswith("0x"):
+                # Check no visible privy dialog backdrop
+                backdrop = page.locator("#privy-dialog-backdrop")
+                if not backdrop.is_visible():
+                    print(f"PRIVY_CONNECTED_{role}=1")
+                    return
+        except Exception:
+            pass
+        page.wait_for_timeout(500)
+    
+    # Diagnostic output on failure
+    try:
+        btn_text = page.inner_text("#hdr-connect")
+        print(f"PRIVY_BTN={btn_text}")
+    except Exception:
+        print("PRIVY_BTN=<not accessible>")
+    
+    try:
+        backdrop = page.locator("#privy-dialog-backdrop")
+        if backdrop.count() == 0:
+            print("PRIVY_BACKDROP=absent")
+        elif backdrop.is_visible():
+            print("PRIVY_BACKDROP=visible")
+        else:
+            print("PRIVY_BACKDROP=hidden")
+    except Exception:
+        print("PRIVY_BACKDROP=error")
+    
+    try:
+        frames = page.frames
+        frame_info = []
+        for f in frames:
+            url = f.url
+            if len(url) > 80:
+                url = url[:80] + "..."
+            frame_info.append(url)
+        print(f"PRIVY_FRAMES={','.join(frame_info)}")
+    except Exception:
+        print("PRIVY_FRAMES=<error>")
+    
+    # Get wallet calls from the mock
+    try:
+        wallet_calls = page.evaluate("window.__e2eWalletCalls || []")
+        print(f"PRIVY_WALLET_CALLS={','.join(wallet_calls[-10:])}")
+    except Exception:
+        print("PRIVY_WALLET_CALLS=<error>")
+    
+    # Take screenshot
+    script_dir = Path(__file__).parent
+    screenshot_path = script_dir / f"privy_fail_{role}.png"
+    try:
+        page.screenshot(path=str(screenshot_path))
+        print(f"PRIVY_SCREENSHOT={screenshot_path}")
+    except Exception:
+        print(f"PRIVY_SCREENSHOT=<error saving {screenshot_path}>")
+    
+    # This will be overridden by the actual logger, but let's try to get page errors
+    try:
+        # We need to access the logs that were set up - but we don't have access to them here
+        # Instead, we'll just report that we've captured the diagnostics
+        print(f"PRIVY_DIAGNOSTICS_CAPTURED={role}")
+    except Exception:
+        pass
+    
+    raise AssertionError(f"Privy connection failed for {role}")
 
 
 # ── ABI encode helpers ─────────────────────────────────────────────────
@@ -339,6 +469,8 @@ def set_usdc_balance(addr: str, amount_wei: int) -> None:
 def add_init_script(page, addr: str) -> None:
     """Inject mock window.ethereum before page scripts."""
     js = MOCK_WALLET_JS.replace("__ACTIVE__", addr).replace("__ANVIL_PORT__", str(ANVIL_PORT)).replace("__CHAIN_ID_HEX__", CHAIN_ID_HEX)
+    # Also add a global array to track wallet calls
+    js += "\nwindow.__e2eWalletCalls = window.__e2eWalletCalls || [];"
     page.add_init_script(js)
 
 
@@ -348,6 +480,44 @@ def setup_rpc_route(context) -> None:
         req = route.request
         url = req.url
         if any(host in url for host in CDN_URLS):
+            if req.method == "OPTIONS":
+                route.fulfill(
+                    status=204,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "*"
+                    }
+                )
+                return
+            body = req.post_data_buffer or b""
+            try:
+                proxy_req = urllib.request.Request(
+                    ANVIL_URL,
+                    data=body,
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(proxy_req, timeout=30) as resp:
+                    data = resp.read()
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin": "*"},
+                    body=data
+                )
+            except Exception as e:
+                error_body = json.dumps({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "error": {"code": -32000, "message": str(e)}
+                }).encode()
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin": "*"},
+                    body=error_body
+                )
+        elif "anvil.e2e.invalid" in url:
             if req.method == "OPTIONS":
                 route.fulfill(
                     status=204,
@@ -400,6 +570,10 @@ def setup_page_logging(page) -> Dict:
     def e2e_log(category: str, method: str, params_str: str):
         if category == "WALLET_CALL":
             logs["wallet"].append(f"{method}: {params_str[:200]}")
+            try:
+                page.evaluate(f"window.__e2eWalletCalls.push('{method}')")
+            except:
+                pass
     
     page.expose_function("__e2eLog", e2e_log)
     return logs
@@ -415,68 +589,161 @@ def print_logs(logs: Dict, prefix: str = "") -> None:
 
 
 # ── Main test ──────────────────────────────────────────────────────────
-def run_step1_3() -> int:
-    """Steps 1-3: stakeBuyerReward, splitStake, enableMaxLock."""
+def run_step1_3(site_port: int) -> int:
+    """Steps 1-3: stakeBuyerReward, splitStake, enableMaxLock (single operator flow)."""
     # fund operator
     rpc("anvil_setBalance", [OPERATOR, "0x16345785d8a0000"])  # 0.1 ETH
 
-    # Step 1: stakeBuyerReward
-    sig = "stakeBuyerReward(address,uint256,uint256,uint256)"
-    selector = get_selector(sig)
-    data = (selector + enc_addr("0x86Bb4278389572D6FFC803D72661552bE096E473")[2:]
-            + enc_uint(23)[2:] + enc_uint(52894)[2:] + enc_uint(104)[2:])
-    receipt = eth_send_and_wait(OPERATOR, USAGE_REWARDS, data)
-    P = get_nft_position_id(receipt)
-    print(f"STEP1_OK position_id={P}")
-
-    # Step 2: splitStake(P, 50e18)
-    sig = "splitStake(uint256,uint256)"
-    selector = get_selector(sig)
-    data = selector + enc_uint(P)[2:] + enc_uint(50 * 10**18)[2:]
-    receipt = eth_send_and_wait(OPERATOR, NFT, data)
-    # find two mints, identify SMALL (amount=50e18) and BIG (other)
-    transfer_topic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-    minted = []
-    for log in receipt["logs"]:
-        if log["address"].lower() == NFT.lower() and log["topics"][0] == transfer_topic:
-            if log["topics"][1] == "0x" + "0" * 64:  # from zero
-                tid = int(log["topics"][3], 16)
-                minted.append(tid)
-    assert len(minted) == 2, f"expected 2 mints, got {len(minted)}"
-    amounts = {tid: get_position_amount(tid) for tid in minted}
-    small = next(tid for tid, amt in amounts.items() if amt == 50 * 10**18)
-    big = next(tid for tid, amt in amounts.items() if tid != small)
-    print(f"STEP2_OK SMALL={small} BIG={big}")
-
-    # Step 3: enableMaxLock(BIG)
-    sig = "enableMaxLock(uint256)"
-    selector = get_selector(sig)
-    data = selector + enc_uint(big)[2:]
-    eth_send_and_wait(OPERATOR, NFT, data)
-    print(f"STEP3_OK nftId_for_listing={small}")
-
-    return small
-
-
-def operator_flow(nft_id: int, site_port: int) -> int:
-    """Operator creates listing."""
+    # Open operator page for steps 1-3
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
         setup_rpc_route(context)
+        if privy_mode:
+            setup_privy_route(context)
         page = context.new_page()
         add_init_script(page, OPERATOR)
         logs = setup_page_logging(page)
 
-        page.goto(f"http://127.0.0.1:{site_port}/")
+        if privy_mode:
+            page.goto("https://lants.eth.limo/index.html")
+            connect_privy(page, "OPERATOR_STEP123")
+        else:
+            page.goto(f"http://127.0.0.1:{site_port}/")
         page.wait_for_load_state("networkidle")
 
-        # open Listings tab (no Connect click needed)
+        # Open Listings tab (Manage a position form is here)
         page.click(".tab[data-tab=listings]")
         page.wait_for_timeout(1000)
 
-        # fill form
+        # Step 1: Stake buyer reward
+        page.fill("#br-buyer", "0x86Bb4278389572D6FFC803D72661552bE096E473")
+        page.fill("#br-epoch", "23")
+        page.fill("#br-agent", "52894")
+        page.fill("#br-epochs", "104")
+        
+        # Wait for summary to be non-empty (pending reward shown)
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            br_summary = page.inner_text("#br-summary").strip()
+            if br_summary:
+                break
+            page.wait_for_timeout(500)
+        else:
+            raise AssertionError(f"br-summary did not become non-empty: '{br_summary}'")
+        
+        # Read pendingBuyerReward via eth_call BEFORE clicking submit
+        selector = get_selector("pendingBuyerReward(address,uint256)")
+        data = selector + enc_addr("0x86Bb4278389572D6FFC803D72661552bE096E473")[2:] + enc_uint(23)[2:]
+        pending_reward_hex = eth_call(USAGE_REWARDS, data)
+        pending_reward = int(pending_reward_hex, 16)
+        print(f"pending_buyer_reward_before={pending_reward}")
+        
+        page.click("#br-submit")
+        
+        # Wait for status matching /position\s*#?\d+/i
+        try:
+            page.wait_for_selector("#br-status:has-text('position')", timeout=120000)
+            # Wait for #mf-posid to have a value
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                posid_val = page.input_value("#mf-posid")
+                if posid_val.strip():
+                    break
+                page.wait_for_timeout(500)
+            else:
+                raise AssertionError(f"#mf-posid did not get filled: '{posid_val}'")
+            P = int(posid_val)
+        except Exception as e:
+            print(f"MANAGE_STATUS={page.inner_text('#manage-status')}")
+            print(f"BR_STATUS={page.inner_text('#br-status')}")
+            print(f"MF_CARD={page.inner_text('#mf-card')}")
+            raise
+        
+        # Chain check: positions(P) amount == pendingBuyerReward
+        actual_amount = get_position_amount(P)
+        assert_eq("positions_P_amount", actual_amount, pending_reward)
+        print(f"STEP1_SITE_OK P={P}")
+
+        # Step 2: Split
+        page.fill("#mf-split", "50")
+        page.click("#mf-split-btn")
+        
+        try:
+            page.wait_for_selector("#manage-status:has-text('Split')", timeout=120000)
+        except Exception as e:
+            print(f"MANAGE_STATUS={page.inner_text('#manage-status')}")
+            print(f"BR_STATUS={page.inner_text('#br-status')}")
+            print(f"MF_CARD={page.inner_text('#mf-card')}")
+            raise
+        
+        SMALL = int(page.input_value("#cf-nftid"))
+        BIG = int(page.input_value("#mf-posid"))
+        small_amount = get_position_amount(SMALL)
+        big_amount = get_position_amount(BIG)
+        assert_eq("small_amount", small_amount, 50 * 10**18)
+        assert_eq("big_amount", big_amount, pending_reward - 50 * 10**18)
+        print(f"STEP2_SITE_OK SMALL={SMALL} BIG={BIG}")
+
+        # Step 3: Max-lock
+        page.click("#mf-maxlock-btn")
+        
+        try:
+            page.wait_for_selector("#manage-status:has-text('Max-lock enabled')", timeout=120000)
+        except Exception as e:
+            print(f"MANAGE_STATUS={page.inner_text('#manage-status')}")
+            print(f"BR_STATUS={page.inner_text('#br-status')}")
+            print(f"MF_CARD={page.inner_text('#mf-card')}")
+            raise
+        
+        # Chain check: positionMaxLockPowerAtEpoch(BIG, currentEpoch()+1) > 0
+        current_epoch_data = get_selector("currentEpoch()")
+        current_epoch_hex = eth_call(NFT, current_epoch_data)
+        current_epoch = int(current_epoch_hex, 16)
+        maxlock_selector = get_selector("positionMaxLockPowerAtEpoch(uint256,uint256)")
+        maxlock_data = maxlock_selector + enc_uint(BIG)[2:] + enc_uint(current_epoch + 1)[2:]
+        maxlock_power = int(eth_call(NFT, maxlock_data), 16)
+        assert maxlock_power > 0, f"maxlock power should be > 0, got {maxlock_power}"
+        print(f"STEP3_SITE_OK maxlock_power={maxlock_power}")
+
+        # Auto-fill check: #cf-nftid should be filled with SMALL in this same page
+        cf_nftid_val = page.input_value("#cf-nftid")
+        assert_eq("cf_nftid_autofill", cf_nftid_val, str(SMALL))
+        print("cf_nftid_autofill_ok=1")
+
+        print_logs(logs, "OPERATOR_STEP123_")
+        page.unroute_all(behavior="ignoreErrors")
+        browser.close()
+        return SMALL
+
+
+def operator_flow(nft_id: int, site_port: int) -> int:
+    """Operator creates listing (filling #cf-nftid manually since this is a new page)."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        setup_rpc_route(context)
+        if privy_mode:
+            setup_privy_route(context)
+        page = context.new_page()
+        add_init_script(page, OPERATOR)
+        logs = setup_page_logging(page)
+
+        if privy_mode:
+            page.goto("https://lants.eth.limo/index.html")
+            connect_privy(page, "OPERATOR_CREATE")
+        else:
+            page.goto(f"http://127.0.0.1:{site_port}/")
+        page.wait_for_load_state("networkidle")
+
+        # open Listings tab (Manage a position form)
+        page.click(".tab[data-tab=listings]")
+        page.wait_for_timeout(1000)
+
+        # Fill #cf-nftid manually (this is a new page, auto-fill from step 1-3 doesn't persist)
         page.fill("#cf-nftid", str(nft_id))
+
+        # fill price and days
         page.fill("#cf-price", PRICE_USDC)
         page.fill("#cf-days", "30")
 
@@ -547,11 +814,17 @@ def buyer_flow(listing_id: int, site_port: int) -> None:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
         setup_rpc_route(context)
+        if privy_mode:
+            setup_privy_route(context)
         page = context.new_page()
         add_init_script(page, BUYER)
         logs = setup_page_logging(page)
 
-        page.goto(f"http://127.0.0.1:{site_port}/")
+        if privy_mode:
+            page.goto("https://lants.eth.limo/index.html")
+            connect_privy(page, "BUYER")
+        else:
+            page.goto(f"http://127.0.0.1:{site_port}/")
         page.wait_for_load_state("networkidle")
         page.click(".tab[data-tab=listings]")
 
@@ -603,20 +876,34 @@ def buyer_flow(listing_id: int, site_port: int) -> None:
 
 
 def main():
+    global privy_mode
     site_port = None
+    
+    import argparse
+    parser = argparse.ArgumentParser(description="E2E fork trade test")
+    parser.add_argument("--privy", action="store_true", help="Run in Privy mode")
+    args = parser.parse_args()
+    privy_mode = args.privy
+    
+    print(f"MODE={'privy' if privy_mode else 'default'}")
+    
     try:
         # start infrastructure
         start_anvil()
-        site_port = start_http_server()
+        if privy_mode:
+            # Build dist and serve from there
+            subprocess.run(["node", "scripts/site/build-dist.mjs"], check=True, cwd=os.getcwd())
+        else:
+            site_port = start_http_server()
 
-        # steps 1-3
-        nft_id = run_step1_3()
+        # steps 1-3 (now through the site, returns SMALL which will be listed)
+        nft_id = run_step1_3(site_port or 0)
 
-        # step 6: operator creates listing
-        listing_id = operator_flow(nft_id, site_port)
+        # step 6: operator creates listing (fills #cf-nftid manually in this new page)
+        listing_id = operator_flow(nft_id, site_port or 0)
 
         # step 7: buyer buys
-        buyer_flow(listing_id, site_port)
+        buyer_flow(listing_id, site_port or 0)
 
         print("RESULT=PASS")
         return 0
