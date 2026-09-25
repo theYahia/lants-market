@@ -357,7 +357,35 @@ function makeSpan(field, value) {
   return s;
 }
 
+// Sales panel: sold lots read from the chain. Internal trades are listed, labelled, and kept out of volume/FDV.
+function updateSales(items, snapshot) {
+  const panel = document.getElementById('sales-panel');
+  if (!panel) return;
+  const sold = (items || []).filter((it) => it.soldTime && it.soldTime !== 0n)
+    .sort((a, b) => Number(b.soldTime - a.soldTime));
+  if (!sold.length) return;
+  const internal = new Set(INTERNAL_LISTING_IDS.map(String));
+  const list = document.createElement('div');
+  list.className = 'sales-list';
+  for (const it of sold.slice(0, 5)) {
+    const pos = snapshot ? findPos(snapshot, it.nftId) : null;
+    const amt = pos ? Number(pos.amount) / 1e18 : (it.chainAmount != null ? Number(it.chainAmount) / 1e18 : null);
+    const row = document.createElement('div');
+    row.className = 'sale-row';
+    row.textContent = '#' + it.listingId + ' · pos ' + it.nftId + ' · ' + (amt != null ? amt.toFixed(2) + ' ANTS · ' : '') +
+      Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC · ' +
+      new Date(Number(it.soldTime) * 1000).toISOString().slice(0, 10) +
+      (internal.has(String(it.listingId)) ? ' · internal' : '');
+    list.appendChild(row);
+  }
+  const old = panel.querySelector('.soon-word') || panel.querySelector('.sales-list');
+  if (old) old.replaceWith(list);
+  const note = panel.querySelector('.soon-note');
+  if (note) note.textContent = 'internal = our own wallets, not in volume';
+}
+
 function updateTiles(items, snapshot) {
+  updateSales(items, snapshot);
   const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, Math.floor(Date.now() / 1000));
   const vol = document.querySelector('#m-positions .metric-value');
   const fdv = document.querySelector('#m-locked .metric-value');
