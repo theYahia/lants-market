@@ -151,7 +151,7 @@ function setupSorting() {
       const enrichedForSort = positionData.map((d) => ({
         pos: { id: d.id },
         amountNum: Number(d.amount),
-        lockLeft: d.lock === '—' ? Infinity : parseInt(d.lock, 10),
+        lockLeft: d.lock === '—' ? Infinity : d.lock === 'max' ? Number.MAX_SAFE_INTEGER : parseInt(d.lock, 10),
         reward: d.reward,
         floor: d.floor,
       }));
@@ -268,14 +268,14 @@ if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
     const lockTd = document.createElement('td');
     lockTd.setAttribute('style', 'text-align:right;font-variant-numeric:tabular-nums');
     const lockText = document.createElement('span');
-    lockText.textContent = lockLeftStr;
+    lockText.textContent = isMax ? 'max' : lockLeftStr;
     lockTd.appendChild(lockText);
     if (isMax) {
-  lockTd.classList.add('is-maxlock');
-  lockTd.title = 'Max lock: constant peak weight. Cannot be split or merged while max lock is on.';
-} else if (Number(pos.weightsByEpoch[epoch]) > 0 && pos.weightsByEpoch[epoch] === pos.maxLockPowerByEpoch[epoch]) {
-  lockTd.title = 'peak weight';
-}
+        lockTd.classList.add('is-maxlock');
+        lockTd.title = 'Max lock: constant peak weight; it does not count down. Unlock begins only after disableMaxLock, which starts a new 104-week countdown. Cannot be split or merged while max lock is on.';
+    } else if (Number(pos.weightsByEpoch[epoch]) > 0 && pos.weightsByEpoch[epoch] === pos.maxLockPowerByEpoch[epoch]) {
+        lockTd.title = 'peak weight';
+    }
     row.appendChild(lockTd);
 
     row.appendChild(makeCell(reward));

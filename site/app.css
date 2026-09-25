@@ -681,6 +681,6 @@ th.sort-desc {
 .offer-label-row{display:flex;align-items:center;gap:6px;width:100%}
 .offer-wallet{margin-left:auto;justify-content:flex-start;gap:6px}
 .offer-wallet svg{width:15px;height:15px}
-.is-maxlock::after{content:" max";color:var(--accent);font-size:var(--fs-11);font-weight:700;margin-left:4px;}
+.is-maxlock{color:var(--accent);font-weight:700;}
 .is-pending::after{content:" from e" attr(data-start);color:var(--muted);font-size:var(--fs-11);margin-left:4px;}
 .cf-note{color:var(--muted);font-size:var(--fs-12);margin:4px 0 10px;}
