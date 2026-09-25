@@ -36,7 +36,7 @@ jobs:
           SOURCE: ${{ github.event.inputs.source }}
         run: |
           set -uo pipefail
-          URL="https://ipfs.filebase.io/ipns/${IPNS_KEY}/fixtures/snapshot-e23.live.json"
+          URL="https://raw.githubusercontent.com/theYahia/lants-market/data/live.json"
           # Fetch live snapshot; any failure => empty body => treated as stale.
           curl -sS --max-time 30 -o live.json "${URL}" || echo '{}' > live.json
           [ -s live.json ] || echo '{}' > live.json
