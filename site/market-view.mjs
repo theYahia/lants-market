@@ -49,6 +49,17 @@ export async function ensurePrivy() {
   m.mountPrivy(MARKET.privyAppId, (provider, address) => {
     selectedProvider = provider;
     onConnect();
+    // Provider already captured (pre-authorized injected wallet): the Privy
+    // connect modal has nothing left to do but stays open blurring the page.
+    // Dismiss it via Escape, retrying until the backdrop is gone.
+    let closeTries = 0;
+    const closeModal = () => {
+      const backdrop = document.getElementById('privy-dialog-backdrop');
+      if (!backdrop) return;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      if (++closeTries < 30) setTimeout(closeModal, 100);
+    };
+    closeModal();
   });
 
   _openWithRetry();
@@ -727,6 +738,304 @@ export function daysToSeconds(days) {
   return secs > 5184000 ? null : secs;
 }
 
+export function initManagePosition() {
+  const MANAGE_ADDR = MARKET.nft;
+  const REWARDS_ADDR = '0x78330bF154172F1137219Bb559d4F3A270B3201F';
+  const MINT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+  const splitSel = '0xdc310451';
+  const moveSel = '0x5437910a';
+  const maxlockSel = '0xedcb5e4e';
+  const positionsSel = '0x99fbab88';
+  const posMaxLockSel = '0xdb39a228';
+  const currentEpochSel = '0x76671808';
+  const pendingSel = '0xb19101a2';
+  const stakeSel = '0xd95e60b9';
+
+  const mfPosid = document.getElementById('mf-posid');
+  if (!mfPosid) return;
+
+  const mfCard = document.getElementById('mf-card');
+  const mfSplit = document.getElementById('mf-split');
+  const mfSplitBtn = document.getElementById('mf-split-btn');
+  const mfAgent = document.getElementById('mf-agent');
+  const mfMoveBtn = document.getElementById('mf-move-btn');
+  const mfMaxlockBtn = document.getElementById('mf-maxlock-btn');
+  const manageStatus = document.getElementById('manage-status');
+  const brBuyer = document.getElementById('br-buyer');
+  const brEpoch = document.getElementById('br-epoch');
+  const brAgent = document.getElementById('br-agent');
+  const brEpochs = document.getElementById('br-epochs');
+  const brSummary = document.getElementById('br-summary');
+  const brSubmit = document.getElementById('br-submit');
+  const brStatus = document.getElementById('br-status');
+
+  function setStatus(el, msg) {
+    if (el) el.textContent = msg;
+  }
+
+  function extractMints(receipt) {
+    const ids = [];
+    if (!receipt || !receipt.logs) return ids;
+    for (const log of receipt.logs) {
+      if (log.address && log.address.toLowerCase() === MARKET.nft.toLowerCase() &&
+          log.topics && log.topics[0] === MINT_TOPIC &&
+          log.topics[1] === '0x0000000000000000000000000000000000000000000000000000000000000000' &&
+          log.topics[3]) {
+        ids.push(BigInt(log.topics[3]));
+      }
+    }
+    return ids;
+  }
+
+  async function refreshCard() {
+    const idStr = mfPosid.value.trim();
+    if (!idStr) { setStatus(mfCard, ''); return; }
+    const id = BigInt(idStr);
+    try {
+      const posData = await ethCallTo(MANAGE_ADDR, positionsSel + encUint(id));
+      const words = decodeWords(posData);
+      if (words.length < 5) throw new Error('bad positions response');
+      const owner = wordToAddr(words[0]);
+      const agentId = wordToBigInt(words[1]);
+      const amount = wordToBigInt(words[2]) / 1000000000000000000n;
+      const stakeStartEpoch = wordToBigInt(words[4]);
+      const epochData = await ethCallTo(MANAGE_ADDR, currentEpochSel);
+      const epochWords = decodeWords(epochData);
+      const currentEpoch = wordToBigInt(epochWords[0]);
+      let maxLock = false;
+      try {
+        const mlData = await ethCallTo(MANAGE_ADDR, posMaxLockSel + encUint(id) + encUint(currentEpoch));
+        const mlWords = decodeWords(mlData);
+        maxLock = mlWords.length > 0 && BigInt(mlWords[0]) > 0n;
+      } catch { /* keep false */ }
+      setStatus(mfCard, `Position ${id.toString()} · ${amount.toString()} ANTS · pool ${agentId.toString()} · start epoch ${stakeStartEpoch.toString()} · ${maxLock ? 'max-lock ON' : 'off'}`);
+    } catch (e) {
+      setStatus(mfCard, 'unavailable');
+    }
+  }
+
+  async function sendTx(to, data, btn, statusEl, successMsg) {
+    if (!btn || !statusEl) return;
+    btn.disabled = true;
+    try {
+      if (!(await ensureChain())) {
+        setStatus(statusEl, 'Wrong network');
+        return;
+      }
+      const accounts = await walletRequest({ method: 'eth_requestAccounts' });
+      const from = accounts[0];
+      setStatus(statusEl, 'Sent … waiting');
+      const txHash = await walletRequest({
+        method: 'eth_sendTransaction',
+        params: [{ from, to, data }]
+      });
+      const receipt = await waitReceipt(txHash);
+      if (receipt && receipt.status === '0x1') {
+        setStatus(statusEl, successMsg);
+        return receipt;
+      } else {
+        setStatus(statusEl, 'failed');
+        return null;
+      }
+    } catch (e) {
+      setStatus(statusEl, e.message || String(e));
+      return null;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  mfPosid.addEventListener('input', refreshCard);
+
+  mfSplitBtn.addEventListener('click', async () => {
+    const posidStr = mfPosid.value.trim();
+    const splitStr = mfSplit.value.trim();
+    if (!posidStr || !splitStr) {
+      setStatus(manageStatus, 'Enter position id and split amount');
+      return;
+    }
+    const posid = BigInt(posidStr);
+    const x = parseFloat(splitStr);
+    if (!(x > 0)) {
+      setStatus(manageStatus, 'Split amount must be > 0');
+      return;
+    }
+    const amountWei = BigInt(Math.round(x * 1e18));
+    try {
+      const posData = await ethCallTo(MANAGE_ADDR, positionsSel + encUint(posid));
+      const words = decodeWords(posData);
+      const posAmount = wordToBigInt(words[2]);
+      if (amountWei >= posAmount) {
+        setStatus(manageStatus, 'Split amount must be less than position amount');
+        return;
+      }
+    } catch (e) {
+      setStatus(manageStatus, 'Cannot read position: ' + (e.message || e));
+      return;
+    }
+    const receipt = await sendTx(
+      MANAGE_ADDR,
+      splitSel + encUint(posid) + encUint(amountWei),
+      mfSplitBtn, manageStatus, ''
+    );
+    if (!receipt) return;
+    const mints = extractMints(receipt);
+    if (mints.length < 2) {
+      setStatus(manageStatus, 'Split failed: expected 2 mints');
+      return;
+    }
+    const idA = mints[0];
+    const idB = mints[1];
+    let smallId, largeId;
+    try {
+      const dataA = await ethCallTo(MANAGE_ADDR, positionsSel + encUint(idA));
+      const dataB = await ethCallTo(MANAGE_ADDR, positionsSel + encUint(idB));
+      const amtA = wordToBigInt(decodeWords(dataA)[2]);
+      const amtB = wordToBigInt(decodeWords(dataB)[2]);
+      if (amtA <= amtB) { smallId = idA; largeId = idB; }
+      else { smallId = idB; largeId = idA; }
+    } catch {
+      smallId = idA; largeId = idB;
+    }
+    const cfNftid = document.getElementById('cf-nftid');
+    if (cfNftid) {
+      cfNftid.value = smallId.toString();
+      cfNftid.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    mfPosid.value = largeId.toString();
+    await refreshCard();
+    setStatus(manageStatus, `Split: SMALL ${smallId.toString()} -> #cf-nftid, LARGE ${largeId.toString()}`);
+  });
+
+  mfMoveBtn.addEventListener('click', async () => {
+    const posidStr = mfPosid.value.trim();
+    const agentStr = mfAgent.value.trim();
+    if (!posidStr || !agentStr) {
+      setStatus(manageStatus, 'Enter position id and target agent id');
+      return;
+    }
+    const posid = BigInt(posidStr);
+    const agentId = BigInt(agentStr);
+    if (agentId <= 0n) {
+      setStatus(manageStatus, 'Agent id must be > 0');
+      return;
+    }
+    const receipt = await sendTx(
+      MANAGE_ADDR,
+      moveSel + encUint(posid) + encUint(agentId),
+      mfMoveBtn, manageStatus, ''
+    );
+    if (!receipt) return;
+    const mints = extractMints(receipt);
+    if (mints.length === 0) {
+      setStatus(manageStatus, 'Move failed: no new position minted');
+      return;
+    }
+    const newId = mints[0];
+    mfPosid.value = newId.toString();
+    await refreshCard();
+    setStatus(manageStatus, `Moved to new position ${newId.toString()}`);
+  });
+
+  mfMaxlockBtn.addEventListener('click', async () => {
+    const posidStr = mfPosid.value.trim();
+    if (!posidStr) {
+      setStatus(manageStatus, 'Enter position id');
+      return;
+    }
+    const posid = BigInt(posidStr);
+    const receipt = await sendTx(
+      MANAGE_ADDR,
+      maxlockSel + encUint(posid),
+      mfMaxlockBtn, manageStatus, ''
+    );
+    if (!receipt) return;
+    await refreshCard();
+    setStatus(manageStatus, 'Max-lock enabled');
+  });
+
+  if (brBuyer) {
+    const setBuyerDefault = () => {
+      if (connectedAccount && !brBuyer.value) {
+        brBuyer.value = connectedAccount;
+      }
+    };
+    setBuyerDefault();
+    window.addEventListener('accountsChanged', setBuyerDefault);
+
+    const updateSummary = async () => {
+      const buyer = brBuyer.value.trim();
+      const epoch = brEpoch.value.trim();
+      if (!buyer || !epoch) {
+        setStatus(brSummary, '');
+        return;
+      }
+      try {
+        const data = await ethCallTo(REWARDS_ADDR, pendingSel + encAddr(buyer) + encUint(BigInt(epoch)));
+        const words = decodeWords(data);
+        const pending = words.length > 0 ? wordToBigInt(words[0]) / 1000000000000000000n : 0n;
+        setStatus(brSummary, `Pending: ${pending.toString()} ANTS`);
+      } catch (e) {
+        setStatus(brSummary, 'unavailable');
+      }
+    };
+
+    brBuyer.addEventListener('input', updateSummary);
+    brEpoch.addEventListener('input', updateSummary);
+    brAgent.addEventListener('input', updateSummary);
+    brEpochs.addEventListener('input', updateSummary);
+
+    brSubmit.addEventListener('click', async () => {
+      const buyer = brBuyer.value.trim();
+      const epochStr = brEpoch.value.trim();
+      const agentStr = brAgent.value.trim();
+      const epochsStr = brEpochs.value.trim();
+      if (!buyer || !epochStr || !agentStr || !epochsStr) {
+        setStatus(brStatus, 'Fill all buyer reward fields');
+        return;
+      }
+      const epoch = BigInt(epochStr);
+      const agentId = BigInt(agentStr);
+      const epochs = BigInt(epochsStr);
+      if (epoch <= 0n || agentId <= 0n) {
+        setStatus(brStatus, 'Epoch and agent id must be > 0');
+        return;
+      }
+      if (epochs < 1n || epochs > 104n) {
+        setStatus(brStatus, 'Epochs must be 1..104');
+        return;
+      }
+      try {
+        const data = await ethCallTo(REWARDS_ADDR, pendingSel + encAddr(buyer) + encUint(epoch));
+        const words = decodeWords(data);
+        const pending = words.length > 0 ? wordToBigInt(words[0]) : 0n;
+        if (pending === 0n) {
+          setStatus(brStatus, 'No pending reward');
+          return;
+        }
+      } catch (e) {
+        setStatus(brStatus, 'Cannot check pending reward: ' + (e.message || e));
+        return;
+      }
+      const receipt = await sendTx(
+        REWARDS_ADDR,
+        stakeSel + encAddr(buyer) + encUint(epoch) + encUint(agentId) + encUint(epochs),
+        brSubmit, brStatus, ''
+      );
+      if (!receipt) return;
+      const mints = extractMints(receipt);
+      if (mints.length === 0) {
+        setStatus(brStatus, 'Staked but no position minted');
+        return;
+      }
+      const newId = mints[0];
+      mfPosid.value = newId.toString();
+      await refreshCard();
+      setStatus(brStatus, `Staked reward, new position ${newId.toString()}`);
+    });
+  }
+}
+
 export function initCreateListing() {
   const btn = document.getElementById('cf-submit');
   if (!btn) return;
@@ -881,6 +1190,7 @@ export function initOfferForm() {
 if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initMarketView();
   initCreateListing();
+  initManagePosition();
   initOfferForm();
   updateTiles([], null);
   loadPublicMarket();

@@ -132,6 +132,33 @@
                   <div id="cf-summary" class="cf-summary"></div>
                   <div id="create-status" class="cf-status"></div>
                 </form>
+                <form id="manage-form">
+                  <div class="cf-title">Manage a position</div>
+                  <div class="cf-note">Split, move to another seller pool, or enable max-lock. New positions start at the next epoch and can't exit until then (PositionChangePending).</div>
+                  <div class="cf-grid">
+                    <label class="cf-field"><span>Position id</span><input id="mf-posid" type="number" min="0" step="1" placeholder="106"></label>
+                  </div>
+                  <div id="mf-card" class="cf-summary"></div>
+                  <div class="cf-grid">
+                    <label class="cf-field"><span>Split amount (ANTS)</span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label>
+                    <button id="mf-split-btn" type="button">Split</button>
+                    <label class="cf-field"><span>Move to pool (agent id)</span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label>
+                    <button id="mf-move-btn" type="button">Move</button>
+                    <button id="mf-maxlock-btn" type="button">Enable max-lock</button>
+                  </div>
+                  <div id="manage-status" class="cf-status"></div>
+                  <div class="cf-title">Stake buyer reward</div>
+                  <div class="cf-note">Restake pending buyer rewards for an epoch into a seller pool (mints a new position). Callable by the buyer or its operator.</div>
+                  <div class="cf-grid">
+                    <label class="cf-field"><span>Buyer address</span><input id="br-buyer" type="text" placeholder="0x…"></label>
+                    <label class="cf-field"><span>Epoch</span><input id="br-epoch" type="number" min="0" step="1" placeholder="23"></label>
+                    <label class="cf-field"><span>Pool (agent id)</span><input id="br-agent" type="number" min="0" step="1" placeholder="52894"></label>
+                    <label class="cf-field"><span>Stake epochs (1-104)</span><input id="br-epochs" type="number" min="1" max="104" step="1" value="104"></label>
+                  </div>
+                  <div id="br-summary" class="cf-summary"></div>
+                  <button id="br-submit" type="button">Stake buyer reward</button>
+                  <div id="br-status" class="cf-status"></div>
+                </form>
             </div>
         </div>
 
