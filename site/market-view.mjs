@@ -3,7 +3,7 @@
 
 let selectedProvider = null;
 let connectedAccount = null;
-const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(args);
+export const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(args);
 
 import {
   MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
@@ -142,7 +142,16 @@ async function ethCall(data) { return ethCallTo(MARKET.market, data); }
 
 // Ensure the wallet is on the expected chain, switching (and adding if needed)
 // instead of bailing out with a 'wrong network' message.
-async function ensureChain() {
+export async function waitReceipt(hash, tries = 90) {
+  for (let i = 0; i < tries; i++) {
+    const r = await walletRequest({ method: 'eth_getTransactionReceipt', params: [hash] });
+    if (r) return r;
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  return null;
+}
+
+export async function ensureChain() {
   let chainId = await walletRequest({ method: 'eth_chainId' });
   if (
     String(chainId).toLowerCase() ===
@@ -336,15 +345,6 @@ function render(snapshot, items) {
   updateTiles(items, snapshot);
   const table = tableEl();
   table.textContent = '';
-  if (!items.length) {
-    const empty = document.createElement('div');
-    empty.className = 'market-empty';
-    empty.textContent = 'no active listings';
-    table.appendChild(empty);
-    return;
-  }
-
-  const epoch = String(Number(snapshot.epoch) + 1);
 
   // Header row
   const head = document.createElement('div');
@@ -357,14 +357,14 @@ function render(snapshot, items) {
       th.textContent = 'USDC/ANTS';
       const info = document.createElement('span');
       info.className = 'info';
-      info.dataset.tip = 'USDC price per 1 ANT.';
+      info.dataset.tip = 'Price in USDC per 1 locked ANTS.';
       info.textContent = 'ⓘ';
       th.appendChild(info);
     } else if (i === 6) {
       th.textContent = 'STATUS';
       const info = document.createElement('span');
       info.className = 'info';
-      info.dataset.tip = 'live = buyable · sold · sold · internal = platform listing · expired · invalid = position closed/split/moved/transferred or owner mismatch.';
+      info.dataset.tip = 'live can be bought; sold · internal = between our own wallets, not in volume.';
       info.textContent = 'ⓘ';
       th.appendChild(info);
     } else {
@@ -374,7 +374,17 @@ function render(snapshot, items) {
   }
   table.appendChild(head);
 
-  const me = ((window.ethereum && window.ethereum.selectedAddress) || '').toLowerCase();
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'market-empty';
+    empty.textContent = 'No active listings yet.';
+    table.appendChild(empty);
+    return;
+  }
+
+  const epoch = String(Number(snapshot.epoch) + 1);
+  // Cancel is offered only to the connected seller (Privy or injected wallet).
+  const me = (connectedAccount || '').toLowerCase();
 
   for (const item of items) {
     const pos = findPos(snapshot, item.nftId);
@@ -686,7 +696,7 @@ async function onConnect() {
   }
 }
 
-async function loadPublicMarket() {
+export async function loadPublicMarket() {
   if (MARKET.market === ZERO) return;
   try {
     const snapshot = await loadSnapshot();
@@ -722,6 +732,27 @@ export function initCreateListing() {
   if (!btn) return;
   const status = document.getElementById('create-status');
   const say = (t) => { if (status) status.textContent = t; };
+  const POS_AMOUNT_WORD = 2; // positions(): owner, agentId, amount, ...
+  const summaryEl = document.getElementById('cf-summary');
+  const nftEl = document.getElementById('cf-nftid');
+  const priceEl = document.getElementById('cf-price');
+  async function updateSummary() {
+    if (!summaryEl) return;
+    const id = nftEl.value;
+    const priceHuman = Number(priceEl.value);
+    if (!id || !(priceHuman > 0)) { summaryEl.textContent = ''; return; }
+    let ants;
+    try {
+      const raw = await ethCallTo(MARKET.nft, '0x99fbab88' + encUint(BigInt(id))) /* positions(uint256) */;
+      ants = wordToBigInt(decodeWords(raw)[POS_AMOUNT_WORD] ?? '0x0');
+    } catch (e) { summaryEl.textContent = `Position ${id} · unavailable`; return; }
+    const antsH = Number(ants) / 1e18;
+    const receive = priceHuman * 0.99;
+    const perAnts = antsH > 0 ? priceHuman / antsH : 0;
+    summaryEl.textContent = `Position ${id} · ${antsH.toFixed(2)} ANTS · you receive ${receive.toFixed(2)} USDC · ${perAnts.toFixed(4)} USDC/ANTS`;
+  }
+  if (nftEl) nftEl.addEventListener('input', updateSummary);
+  if (priceEl) priceEl.addEventListener('input', updateSummary);
   btn.addEventListener('click', async () => {
     const nftId = document.getElementById('cf-nftid').value;
     const priceHuman = document.getElementById('cf-price').value;
@@ -736,6 +767,7 @@ export function initCreateListing() {
       const accounts = await walletRequest({ method: 'eth_requestAccounts' });
       const from = accounts && accounts[0];
       if (!from) { say('No account'); btn.disabled = false; return; }
+      if (!(await ensureChain())) { say('Wrong network'); btn.disabled = false; return; }
       const oRaw = await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(BigInt(nftId)));
       const owner = wordToAddr(decodeWords(oRaw)[0]);
       if (owner.toLowerCase() !== from.toLowerCase()) { say('You do not own this NFT'); btn.disabled = false; return; }
@@ -744,13 +776,13 @@ export function initCreateListing() {
       const approved = wordToBigInt(decodeWords(aRaw)[0]) !== 0n;
       if (!approved) {
         say('Approving the marketplace...');
-        await walletRequest({
+        const aTx = await walletRequest({
           method: 'eth_sendTransaction',
           params: [{ from, to: MARKET.nft, data: encSetApprovalForAll(MARKET.market, true) }]
         });
-        say('Approval sent. Wait for confirmation, then press Create listing again.');
-        btn.disabled = false;
-        return;
+        say('Approval sent, waiting for confirmation...');
+        const aRcpt = await waitReceipt(aTx);
+        if (!aRcpt || aRcpt.status !== '0x1') { say('Approval failed'); btn.disabled = false; return; }
       }
       // continue to createListing as now
       say('Creating the listing...');
@@ -767,7 +799,14 @@ export function initCreateListing() {
         method: 'eth_sendTransaction',
         params: [{ from, to: MARKET.market, data }]
       });
-      say('Sent: ' + tx);
+      say('Sent: ' + tx + ' — waiting for confirmation...');
+      const rcpt = await waitReceipt(tx);
+      if (rcpt && rcpt.status === '0x1') {
+        say('Listing created.');
+        await loadPublicMarket();
+      } else {
+        say('Listing failed');
+      }
     } catch (e) {
       say('Error: ' + (e && e.message ? e.message : String(e)));
     }

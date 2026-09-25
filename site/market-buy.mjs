@@ -10,6 +10,7 @@ import {
   decodeWords,
   wordToBigInt,
 } from "./market-config.mjs";
+import { walletRequest, ensureChain, waitReceipt, loadPublicMarket } from "./market-view.mjs";
 
 /**
  * Helper: create / get a span for messages inside the same market row.
@@ -60,7 +61,7 @@ function initBuyHandler() {
     // -----------------------------------------------------------------
     let accounts = [];
     try {
-      accounts = await window.ethereum.request({ method: "eth_accounts" });
+      accounts = await walletRequest({ method: "eth_accounts" });
     } catch (e) {
       setMessage(row, `wallet error: ${e.message}`, true);
       btn.disabled = false;
@@ -75,6 +76,18 @@ function initBuyHandler() {
 
     const from = accounts[0];
 
+    try {
+      if (!(await ensureChain())) {
+        setMessage(row, "wrong network", true);
+        btn.disabled = false;
+        return;
+      }
+    } catch (e) {
+      setMessage(row, `network error: ${e.message}`, true);
+      btn.disabled = false;
+      return;
+    }
+
     // -----------------------------------------------------------------
     // 2. Check allowance (ERC20)
     // -----------------------------------------------------------------
@@ -82,7 +95,7 @@ function initBuyHandler() {
     try {
       // SEL.allowance already contains the 0x prefix
       const callData = SEL.allowance + encAddr(from) + encAddr(MARKET.market);
-      const raw = await window.ethereum.request({
+      const raw = await walletRequest({
         method: "eth_call",
         params: [{ to: currency, data: callData }, "latest"],
       });
@@ -102,11 +115,17 @@ function initBuyHandler() {
       try {
         // SEL.approve already contains the 0x prefix
         const approveData = SEL.approve + encAddr(MARKET.market) + encUint(price);
-        const txHash = await window.ethereum.request({
+        const txHash = await walletRequest({
           method: "eth_sendTransaction",
           params: [{ from, to: currency, data: approveData }],
         });
-        setMessage(row, `approve: ${txHash}`);
+        setMessage(row, `approve sent: ${txHash}`);
+        const aRcpt = await waitReceipt(txHash);
+        if (!aRcpt || aRcpt.status !== "0x1") {
+          setMessage(row, "approve failed", true);
+          btn.disabled = false;
+          return;
+        }
       } catch (e) {
         setMessage(row, `approve error: ${e.message}`, true);
         btn.disabled = false;
@@ -120,11 +139,18 @@ function initBuyHandler() {
     try {
       // SEL.buyListing already contains the 0x prefix
       const buyData = SEL.buyListing + encUint(id);
-      const txHash = await window.ethereum.request({
+      const txHash = await walletRequest({
         method: "eth_sendTransaction",
         params: [{ from, to: MARKET.market, data: buyData }],
       });
-      setMessage(row, `buy: ${txHash}`);
+      setMessage(row, `buy sent: ${txHash}`);
+      const rcpt = await waitReceipt(txHash);
+      if (rcpt && rcpt.status === "0x1") {
+        setMessage(row, "bought");
+        await loadPublicMarket();
+      } else {
+        setMessage(row, "buy reverted", true);
+      }
     } catch (e) {
       setMessage(row, `buy error: ${e.message}`, true);
       btn.disabled = false;

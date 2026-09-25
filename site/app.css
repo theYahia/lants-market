@@ -538,6 +538,7 @@ td.badge-deal::before {
 .cf-field input{box-sizing:border-box;width:100%;padding:8px 10px;background:oklch(0.16 0.008 313);border:1px solid var(--line);border-radius:3px;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-14);}
 #cf-submit{margin-top:12px;padding:10px 16px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-13);cursor:pointer;}
 .cf-status{margin-top:10px;color:var(--muted);font-size:var(--fs-12);min-height:16px;}
+.cf-summary{margin-top:10px;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-12);min-height:16px;}
 @media (max-width:560px){.cf-grid{grid-template-columns:minmax(0,1fr);}}
 
 .foot-docs{color:var(--muted);text-decoration:none;font-weight:700;font-size:var(--fs-13);margin-right:16px;}
