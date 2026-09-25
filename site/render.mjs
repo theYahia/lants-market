@@ -183,7 +183,11 @@ function renderSnapshot(snapshot, opts = {}) {
   const epoch = String(epochNum + 1);
 
   // Ensure positions is an array
-  const rawPositions = Array.isArray(snapshot?.positions) ? snapshot.positions : [];
+  // Positions closed by split / move / merge (or withdrawn) stay in the snapshot as records; closedAtEpoch is the
+  // first epoch without power, so hide them once that epoch has started, otherwise stake is counted twice.
+  const curEpoch = Number(snapshot?.epoch);
+  const rawPositions = (Array.isArray(snapshot?.positions) ? snapshot.positions : []).filter((p) =>
+    !p.withdrawn && !(Number(p.closedAtEpoch || 0) > 0 && Number(p.closedAtEpoch) <= curEpoch));
 
   // Sort positions by amount descending (original logic)
   const positions = [...rawPositions];

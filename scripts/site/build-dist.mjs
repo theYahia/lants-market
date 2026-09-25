@@ -72,7 +72,7 @@ for (const name of VERSIONABLE) {
 }
 const RE = /(\.\/)?([A-Za-z0-9_-]+)\.mjs|app\.css/g;
 const stamp = (txt) => txt.replace(RE, (m) => { if (m.includes('?v=')) return m; const key = m.replace('./', ''); return versions[key] ? m + '?v=' + versions[key] : m; });
-for (const name of ['index.html', ...VERSIONABLE.filter((n) => n.endsWith('.mjs'))]) {
+for (const name of ['index.html', 'docs.html', ...VERSIONABLE.filter((n) => n.endsWith('.mjs'))]) {
   const p = join(DIST_ROOT, name);
   writeFileSync(p, stamp(readFileSync(p, 'utf8')));
 }

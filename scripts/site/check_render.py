@@ -3,14 +3,38 @@ import http.server
 import socketserver
 import threading
 import sys
+import os
 from functools import partial
 from playwright.sync_api import sync_playwright
 
 def main():
     # 1. Data reading
-    with open('site/fixtures/snapshot-e23.full.json') as f:
+    fixture_dir = 'site/fixtures'
+    live_fixture = os.path.join(fixture_dir, 'snapshot-e23.live.json')
+    full_fixture = os.path.join(fixture_dir, 'snapshot-e23.full.json')
+    fixture_path = live_fixture if os.path.exists(live_fixture) else full_fixture
+    fixture_name = os.path.basename(fixture_path)
+    
+    with open(fixture_path) as f:
         data = json.load(f)
-    N = len(data['positions'])
+    
+    # Count expected positions based on render.mjs logic
+    DUST_THRESHOLD = 1e18
+    positions = data['positions']
+    snapshot_epoch = int(data["epoch"])
+    expected = 0
+    has_dust = False
+    
+    for p in positions:
+        if not p.get('withdrawn', False) and (int(p.get('closedAtEpoch', 0) or 0) == 0 or int(p.get('closedAtEpoch', 0) or 0) > snapshot_epoch):
+            amount = int(p.get('amount', 0))
+            if amount > DUST_THRESHOLD:
+                expected += 1
+            else:
+                has_dust = True
+    
+    if has_dust:
+        expected += 1
 
     # 2. Server preparation
     handler = partial(http.server.SimpleHTTPRequestHandler, directory='site')
@@ -36,8 +60,11 @@ def main():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' else None)
+        page.on('console', lambda msg: errors.append(msg.text) if msg.type == 'error' and msg.text != "Failed to load resource: net::ERR_FAILED" else None)
         page.on('pageerror', lambda err: errors.append(str(err)))
+
+        # Block all network requests to ensure local fixture is used
+        page.route("https://**/*", lambda route: route.abort())
 
         # 4. Navigate to page with timeout
         try:
@@ -54,7 +81,7 @@ def main():
         rows = page.locator('table tbody tr').count()
 
         # 6. Print result
-        print(f'rows={rows} expected={N} errors={len(errors)}')
+        print(f'rows={rows} expected={expected} source={fixture_name} errors={len(errors)}')
 
         # 7. Error and content details
         for e in errors:
@@ -69,7 +96,7 @@ def main():
         thread.join(timeout=5)
 
     # 9. Return code
-    if rows == N and len(errors) == 0:
+    if rows == expected and len(errors) == 0:
         sys.exit(0)
     else:
         sys.exit(1)
