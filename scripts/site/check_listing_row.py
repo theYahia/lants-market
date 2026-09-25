@@ -125,11 +125,11 @@ def _build_mock_response(method: str, params: list, run_type: str) -> str:
             if len(data) >= 74:  # 10 (selector) + 64 (one word)
                 arg = int(data[10:74], 16)
                 if arg == 0:
-                    # 11 words: SELLER, NFT, 1, 106, USDC, 0, 2000000, 0, 2592000, endTime, soldTime
+                    # 11 words: SELLER, 1, NFT, 106, USDC, 0, 2000000, 0, 2592000, endTime, soldTime
                     words = [
                         _pad_word(SELLER),
-                        _pad_word(NFT),
                         _pad_word(1),
+                        _pad_word(NFT),
                         _pad_word(106),
                         _pad_word(USDC),
                         _pad_word(0),

@@ -568,12 +568,9 @@ def setup_page_logging(page) -> Dict:
     page.on("pageerror", lambda exc: logs["page_errors"].append(str(exc)))
     
     def e2e_log(category: str, method: str, params_str: str):
+        # Only append to the list and return immediately - no Playwright API calls
         if category == "WALLET_CALL":
             logs["wallet"].append(f"{method}: {params_str[:200]}")
-            try:
-                page.evaluate(f"window.__e2eWalletCalls.push('{method}')")
-            except:
-                pass
     
     page.expose_function("__e2eLog", e2e_log)
     return logs

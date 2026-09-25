@@ -275,7 +275,7 @@ async function readListings() {
     if (soldTime === 0n) {
       try {
         const nRaw = await ethCall('0x444c74aa' + encAddr(seller) + encAddr(MARKET.nft) + encUint(nftId)); // sellerNftNonce(address,address,uint256)
-        cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[2]);
+        cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[1]); // listings(): 0 seller, 1 sellerNftNonce, 2 nftCollection, 3 nftId, 4 currency
       } catch {
         cancelled = false;
       }
