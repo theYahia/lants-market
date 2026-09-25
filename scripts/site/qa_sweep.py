@@ -724,8 +724,11 @@ class QASweep:
                 timeout=20000
             )
 
-            # wait for portfolio values to update
-            self.page.wait_for_timeout(1000)
+            # wait until the values are filled: one eth_call per position, so a fixed 1 s broke once the wallet had 2 positions
+            self.page.wait_for_function(
+                """() => { const v = document.querySelectorAll('#portfolio .pf-value'); return v.length > 1 && /^[0-9]/.test(v[1].textContent.trim()); }""",
+                timeout=30000
+            )
             values_after = self.page.locator(SEL["pf_values"]).all_inner_texts()
             count = values_after[0].strip() if len(values_after) > 0 else ""
             staked = values_after[1].strip() if len(values_after) > 1 else ""
@@ -1018,17 +1021,18 @@ class QASweep:
                     # check nonce via sellerNftNonce
                     nonce_selector = "0x444c74aa"
                     # pad seller, collection, nonce
-                    params = seller[2:].rjust(64, "0") + collection[2:].rjust(64, "0") + f"{lid_int:064x}"
+                    nft_id = decode_uint256(list_raw, 3)  # sellerNftNonce is keyed by the NFT id, not the listing id
+                    params = seller[2:].rjust(64, "0") + collection[2:].rjust(64, "0") + f"{nft_id:064x}"
                     nonce_raw = eth_call(self.context, MARKET_CONTRACT, nonce_selector + params, RPC_LIST[0])
                     chain_nonce = decode_uint256(nonce_raw, 0)
 
                     # compare with listings nonce
-                    if chain_nonce != nonce:
+                    if chain_nonce != nonce and sold_time == 0:  # a mismatch means cancelled; a sold lot may bump it
                         ok_all = False
                         print(f"  LST-CHAIN FAIL: id {lid} nonce mismatch listings={nonce} sellerNftNonce={chain_nonce}")
 
                     # status check (sold vs active)
-                    status = row.locator("[class*=status], .badge").first.inner_text().lower() if row.locator("[class*=status], .badge").count() else ""
+                    status = row.locator('[data-field="state"]').first.inner_text().lower() if row.locator('[data-field="state"]').count() else ""
                     is_sold = sold_time > 0
                     if is_sold and "sold" not in status:
                         ok_all = False
