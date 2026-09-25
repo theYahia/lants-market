@@ -46,9 +46,13 @@ SEL = {
     "portfolio": "#portfolio",
     "pf_body": "#pf-body",
     "pf_values": "#portfolio .pf-value",
+    "pf_placeholder": "#pf-placeholder",
     "m_positions": "#m-positions",
     "m_locked": "#m-locked",
     "my_listings": "#my-listings",
+    "market_strip": ".market-strip",
+    "tabs": "#tabs",
+    "pf_connect": "#pf-connect",
     "rows_table": "#rows",
     "rows_thead": "#rows thead",
     "rows_tbody": "#rows",
@@ -295,8 +299,15 @@ class QASweep:
     def open_page(self):
         self.page.goto(f"{ORIGIN}/index.html", wait_until="networkidle")
 
+    def ensure_market_view(self):
+        """Ensure we are in the market view, not the portfolio view."""
+        if self.page.locator(SEL["market_strip"]).evaluate("el => el.offsetParent === null"):
+            self.page.locator(SEL["hdr_link_market"]).click()
+            self.page.locator(SEL["market_strip"]).wait_for(state="visible", timeout=10000)
+
     def _wait_for_rows(self):
         """Wait for all tab and at least 5 rows in tbody."""
+        self.ensure_market_view()
         self.page.locator(SEL["tab_all"]).click()
         self.page.wait_for_function(
             """() => document.querySelectorAll('#rows tr').length >= 5""",
@@ -331,6 +342,7 @@ class QASweep:
     # ── individual checks ────────────────────────────────────────────────────
     def check_nav_01(self):
         """Logo → all positions tab."""
+        self.ensure_market_view()
         self.page.locator(SEL["brand"]).click()
         panel = self.page.locator(SEL["panel_all"])
         ok = panel.evaluate("el => el.offsetParent !== null")
@@ -339,6 +351,7 @@ class QASweep:
 
     def check_nav_02(self):
         """Each tab shows its panel, others hidden."""
+        self.ensure_market_view()
         tabs_panels = [
             ("all", SEL["tab_all"], SEL["panel_all"]),
             ("listings", SEL["tab_listings"], SEL["panel_listings"]),
@@ -422,6 +435,7 @@ class QASweep:
     def check_tbl_03(self):
         """Sorting by header click."""
         try:
+            self.ensure_market_view()
             # get first column values before
             self._wait_for_rows()
             rows = self.page.locator(f"{SEL['rows_tbody']} tr").all()
@@ -468,6 +482,7 @@ class QASweep:
 
     def check_tbl_05(self):
         """Pending rows format 'from e\d+'."""
+        self.ensure_market_view()
         pattern = re.compile(r"from e\d+")
         self._wait_for_rows()
         rows = self.page.locator(f"{SEL['rows_tbody']} tr").all()
@@ -486,6 +501,7 @@ class QASweep:
     def check_lst_04(self):
         """Cancel button structural check via helper click."""
         try:
+            self.ensure_market_view()
             # open the Listings tab first (panel is hidden until tab is open)
             self.page.locator(SEL["tab_listings"]).click()
             self.page.wait_for_timeout(300)
@@ -536,6 +552,7 @@ class QASweep:
     def check_lst_06(self):
         """Manage form buttons have handlers (validation message on click)."""
         try:
+            self.ensure_market_view()
             self.page.locator(SEL["tab_listings"]).click()
             self.page.wait_for_timeout(500)
             # ensure manage form visible
@@ -551,6 +568,138 @@ class QASweep:
             report(self.results, "LST-06", ok, f"split handler fired: '{after[:50]}'")
         except Exception:
             report(self.results, "LST-06", False, "exception during manage check")
+
+
+    def check_nav_05(self):
+        """Portfolio view: placeholder → connect → body, then back to market.
+        Runs in its own isolated browser context to avoid polluting shared state."""
+        nav_context = None
+        try:
+            # Create an isolated context with the same routing and mock init script
+            nav_context = self.browser.new_context(viewport={"width": 1280, "height": 900})
+            
+            def nav_route_handler(route):
+                url = route.request.url
+                if not url.startswith(ORIGIN):
+                    route.continue_()
+                    return
+                path = strip_query(url).replace(ORIGIN, "")
+                if path == "" or path == "/":
+                    path = "/index.html"
+                rel = path.lstrip("/")
+                file_path = DIST / rel
+                try:
+                    file_path.resolve().relative_to(DIST.resolve())
+                except ValueError:
+                    route.continue_()
+                    return
+                if file_path.is_file():
+                    mime = "text/javascript" if file_path.suffix == ".mjs" else get_mime(file_path)
+                    route.fulfill(
+                        status=200,
+                        content_type=mime,
+                        body=file_path.read_bytes(),
+                    )
+                else:
+                    route.continue_()
+            
+            nav_context.route(f"{ORIGIN}/**", nav_route_handler)
+            nav_context.add_init_script(MOCK_WALLET_JS.replace("__ADDR__", MOCK_ADDR))
+            page = nav_context.new_page()
+            
+            # Navigate to the index page
+            page.goto(f"{ORIGIN}/index.html", wait_until="networkidle")
+            page.wait_for_timeout(2000)
+            
+            # click portfolio link
+            page.locator(SEL["hdr_link_portfolio"]).click()
+            page.wait_for_timeout(500)
+
+            # check initial state
+            scroll_y = page.evaluate("window.scrollY")
+            placeholder_visible = page.locator(SEL["pf_placeholder"]).evaluate(
+                "el => el.offsetParent !== null"
+            )
+            placeholder_text = page.locator(SEL["pf_placeholder"]).inner_text()
+            pf_body_hidden = page.locator(SEL["pf_body"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+            market_strip_hidden = page.locator(SEL["market_strip"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+            tabs_hidden = page.locator(SEL["tabs"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+            my_listings_hidden = page.locator(SEL["my_listings"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+
+            ok = (
+                scroll_y < 100
+                and placeholder_visible
+                and "Connect your wallet" in placeholder_text
+                and pf_body_hidden
+                and market_strip_hidden
+                and tabs_hidden
+                and my_listings_hidden
+            )
+
+            if not ok:
+                report(self.results, "NAV-05", False,
+                       f"initial: scroll={scroll_y} ph_vis={placeholder_visible} "
+                       f"ph_text='{placeholder_text[:30]}' body_hidden={pf_body_hidden} "
+                       f"strip_hidden={market_strip_hidden} tabs_hidden={tabs_hidden} "
+                       f"list_hidden={my_listings_hidden}")
+                return
+
+            # connect via portfolio button
+            page.locator(SEL["pf_connect"]).click()
+            page.wait_for_function(
+                """() => {
+                    const b = document.getElementById('hdr-connect');
+                    return b && b.textContent.trim().startsWith('0x');
+                }""",
+                timeout=20000
+            )
+
+            # check switched to body
+            page.wait_for_timeout(500)
+            placeholder_hidden_after = page.locator(SEL["pf_placeholder"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+            body_visible_after = page.locator(SEL["pf_body"]).evaluate(
+                "el => el.offsetParent !== null"
+            )
+            ok = ok and placeholder_hidden_after and body_visible_after
+
+            if not ok:
+                report(self.results, "NAV-05", False,
+                       f"after connect: ph_hidden={placeholder_hidden_after} body_vis={body_visible_after}")
+                return
+
+            # go back to market
+            page.locator(SEL["hdr_link_market"]).click()
+            page.wait_for_timeout(300)
+            market_strip_visible = page.locator(SEL["market_strip"]).evaluate(
+                "el => el.offsetParent !== null"
+            )
+            portfolio_hidden = page.locator(SEL["portfolio"]).evaluate(
+                "el => el.offsetParent === null"
+            )
+            ok = ok and market_strip_visible and portfolio_hidden
+
+            detail = f"initial_ok=true connected=true body_ok=true market_ok=true"
+            if market_strip_visible and portfolio_hidden:
+                report(self.results, "NAV-05", True, detail)
+            else:
+                report(self.results, "NAV-05", False,
+                       f"back to market: strip_vis={market_strip_visible} portfolio_hidden={portfolio_hidden}")
+        except Exception as e:
+            report(self.results, "NAV-05", False, f"exception: {str(e)[:100]}")
+        finally:
+            # Always close the isolated context to not pollute shared state
+            if nav_context:
+                nav_context.close()
 
 
     def check_por_02(self):
@@ -600,6 +749,10 @@ class QASweep:
             report(self.results, "POR-02", ok, detail)
         except Exception as e:
             report(self.results, "POR-02", False, f"exception: {str(e)[:80]}")
+        finally:
+            # Ensure we return to market view at the end
+            self.page.locator(SEL["hdr_link_market"]).click()
+            self.page.locator(SEL["market_strip"]).wait_for(state="visible", timeout=10000)
 
 
     def check_por_03(self):
@@ -611,20 +764,28 @@ class QASweep:
                 report(self.results, "POR-03", False, "not connected")
                 return
 
+            # click the My Portfolio header link to open the portfolio view
+            self.page.locator(SEL["hdr_link_portfolio"]).click()
+            self.page.locator(SEL["portfolio"]).wait_for(state="visible", timeout=10000)
+
             # check my-listings section exists and shows data or empty state
-            self.page.locator(SEL["portfolio"]).wait_for(state="visible")
             self.page.locator(SEL["my_listings"]).wait_for(state="visible", timeout=5000)
             text = self.page.locator(SEL["my_listings"]).inner_text()
             # if no listings, it's fine (empty state)
             ok = True
             report(self.results, "POR-03", ok, f"my-listings present: '{text[:50]}'")
-        except Exception:
-            report(self.results, "POR-03", False, "exception")
+        except Exception as e:
+            report(self.results, "POR-03", False, f"exception: {e}")
+        finally:
+            # Ensure we return to market view at the end
+            self.page.locator(SEL["hdr_link_market"]).click()
+            self.page.locator(SEL["market_strip"]).wait_for(state="visible", timeout=10000)
 
 
     def check_dat_chain(self, sample=5):
         """Compare AMOUNT column with chain positions() on 2 RPCs."""
         try:
+            self.ensure_market_view()
             self._wait_for_rows()
             rows_data = self._extract_row_data()
             if len(rows_data) < sample:
@@ -658,6 +819,7 @@ class QASweep:
     def check_lst_chain(self, sample=3):
         """Compare market listings with chain."""
         try:
+            self.ensure_market_view()
             # get listingsLength on chain
             length_data = eth_call(self.context, MARKET_CONTRACT, "0x7afd81f5", RPC_LIST[0])
             listings_len = decode_uint256(length_data, 0)
@@ -789,6 +951,7 @@ class QASweep:
     def check_x_04(self):
         """Keyboard Tab navigation."""
         try:
+            self.ensure_market_view()
             self.page.keyboard.press("Tab")
             found_connect = False
             found_tab = False
@@ -817,6 +980,7 @@ class QASweep:
     def check_x_05(self):
         """No horizontal scroll at 390."""
         try:
+            self.ensure_market_view()
             # go through each tab
             ok_all = True
             for tab_sel in [SEL["tab_all"], SEL["tab_listings"], SEL["tab_offers"]]:
@@ -850,6 +1014,7 @@ class QASweep:
     def check_off_02(self):
         """Offer calculator re-computes summary."""
         try:
+            self.ensure_market_view()
             self.page.locator(SEL["tab_all"]).click()
             # try to open a make-offer modal if there's a position
             rows = self.page.locator(f"{SEL['rows_tbody']} tr").all()
@@ -914,6 +1079,7 @@ class QASweep:
         self.check_nav_01()
         self.check_nav_02()
         self.check_nav_04()
+        self.check_nav_05()
         self.check_tbl_03()
         self.check_tbl_05()
         self.check_lst_04()

@@ -821,3 +821,9 @@ button.cancel:hover{color:var(--ink);border-color:var(--muted);}
 /* font-independent column widths so header and rows line up exactly */
 #market-list .market-head,#market-list .market-row{grid-template-columns:48px 96px 112px 96px 120px 64px 104px 120px 1fr;}
 @media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:860px;}}
+/* My Portfolio view */
+body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio .panel{display:none !important;}
+.pf-placeholder{padding:32px 0 16px;}
+.pf-placeholder p{color:var(--muted);margin:8px 0 16px;}
+#pf-connect{padding:10px 16px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-13);cursor:pointer;}
+#pf-placeholder:not([hidden]) ~ #my-listings{display:none;}

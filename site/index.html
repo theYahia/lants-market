@@ -167,7 +167,12 @@
         </div>
 
         <div id="portfolio" hidden>
-          <div id="pf-body">
+          <div id="pf-placeholder" class="pf-placeholder">
+            <h2>My Portfolio</h2>
+            <p>Connect your wallet to see your positions, staked ANTS and your listings.</p>
+            <button type="button" id="pf-connect">Connect wallet</button>
+          </div>
+          <div id="pf-body" hidden>
             <div class="pf-head">
               <h2>My Portfolio</h2>
               <span class="pf-snapshot">network snapshot @ block <snapshotBlock></span>
@@ -262,11 +267,15 @@
       }
       tabs.forEach(function(t){t.addEventListener('click',function(){open(t.dataset.tab);});});
       var brand=document.querySelector('.brand');
-      if(brand)brand.addEventListener('click',function(){open('all');});
+      if(brand)brand.addEventListener('click',function(){if(typeof showPortfolio==='function')showPortfolio(false);open('all');});
       var pfLinks=document.querySelectorAll('.hdr-link');
       var pfPanel=document.getElementById('portfolio');
-      function showPortfolio(on){ if(pfPanel)pfPanel.hidden=!on; pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);}); }
-      pfLinks.forEach(function(l){l.addEventListener('click',function(){showPortfolio(l.getAttribute('href')==='#portfolio');});});
+      // My Portfolio is its own view: hide the market, show the portfolio at the top (no anchor jump to the page bottom).
+      function showPortfolio(on){ document.body.classList.toggle('view-portfolio',on); if(pfPanel)pfPanel.hidden=!on; pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);}); window.scrollTo(0,0); }
+      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();showPortfolio(l.getAttribute('href')==='#portfolio');});});
+      var pfConnect=document.getElementById('pf-connect');
+      if(pfConnect)pfConnect.addEventListener('click',function(){var c=document.getElementById('hdr-connect');if(c)c.click();});
+      if(location.hash==='#portfolio')showPortfolio(true);
       open('all');
     })();
     </script>
