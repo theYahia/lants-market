@@ -75,7 +75,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
-| Seller perks board | — | open |
+| Seller incentives pilot (the Votium / Hidden Hand model for AntSeed): re-read the buyer-points formula on chain, ask 3 sellers what they would pay per 1,000 ANTS of pool weight, then a board where sellers post offers and pay stakers themselves | 10.10 | open |
 | List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065), waiting for review) | — | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
