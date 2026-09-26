@@ -329,7 +329,7 @@ def main() -> None:
         if results["a_nftId"] != "106": listing_ok = 0
         if results["a_price"] != "2.00 USDC": listing_ok = 0
         if results["a_ants"] != "50.00": listing_ok = 0
-        if results["a_unitPrice"] != "0.0400": listing_ok = 0
+        if "$41.60M FDV" not in results["a_unitPrice"]: listing_ok = 0  # 2.00 USDC / 50 ANTS = 0.04 per ANTS x 1.04B
         if results["a_lock"] != "104w": listing_ok = 0
         if results["a_exit"] != "—": listing_ok = 0
         if results["a_exit_title"] != "Appears after the next snapshot": listing_ok = 0
@@ -338,7 +338,7 @@ def main() -> None:
         if results["a_cancel"] != "0": listing_ok = 0
         
         # Run B checks
-        if results["b_state"] != "sold": listing_ok = 0
+        if not results["b_state"].startswith("sold"): listing_ok = 0  # lot 0 is marked internal since 25.09: "sold · internal"
         if results["b_ants"] != "50.00": listing_ok = 0
         if results["b_lock"] != "—": listing_ok = 0
         if results["b_exit"] != "—": listing_ok = 0

@@ -1010,9 +1010,9 @@ class QASweep:
                     # listings(uint256)
                     padded = f"{lid_int:064x}"
                     list_raw = eth_call(self.context, MARKET_CONTRACT, "0xde74e57b" + padded, RPC_LIST[0])
-                    seller = "0x" + list_raw[2:42]
+                    seller = "0x" + list_raw[26:66]  # word 0, address right-aligned
                     nonce = decode_uint256(list_raw, 1)
-                    collection = "0x" + list_raw[66:106]  # word 2
+                    collection = "0x" + list_raw[154:194]  # word 2, address right-aligned
                     price = decode_uint256(list_raw, 6)
                     sold_time = decode_uint256(list_raw, 10)
 
