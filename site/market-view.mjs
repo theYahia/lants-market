@@ -10,7 +10,7 @@ import {
   MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
   cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS
 } from './market-config.mjs';
-import { computeMarketStats } from './market-stats.mjs';
+import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn } from './metrics.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
@@ -120,6 +120,18 @@ const LIVE_URLS = [
 
 // Number of 32-byte words in the listings(uint256) struct (measured by ABI).
 const WORDS_PER_LISTING = 11;
+
+// ANTS ERC-20 on Base: totalSupply() = ANTS minted so far, the base for the implied market cap of a lot.
+const ANTS_TOKEN = '0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263';
+let MINTED = null; // ANTS minted, read once per page load in readListings()
+
+function fmtUsd(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
 
 async function ethCallTo(to, data) {
   const READ_RPCS = [
@@ -242,6 +254,10 @@ async function loadSnapshot() {
 // Read *all* listings on-chain (live, sold and expired).
 async function readListings() {
   const now = BigInt(Math.floor(Date.now() / 1000));
+  if (MINTED == null) {
+    try { MINTED = Number(wordToBigInt(decodeWords(await ethCallTo(ANTS_TOKEN, '0x18160ddd'))[0])) / 1e18 || null; }
+    catch (e) { MINTED = null; } // MC then shows a dash; FDV only needs the fixed max supply
+  }
 
   const lenRaw = await ethCall(SELECTORS.listingsLength);
   const n = Number(wordToBigInt(decodeWords(lenRaw)[0] || lenRaw));
@@ -375,6 +391,7 @@ function updateSales(items, snapshot) {
     row.textContent = '#' + it.listingId + ' · pos ' + it.nftId + ' · ' + (amt != null ? amt.toFixed(2) + ' ANTS · ' : '') +
       Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC · ' +
       new Date(Number(it.soldTime) * 1000).toISOString().slice(0, 10) +
+      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * ANTS_MAX_SUPPLY) : '') +
       (internal.has(String(it.listingId)) ? ' · internal' : '');
     list.appendChild(row);
   }
@@ -406,7 +423,7 @@ function render(snapshot, items) {
     { label: 'POSITION', tip: 'lANTS position id backing this lot on Base.' },
     { label: 'PRICE', tip: 'Asking price in the listing currency.' },
     { label: 'ANTS', tip: 'ANTS locked in the listed position.' },
-    { label: 'USDC/ANTS', tip: 'Price in USDC per 1 locked ANTS.' },
+    { label: 'MC / FDV', tip: 'At this lot price per ANTS: market cap = x ANTS minted so far, fully diluted value = x 1.04B max supply.' },
     { label: 'LOCK', tip: "Weeks left in the lock; 'max' never counts down." },
     { label: 'EXIT', tip: 'ANTS returned on early exit after the slash burn.', note: 'net' },
     { label: 'STATUS', tip: 'live can be bought; sold, internal = between our own wallets, not in volume.' },
@@ -486,7 +503,12 @@ function render(snapshot, items) {
     unitPriceSpan.dataset.field = 'unitPrice';
     const usdcPrice = Number(formatUnits(item.price, MARKET.usdcDecimals));
     if (antsNumeric != null && antsNumeric > 0) {
-      unitPriceSpan.textContent = (usdcPrice / antsNumeric).toFixed(4);
+      const unit = usdcPrice / antsNumeric;
+      unitPriceSpan.textContent = MINTED ? fmtUsd(unit * MINTED) : '—';
+      const fdvLine = document.createElement('small');
+      fdvLine.textContent = fmtUsd(unit * ANTS_MAX_SUPPLY) + ' FDV';
+      unitPriceSpan.appendChild(fdvLine);
+      unitPriceSpan.title = unit.toFixed(4) + ' USDC per ANTS' + (MINTED ? ' · MC = x ' + (MINTED / 1e6).toFixed(2) + 'M minted' : '') + ' · FDV = x 1.04B max supply';
     } else {
       unitPriceSpan.textContent = '—';
     }

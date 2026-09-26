@@ -850,3 +850,4 @@ body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio 
 #sales-panel .sales-list{margin:10px 0 8px;}
 #sales-panel .sale-row{font-family:var(--font-mono);font-size:var(--fs-12);color:var(--ink);padding:4px 0;}
 #sales-panel .sale-row + .sale-row{border-top:1px solid var(--line);}
+#market-list .market-row span[data-field="unitPrice"] small{display:block;color:var(--muted);font-size:var(--fs-10);line-height:1.3;}
