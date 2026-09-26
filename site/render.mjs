@@ -345,7 +345,10 @@ if (isPending) {
       const hours = String(genDate.getUTCHours()).padStart(2, '0');
       const minutes = String(genDate.getUTCMinutes()).padStart(2, '0');
 
-      originLine.innerHTML = `Snapshot <span class="snap-block">#${snapshot.snapshotBlock}</span> · epoch ${snapshot.snapshotEpoch} · ${month} ${day}, ${genDate.getUTCFullYear()} ${hours}:${minutes} UTC`;
+      const blockSpan = document.createElement('span');
+      blockSpan.className = 'snap-block';
+      blockSpan.textContent = `#${snapshot.snapshotBlock}`;
+      originLine.replaceChildren('Snapshot ', blockSpan, ` · epoch ${snapshot.snapshotEpoch} · ${month} ${day}, ${genDate.getUTCFullYear()} ${hours}:${minutes} UTC`);
 
       const blurbLine = document.createElement('div');
       blurbLine.className = 'metric note';

@@ -691,10 +691,8 @@ async function onConnect() {
     }
 
     // portfolio-wallet
-    // Rewards contract address: use from MARKET if present, otherwise local constant
-    const REWARDS_CONTRACT = MARKET.rewardsContract || '0x83cc5b9aa0c8cb8683f35462c385a5baaa755ee5';
-    // TODO: move to MARKET
-    const POSITIONS_CONTRACT = '0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652';
+    const REWARDS_CONTRACT = MARKET.stakerRewards;
+    const POSITIONS_CONTRACT = MARKET.nft;
     const { stakerPositionCount, stakerTotalActiveStake, stakerPositionIds, pendingIndexedStakerReward } = SEL;
 
     const account = accounts && accounts[0];
@@ -786,6 +784,21 @@ async function onConnect() {
   }
 }
 
+// Wallet and contract errors in plain words, shared by the manage forms and Buy; the raw error stays in the console.
+export function humanError(e) {
+  const m = String((e && (e.shortMessage || e.message)) || e);
+  console.warn('tx error', e);
+  if (/user rejected|user denied|rejected the request|cancel/i.test(m)) return 'Cancelled in the wallet.';
+  if (/insufficient funds/i.test(m)) return 'Not enough ETH on Base for gas.';
+  if (/transfer amount exceeds balance/i.test(m)) return 'Not enough USDC in this wallet.';
+  if (/0x9e684275|PositionClosed/.test(m)) return 'This position is max-locked or closed: split and move are disabled.';
+  if (/0x646cf558|AlreadyClaimed/.test(m)) return 'This reward is already staked or claimed.';
+  if (/underpriced|nonce too low/i.test(m)) return 'The wallet reused an old transaction. Wait a few seconds and try again.';
+  const lot = m.match(/Marketplace: ([A-Za-z0-9 ]+)/); // VexyMarketplace require() messages
+  if (lot) return lot[1] + '.';
+  return m.length > 140 ? m.slice(0, 140) + '…' : m;
+}
+
 export async function loadPublicMarket() {
   if (MARKET.market === ZERO) return;
   if (connectedAccount) return onConnect(); // re-read the wallet's positions after a buy, split or stake
@@ -822,7 +835,7 @@ export function daysToSeconds(days) {
 
 export function initManagePosition() {
   const MANAGE_ADDR = MARKET.nft;
-  const REWARDS_ADDR = '0x78330bF154172F1137219Bb559d4F3A270B3201F';
+  const REWARDS_ADDR = MARKET.usageRewards;
   const MINT_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
   const splitSel = '0xdc310451';
   const moveSel = '0x5437910a';
@@ -900,18 +913,6 @@ export function initManagePosition() {
       mfMoveBtn.disabled = false;
       setStatus(mfCard, 'unavailable');
     }
-  }
-
-  // wallet and contract errors in plain words; the raw error stays in the console
-  function humanError(e) {
-    const m = String((e && (e.shortMessage || e.message)) || e);
-    console.warn('tx error', e);
-    if (/user rejected|user denied|rejected the request|cancel/i.test(m)) return 'Cancelled in the wallet.';
-    if (/insufficient funds/i.test(m)) return 'Not enough ETH on Base for gas.';
-    if (/0x9e684275|PositionClosed/.test(m)) return 'This position is max-locked or closed: split and move are disabled.';
-    if (/0x646cf558|AlreadyClaimed/.test(m)) return 'This reward is already staked or claimed.';
-    if (/underpriced|nonce too low/i.test(m)) return 'The wallet reused an old transaction. Wait a few seconds and try again.';
-    return m.length > 140 ? m.slice(0, 140) + '…' : m;
   }
 
   async function sendTx(to, data, btn, statusEl, successMsg) {

@@ -8,6 +8,8 @@ export const MARKET = {
   nft:      '0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652',            // lANTS positions collection
   usdc:     '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',            // USDC on Base, 6 decimals
   usdcDecimals: 6,
+  stakerRewards: '0x83cc5b9aa0c8cb8683f35462c385a5baaa755ee5',       // AntseedSellerPoolsRewards: staker rewards
+  usageRewards: '0x78330bF154172F1137219Bb559d4F3A270B3201F',        // AntseedUsageRewards: buyer rewards, stakeBuyerReward
   operator: '0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B',
   privyAppId: 'cmudz5sz902ru0bl8pns3vryh',
 };

@@ -10,7 +10,7 @@ import {
   decodeWords,
   wordToBigInt,
 } from "./market-config.mjs";
-import { walletRequest, ensureChain, waitReceipt, loadPublicMarket } from "./market-view.mjs";
+import { walletRequest, ensureChain, waitReceipt, loadPublicMarket, humanError } from "./market-view.mjs";
 
 /**
  * Helper: create / get a span for messages inside the same market row.
@@ -63,7 +63,7 @@ function initBuyHandler() {
     try {
       accounts = await walletRequest({ method: "eth_accounts" });
     } catch (e) {
-      setMessage(row, `wallet error: ${e.message}`, true);
+      setMessage(row, humanError(e), true);
       btn.disabled = false;
       return;
     }
@@ -83,7 +83,7 @@ function initBuyHandler() {
         return;
       }
     } catch (e) {
-      setMessage(row, `network error: ${e.message}`, true);
+      setMessage(row, humanError(e), true);
       btn.disabled = false;
       return;
     }
@@ -103,7 +103,7 @@ function initBuyHandler() {
       const allowance = wordToBigInt(words[0] ?? "0x0");
       if (allowance < price) needApprove = true;
     } catch (e) {
-      setMessage(row, `allowance check failed: ${e.message}`, true);
+      setMessage(row, 'Could not check the USDC allowance: ' + humanError(e), true);
       btn.disabled = false;
       return;
     }
@@ -127,7 +127,7 @@ function initBuyHandler() {
           return;
         }
       } catch (e) {
-        setMessage(row, `approve error: ${e.message}`, true);
+        setMessage(row, humanError(e), true);
         btn.disabled = false;
         return;
       }
@@ -152,7 +152,7 @@ function initBuyHandler() {
         setMessage(row, "buy reverted", true);
       }
     } catch (e) {
-      setMessage(row, `buy error: ${e.message}`, true);
+      setMessage(row, humanError(e), true);
       btn.disabled = false;
       return;
     }
