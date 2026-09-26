@@ -36,18 +36,20 @@ def get_pending_reward():
     """Fetch pendingIndexedStakerReward(27) via eth_call."""
     calldata = "0x" + "8693dd3c" + "000000000000000000000000000000000000000000000000000000000000001b"
     result = eth_call(OPERATOR, calldata)
+    if not result or result == "0x":
+        raise RuntimeError("empty eth_call result for pendingIndexedStakerReward(27)")
     return int(result, 16)
 
 
 def run():
     global REASON
 
-    anvil_process, http_process = None, None
+    # Boot anvil and http server
+    anvil_process = None
+    http_process = None
     browser = None
-    context = None
-    page = None
+
     try:
-        # Boot anvil and http server
         anvil_process = start_anvil()
         http_process = start_http_server()
 
@@ -86,18 +88,42 @@ def run():
             # Logging
             setup_page_logging(page)
 
-            # Open local site
-            page.goto(f"http://127.0.0.1:{http_process}", wait_until="networkidle")
+            # Open local site with #portfolio hash so the portfolio view is revealed
+            page.goto(f"http://127.0.0.1:{http_process}/#portfolio", wait_until="networkidle")
 
-            # Switch to My Positions tab
-            page.click(".tab[data-tab=positions]")
-            page.wait_for_timeout(500)
+            # Ensure the portfolio panel is visible (the hash should do it, but clicking the link is a safe fallback)
+            portfolio_visible = page.evaluate("() => !document.getElementById('portfolio').hidden")
+            if not portfolio_visible:
+                # Click the "My Portfolio" header link to reveal it
+                page.click('a.hdr-link[href="#portfolio"]')
+                page.wait_for_timeout(300)
 
-            # Wait for .pf-pos-row with dataset.id == 27
+            # The placeholder with #pf-connect is shown initially; click it to trigger the connect flow.
+            # (If the placeholder is already hidden because the wallet connected, fall back to #hdr-connect.)
+            pf_connect = page.query_selector("#pf-connect")
+            if pf_connect is not None and pf_connect.is_visible():
+                pf_connect.click()
+            else:
+                page.click("#hdr-connect")
+
+            # Wait for the portfolio body to become visible (onConnect does this after eth_requestAccounts)
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                pf_body_hidden = page.evaluate("() => document.getElementById('pf-body').hidden")
+                if not pf_body_hidden:
+                    break
+                page.wait_for_timeout(500)
+            else:
+                REASON = "portfolio body did not become visible after connect"
+                print(f"reason={REASON}")
+                print("restake_ok=0")
+                return
+
+            # Wait for .pf-pos-row with dataset.id == 27 inside #pf-positions
             row = None
             deadline = time.time() + 15
             while time.time() < deadline:
-                rows = page.query_selector_all(".pf-pos-row")
+                rows = page.query_selector_all("#pf-positions .pf-pos-row")
                 for r in rows:
                     d = r.get_attribute("data-id")
                     if d == "27":
@@ -116,13 +142,19 @@ def run():
             # Check Restake control shows pending amount
             restake_buttons = row.query_selector_all("button.restake")
             if not restake_buttons:
-                REASON = "Restake button not found in position row 27"
+                REASON = "no Restake button in row #27"
+                print(f"reason={REASON}")
+                print("restake_ok=0")
+                return
             else:
                 restake_btn = restake_buttons[0]
                 text = restake_btn.inner_text()
                 # Ensure the pending amount is shown before sign
                 if str(EXPECTED_PENDING_REWARD) not in text:
                     REASON = f"Restake button does not show pending amount, got: {text}"
+                    print(f"reason={REASON}")
+                    print("restake_ok=0")
+                    return
                 else:
                     # Click restake, wait for tx
                     restake_btn.click()
@@ -132,16 +164,17 @@ def run():
                     amount = get_position_amount(POSITION_ID)
                     if amount != EXPECTED_PENDING_REWARD:
                         REASON = f"position {POSITION_ID} amount mismatch, got: {amount}"
+                        print(f"reason={REASON}")
+                        print("restake_ok=0")
+                        return
 
-            if REASON:
-                print(f"reason={REASON}")
-                print("restake_ok=0")
-            else:
-                print("restake_ok=1")
+            print("restake_ok=1")
 
     except Exception as e:
-        REASON = str(e)
-        print(f"reason={REASON}")
+        cls = e.__class__.__name__
+        msg = str(e)
+        reason = f"{cls}: {msg}" if msg else cls
+        print(f"reason={reason}")
         print("restake_ok=0")
     finally:
         stop_all()
