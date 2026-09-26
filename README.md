@@ -35,7 +35,7 @@ becoming something sellers should care about — and pay for.
 
 | v1 does | v1 does not |
 |---|---|
-| Shows every lANTS position: amount, lock, pool, weight, exit penalty, pending reward | Hold anyone's NFTs or funds — purchases are atomic |
+| Shows every lANTS position: amount, lock, staker reward, what an early exit returns | Hold anyone's NFTs or funds — purchases are atomic |
 | Lists, buys and cancels lots through a thin USDC-only contract on Base (fork of Vexy) | Custody anything: the contract never holds NFTs or USDC |
 | Shows each lot's implied **MC and FDV** at its price per ANTS, and every completed sale | Let the owner touch your money — owner can only change `feeRecipient` or hand over ownership |
 | Manages positions from the site: stake a buyer reward, split, move, enable max-lock | Charge more than a fixed 1% fee on a completed purchase |

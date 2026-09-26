@@ -49,8 +49,8 @@ market layer (phase 4) does not start.
 
 ## What lANTS-market is
 
-- **The board** — every lANTS position (amount, lock, pool, weight, exit penalty, pending reward),
-  led by expected staker reward per unit of weight next epoch.
+- **The board** — every lANTS position: amount, lock (max-lock marked), staker reward for the current
+  epoch and what an early exit returns; sortable by reward.
 - **The USDC market** — list a position, buy it through the contract, priced as **USDC per locked
   ANTS**. Contract: VexyMarketplace fork, `0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660` on Base,
   source-verified on Basescan and Blockscout.
@@ -106,7 +106,8 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 ### Phase 1 — The board
 
 - [x] A lens that reads every position and pool, cross-checked on two RPCs before anything is written
-- [x] Positions page: metric tiles, positions table, pools table led by expected reward per weight
+- [x] Positions page: metric tiles and the positions table (amount, lock, reward, exit)
+- [ ] Pools table: seller names, sales, weight and expected reward per unit of weight (the data is already in the snapshot)
 - [ ] **Seller perks board** — a schema-checked list plus instructions for sellers to add their perks
 
 ### Phase 2 — Publish ✅ (20.09 → 23.09)
@@ -208,7 +209,7 @@ Automatic snapshot 3×/day turned on. AntSeed contest entry posted on X.
 **17.09.2026** — Staked our epoch-22 buyer reward as position #27 (max-lock on). Within five hours
 three large positions appeared and our epoch-24 pool-weight share fell 99.99 % → 34.7 %. Lesson: one
 wallet's weight is temporary; buyer rewards can be staked every epoch and holders already do it.
-This drove the "reward per weight" column on the board.
+This is why reward per unit of weight matters more than stake size (see protocol-notes).
 
 **09.09.2026** — Research verdict: a locked-position market works, but at the time there were no
 transfers. Decision: watch the signals. Two signals (positions and staked amount) later moved, which
