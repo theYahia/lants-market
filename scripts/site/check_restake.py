@@ -32,17 +32,17 @@ POSITION_ID = 110
 REASON = None
 
 
-def get_pending_reward(rpc_url):
+def get_pending_reward():
     """Fetch pendingIndexedStakerReward(27) via eth_call."""
     calldata = "0x" + "8693dd3c" + "000000000000000000000000000000000000000000000000000000000000001b"
-    return eth_call(rpc_url, to=OPERATOR, data=calldata)
+    result = eth_call(OPERATOR, calldata)
+    return int(result, 16)
 
 
 def run():
     global REASON
 
     anvil_process, http_process = None, None
-    playwright = None
     browser = None
     context = None
     page = None
@@ -55,28 +55,27 @@ def run():
 
         # Recipe in exact order:
         # 1) evm_setNextBlockTimestamp to 1790850600
-        rpc(ANVIL_URL, "evm_setNextBlockTimestamp", [TIMESTAMP_EPOCH_25])
+        rpc("evm_setNextBlockTimestamp", [TIMESTAMP_EPOCH_25])
         # 2) evm_mine
-        rpc(ANVIL_URL, "evm_mine", [])
+        rpc("evm_mine", [])
         # 3) anvil_setBalance to funded caller address
-        rpc(ANVIL_URL, "anvil_setBalance", [funded_caller, hex(10**22)])
+        rpc("anvil_setBalance", [funded_caller, hex(10**22)])
         # 4) call indexPoolRewards(52894, 10) via eth_send_and_wait
         calldata = INDEX_POOL_REWARDS_SELECTOR + (
             "000000000000000000000000000000000000000000000000000000000000ce9e"  # 52894
             "000000000000000000000000000000000000000000000000000000000000000a"  # 10
         )
-        eth_send_and_wait(ANVIL_URL, to=OPERATOR, data=calldata)
+        eth_send_and_wait(funded_caller, OPERATOR, calldata)
 
         # Verify pending reward before UI
-        pending = get_pending_reward(ANVIL_URL)
-        if pending is None or int(pending, 16) != EXPECTED_PENDING_REWARD:
+        pending = get_pending_reward()
+        if pending != EXPECTED_PENDING_REWARD:
             REASON = f"pending reward mismatch: got {pending}, expected {EXPECTED_PENDING_REWARD}"
             print(f"reason={REASON}")
             print("restake_ok=0")
             return
 
         with sync_playwright() as p:
-            playwright = p
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             # Setup RPC route on the context
@@ -88,10 +87,10 @@ def run():
             setup_page_logging(page)
 
             # Open local site
-            page.goto("http://localhost:8080", wait_until="networkidle")
+            page.goto(f"http://127.0.0.1:{http_process}", wait_until="networkidle")
 
             # Switch to My Positions tab
-            page.click("text=My Positions")
+            page.click(".tab[data-tab=positions]")
             page.wait_for_timeout(500)
 
             # Wait for .pf-pos-row with dataset.id == 27
@@ -127,11 +126,11 @@ def run():
                 else:
                     # Click restake, wait for tx
                     restake_btn.click()
-                    page.wait_for_timeout(3000)
+                    page.wait_for_timeout(10000)
 
                     # Confirm fresh position id 110
-                    amount = get_position_amount(ANVIL_URL, POSITION_ID, OPERATOR)
-                    if amount is None or int(amount) != EXPECTED_PENDING_REWARD:
+                    amount = get_position_amount(POSITION_ID)
+                    if amount != EXPECTED_PENDING_REWARD:
                         REASON = f"position {POSITION_ID} amount mismatch, got: {amount}"
 
             if REASON:
