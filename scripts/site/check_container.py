@@ -274,7 +274,7 @@ def main() -> int:
                     normalized = page.evaluate(
                         """(el) => {
                             const clone = el.cloneNode(true);
-                            clone.querySelectorAll('.th-note').forEach(n => n.remove());
+                            clone.querySelectorAll('.th-note, .info').forEach(n => n.remove()); // header tips add an info icon
                             return clone.textContent || '';
                         }""",
                         cell,

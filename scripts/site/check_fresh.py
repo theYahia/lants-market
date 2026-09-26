@@ -13,11 +13,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 SITE_DIR = os.path.join(ROOT, "site")
 PORT = 8000
 
-LIVE_SNAPSHOT_URL = (
-    "https://ipfs.filebase.io/ipns/"
-    "k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/"
-    "fixtures/snapshot-e23.live.json"
-)
+# the site reads the data branch first (market-view.mjs LIVE_URLS); the IPNS copy lagged for hours
+LIVE_SNAPSHOT_URL = "https://raw.githubusercontent.com/theYahia/lants-market/data/live.json"
 
 
 class QuietHandler(SimpleHTTPRequestHandler):

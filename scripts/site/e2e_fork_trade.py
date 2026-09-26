@@ -244,6 +244,8 @@ def start_anvil() -> subprocess.Popen:
     cmd = [
         "anvil",
         "--fork-url", FORK_RPC,
+        # one block before the real first trade staked the epoch-23 buyer reward (AlreadyClaimed after it)
+        "--fork-block-number", "51780129",
         "--port", str(ANVIL_PORT),
         "--auto-impersonate",
         "--chain-id", "8453",
@@ -543,6 +545,20 @@ def add_init_script(page, addr: str) -> None:
     page.add_init_script(js)
 
 
+_PRE_TRADE_SNAPSHOT: Optional[bytes] = None
+
+
+def pre_trade_snapshot() -> bytes:
+    """Live snapshot without positions minted by or after the first trade (ids >= 110)."""
+    global _PRE_TRADE_SNAPSHOT
+    if _PRE_TRADE_SNAPSHOT is None:
+        with urllib.request.urlopen("https://raw.githubusercontent.com/theYahia/lants-market/data/live.json", timeout=30) as r:
+            snap = json.load(r)
+        snap["positions"] = [x for x in snap["positions"] if int(x["id"]) < 110]
+        _PRE_TRADE_SNAPSHOT = json.dumps(snap).encode()
+    return _PRE_TRADE_SNAPSHOT
+
+
 def setup_rpc_route(context) -> None:
     """Intercept public RPC calls and forward to anvil."""
     def handle_route(route):
@@ -586,6 +602,10 @@ def setup_rpc_route(context) -> None:
                     headers={"Access-Control-Allow-Origin": "*"},
                     body=error_body
                 )
+        elif "raw.githubusercontent.com/theYahia/lants-market/data/live.json" in url:
+            # the fork is at the block before the first trade; today's snapshot already has #110+ split and closed
+            route.fulfill(status=200, content_type="application/json",
+                          headers={"Access-Control-Allow-Origin": "*"}, body=pre_trade_snapshot())
         elif "anvil.e2e.invalid" in url:
             if req.method == "OPTIONS":
                 route.fulfill(
@@ -933,7 +953,8 @@ def buyer_flow(listing_id: int, site_port: int) -> None:
         row = page.locator(f"#market-list .market-row[data-listing-id='{listing_id}']")
         row.wait_for(timeout=30000)
         status = row.locator("span[data-field=state]").inner_text()
-        assert_eq("row_status_buy", status.strip().lower(), "sold")
+        # lot 0 is in INTERNAL_LISTING_IDS since 25.09, so the site shows "sold · internal"
+        assert_eq("row_status_buy", status.strip().lower().split(" · ")[0], "sold")
 
         print_logs(logs, "BUYER_")
         page.unroute_all(behavior="ignoreErrors")
