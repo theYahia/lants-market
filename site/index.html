@@ -117,7 +117,7 @@
             <div id="listings">
                 <!-- listings-clean -->
                 <div id="market-list">
-                    <div class="feed-empty" data-empty="listings">No active listings yet.</div>
+                    <div class="feed-empty" data-empty="listings">Loading listings from Base…</div>
                 </div>
                 <form id="create-form">
                   <div class="cf-title">List a position</div>
@@ -142,7 +142,7 @@
                   <div class="cf-actions">
                     <div class="cf-row"><label class="cf-field"><span>Split amount (ANTS)</span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label><button id="mf-split-btn" type="button">Split</button></div>
                     <div class="cf-row"><label class="cf-field"><span>Move to pool (agent id)</span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label><button id="mf-move-btn" type="button">Move</button></div>
-                    <div class="cf-row"><button id="mf-maxlock-btn" type="button">Enable max-lock</button></div>
+                    <div class="cf-row"><button id="mf-maxlock-btn" type="button">Enable max-lock</button><span class="cf-note mf-final">Final: a max-locked position can no longer be split or moved.</span></div>
                   </div>
                   <div id="manage-status" class="cf-status"></div>
                   <div class="cf-title">Stake buyer reward</div>

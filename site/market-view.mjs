@@ -260,11 +260,11 @@ async function readListings() {
   const lenRaw = await ethCall(SELECTORS.listingsLength);
   const n = Number(wordToBigInt(decodeWords(lenRaw)[0] || lenRaw));
 
-  const out = [];
-  for (let i = 0n; i < BigInt(n); i++) {
+  // lots are read in parallel: ~5 calls each, one by one took ~5 s for 6 lots
+  const readOne = async (i) => {
     const raw = await ethCall(SELECTORS.listings + encUint(i));
     const w = decodeWords(raw);
-    if (!w || w.length < WORDS_PER_LISTING) continue;
+    if (!w || w.length < WORDS_PER_LISTING) return null;
 
     const listingId = i;
     const seller = wordToAddr(w[0]);
@@ -325,7 +325,7 @@ async function readListings() {
       chainClosed = false;
       chainStakeEnd = null;
     }
-    out.push({
+    return {
       listingId,
       nftId,
       seller,
@@ -339,8 +339,9 @@ async function readListings() {
       chainClosed,
       chainStakeEnd,
       cancelled
-    });
-  }
+    };
+  };
+  const out = (await Promise.all(Array.from({ length: n }, (_, k) => readOne(BigInt(k))))).filter(Boolean);
 
   // ensure deterministic order
   out.sort((a, b) => (a.listingId < b.listingId ? -1 : a.listingId > b.listingId ? 1 : 0));
@@ -794,6 +795,8 @@ export async function loadPublicMarket() {
     render(snapshot, items);
   } catch (e) {
     console.warn('public market load failed', e);
+    const t = tableEl();
+    if (t && !t.querySelector('.market-row')) t.textContent = 'Could not load listings from the Base RPCs. Refresh the page.';
   }
 }
 
@@ -883,14 +886,32 @@ export function initManagePosition() {
       const currentEpoch = wordToBigInt(epochWords[0]);
       let maxLock = false;
       try {
-        const mlData = await ethCallTo(MANAGE_ADDR, posMaxLockSel + encUint(id) + encUint(currentEpoch));
+        // next epoch, like the positions table: a fresh position has max-lock power only from its start epoch
+        const mlData = await ethCallTo(MANAGE_ADDR, posMaxLockSel + encUint(id) + encUint(currentEpoch + 1n));
         const mlWords = decodeWords(mlData);
-        maxLock = mlWords.length > 0 && BigInt(mlWords[0]) > 0n;
+        maxLock = mlWords.length > 0 && wordToBigInt(mlWords[0]) > 0n; // words have no 0x prefix: BigInt() threw and hid max-lock
       } catch { /* keep false */ }
-      setStatus(mfCard, `Position ${id.toString()} · ${amount.toString()} ANTS · pool ${agentId.toString()} · start epoch ${stakeStartEpoch.toString()} · ${maxLock ? 'max-lock ON' : 'off'}`);
+      // the contract reverts split and move on a max-locked position (PositionClosed)
+      mfSplitBtn.disabled = maxLock;
+      mfMoveBtn.disabled = maxLock;
+      setStatus(mfCard, `Position ${id.toString()} · ${amount.toString()} ANTS · pool ${agentId.toString()} · rewards from epoch ${stakeStartEpoch.toString()} · ${maxLock ? 'max-lock ON: split and move are disabled' : 'max-lock off'}`);
     } catch (e) {
+      mfSplitBtn.disabled = false;
+      mfMoveBtn.disabled = false;
       setStatus(mfCard, 'unavailable');
     }
+  }
+
+  // wallet and contract errors in plain words; the raw error stays in the console
+  function humanError(e) {
+    const m = String((e && (e.shortMessage || e.message)) || e);
+    console.warn('tx error', e);
+    if (/user rejected|user denied|rejected the request|cancel/i.test(m)) return 'Cancelled in the wallet.';
+    if (/insufficient funds/i.test(m)) return 'Not enough ETH on Base for gas.';
+    if (/0x9e684275|PositionClosed/.test(m)) return 'This position is max-locked or closed: split and move are disabled.';
+    if (/0x646cf558|AlreadyClaimed/.test(m)) return 'This reward is already staked or claimed.';
+    if (/underpriced|nonce too low/i.test(m)) return 'The wallet reused an old transaction. Wait a few seconds and try again.';
+    return m.length > 140 ? m.slice(0, 140) + '…' : m;
   }
 
   async function sendTx(to, data, btn, statusEl, successMsg) {
@@ -913,11 +934,11 @@ export function initManagePosition() {
         setStatus(statusEl, successMsg);
         return receipt;
       } else {
-        setStatus(statusEl, 'failed');
+        setStatus(statusEl, 'Transaction failed on chain.');
         return null;
       }
     } catch (e) {
-      setStatus(statusEl, e.message || String(e));
+      setStatus(statusEl, humanError(e));
       return null;
     } finally {
       btn.disabled = false;
@@ -983,7 +1004,7 @@ export function initManagePosition() {
     }
     mfPosid.value = largeId.toString();
     await refreshCard();
-    setStatus(manageStatus, `Split: SMALL ${smallId.toString()} -> #cf-nftid, LARGE ${largeId.toString()}`);
+    setStatus(manageStatus, `Split done: #${smallId.toString()} is filled into "List a position" above, #${largeId.toString()} keeps the rest. Next: list #${smallId.toString()}, or enable max-lock on #${largeId.toString()}.`);
   });
 
   mfMoveBtn.addEventListener('click', async () => {
@@ -1030,7 +1051,7 @@ export function initManagePosition() {
     );
     if (!receipt) return;
     await refreshCard();
-    setStatus(manageStatus, 'Max-lock enabled');
+    setStatus(manageStatus, 'Max-lock enabled: power stays at amount x 104. Split and move are now disabled for this position.');
   });
 
   if (brBuyer) {
@@ -1110,7 +1131,7 @@ export function initManagePosition() {
       const newId = mints[0];
       mfPosid.value = newId.toString();
       await refreshCard();
-      setStatus(brStatus, `Staked reward, new position ${newId.toString()}`);
+      setStatus(brStatus, `Staked: new position #${newId.toString()}, filled into "Manage a position" above. Next: split off a part to sell, or enable max-lock.`);
     });
   }
 }
