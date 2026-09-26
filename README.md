@@ -37,7 +37,7 @@ becoming something sellers should care about — and pay for.
 |---|---|
 | Shows every lANTS position: amount, lock, pool, weight, exit penalty, pending reward | Hold anyone's NFTs or funds — purchases are atomic |
 | Lists, buys and cancels lots through a thin USDC-only contract on Base (fork of Vexy) | Custody anything: the contract never holds NFTs or USDC |
-| Shows each lot's implied **MC and FDV** at its price per ANTS, and every completed sale | Let the owner touch your money — owner can only change `feeRecipient` |
+| Shows each lot's implied **MC and FDV** at its price per ANTS, and every completed sale | Let the owner touch your money — owner can only change `feeRecipient` or hand over ownership |
 | Manages positions from the site: stake a buyer reward, split, move, enable max-lock | Charge more than a fixed 1% fee on a completed purchase |
 | My Portfolio: your positions (List / Manage) and your listings | Duplicate pool analytics — [antseed-zh](https://antseed-zh.com) already does that well |
 | Cross-checks every snapshot number on two RPCs at one block | Publish seller perks yet — that board is still planned |
@@ -94,7 +94,8 @@ Site checks (Playwright) live in `scripts/site/check_*.py`.
   own `SPDX: UNLICENSED` header.
 - **No custody, no rug surface.** The contract holds neither NFTs nor money. A seller lists without
   transferring the NFT; a purchase is atomic (USDC to seller, 1% fee to `feeRecipient`, NFT to
-  buyer). The owner can change **only** `feeRecipient` — nothing else.
+  buyer). The owner can change **only** `feeRecipient` (and hand over ownership, which carries that same
+  single right) — nothing else.
 - `feeRecipient` today is the operator wallet `0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B`.
 
 ## Data pipeline

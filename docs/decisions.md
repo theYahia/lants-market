@@ -4,6 +4,10 @@ Newest first. Each entry says what we chose, why, and what would make us change 
 
 | # | Date | Decision | Why | Revisit when |
 |---:|---|---|---|---|
+| D14 | 26.09 | Late UX fixes (manage flow, errors, table) written directly in Claude Code at the owner's request | speed before the contest deadline; the network models stay the default | back to network models after the deadline |
+| D13 | 26.09 | Show implied **MC and FDV** on every lot: price per ANTS × `totalSupply()` (minted) and × `MAX_SUPPLY()` (1.04B), both read from the ANTS token | feedback from the AntSeed chat: a bare USDC price is hard to read | ANTS gets a real market price elsewhere |
+| D12 | 25.09 | Trades between our own wallets are listed as **internal** and kept out of volume and FDV | a test trade must not read as demand | never |
+| D11 | 25.09 | `lants.eth` contenthash points at each release's **CID** instead of IPNS | eth.limo served IPNS content 3.5–5.5 hours stale; one ENS transaction per release is cheap | IPNS caching becomes reliable |
 | D10 | 20.09 | Ship our own market via a **fork of VexyMarketplace** (USDC-only) instead of building from scratch | Vexy is battle-tested for atomic, non-custodial NFT sales; we add one line (`require(currency == USDC)`), swap Solmate `Owned.sol` for a minimal MIT one, and keep custody at zero | fee volume or a feature OpenSea can't serve justifies a bespoke contract 
 | D9 | 17.09 | Develop on a free `github.io` mirror; publish only releases to `lants.eth` | every change of an ENS contenthash is an L1 transaction (≈ $0.1 at 0.44 gwei) | many releases per week → switch to IPNS |
 | D8 | 17.09 | Host on **IPFS + ENS** (`lants.eth`, served through eth.limo) | ~$5 a year, paid in ETH, no server, nothing to take down | eth.limo proves unreliable → DNS domain |
