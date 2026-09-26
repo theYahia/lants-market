@@ -329,7 +329,7 @@ def main() -> None:
         if results["a_nftId"] != "106": listing_ok = 0
         if results["a_price"] != "2.00 USDC": listing_ok = 0
         if results["a_ants"] != "50.00": listing_ok = 0
-        if "$41.60M FDV" not in results["a_unitPrice"]: listing_ok = 0  # 2.00 USDC / 50 ANTS = 0.04 per ANTS x 1.04B
+        if "$41.6M FDV" not in results["a_unitPrice"]: listing_ok = 0  # 2.00 USDC / 50 ANTS = 0.04 per ANTS x 1.04B
         if results["a_lock"] != "104w": listing_ok = 0
         if results["a_exit"] != "—": listing_ok = 0
         if results["a_exit_title"] != "Appears after the next snapshot": listing_ok = 0

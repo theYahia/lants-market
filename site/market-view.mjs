@@ -125,12 +125,10 @@ const WORDS_PER_LISTING = 11;
 const ANTS_TOKEN = '0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263';
 let MINTED = null; // ANTS minted, read once per page load in readListings()
 
+// same format as the Implied FDV tile (market-stats.mjs): $1.19M, $10.4M
+const USD_COMPACT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
 function fmtUsd(n) {
-  if (!Number.isFinite(n)) return '—';
-  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
-  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-  return '$' + n.toFixed(0);
+  return Number.isFinite(n) ? USD_COMPACT.format(n) : '—';
 }
 
 async function ethCallTo(to, data) {
