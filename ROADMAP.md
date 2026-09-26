@@ -181,6 +181,12 @@ Most concrete first. Nothing here is decided before 22.10.
 
 ## Build log
 
+**26.09.2026 (later)** — Full repo audit before more eyes land on it: no secrets in 351 commits, no
+broken links, every contract fact re-read on chain (ANTS `MAX_SUPPLY()` is 1.04B, so the FDV basis is the
+token's own). The Docs page had gone stale ("zero sales", a wrong claim that inactive positions can't
+be split — it is max-lock that blocks split and move); rewritten. Three stale checks and two probes fixed;
+the fork e2e test passes again in both wallet modes.
+
 **26.09.2026** — First public lots: our buyer wallet split its 50-ANTS position into five lots of 10 ANTS
 at 0.10 USDC. Feedback from the AntSeed chat: a bare USDC price is hard to read, so every lot now shows
 its implied MC (× ANTS minted, read from the token) and FDV (× 1.04B max supply). Also measured: the
