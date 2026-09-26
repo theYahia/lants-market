@@ -75,7 +75,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
-| Seller incentives pilot (the Votium / Hidden Hand model for AntSeed): re-read the buyer-points formula on chain, ask 3 sellers what they would pay per 1,000 ANTS of pool weight, then a board where sellers post offers and pay stakers themselves | 10.10 | open |
+| Seller incentives board v1 (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 10.10 | open |
 | List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065), waiting for review) | — | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
@@ -138,6 +138,8 @@ Every item below touches other people's assets, so each one gets its own review.
 - [ ] Explore a pool-weight hub (pooled positions, holder voting on weight). Needs an audit first.
 
 ### Ideas (not scheduled)
+
+- **Why seller incentives can work here.** About 70% of Aerodrome's bribe mechanics carry over: stake in a pool works like a vote (it multiplies rewards for that seller's buyers), sellers play the role of protocols buying votes, and new sellers keep arriving. The missing piece is a liquid reward: ANTS can't be transferred, so a pool's weight is worth ANTS, not dollars. Paying in inference credits closes that gap; if ANTS transfers are ever enabled, the USDC version works exactly like Aerodrome's.
 
 - **lANTS Allocator — where to stake ANTS, for people and agents.** A pools table (seller name, sales,
   weight, forecast reward for *your* amount after your own dilution, plus the buyer-reward boost if you buy
