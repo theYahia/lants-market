@@ -703,19 +703,15 @@ th.sort-desc {
   pointer-events: none; opacity: 0; transition: opacity .1s;
 }
 #tip.show { opacity: 1; }
-/* market listing table: 8-column grid */
+/* market listing table: grid rows; columns, gap and padding are set at the end of the file */
 #market-list .market-head,
 #market-list .market-row {
     display: grid;
-    grid-template-columns: 4ch 9ch 11ch 9ch 10ch 6ch 14ch 1fr;
-    gap: 8px 12px;
     align-items: center;
-    padding: 4px 0;
 }
 #market-list .market-head > span { white-space: nowrap; }
 #market-list .market-head > span:nth-child(3), #market-list .market-head > span:nth-child(4), #market-list .market-head > span:nth-child(5), #market-list .market-head > span:nth-child(6),
 #market-list .market-row > span:nth-child(3), #market-list .market-row > span:nth-child(4), #market-list .market-row > span:nth-child(5), #market-list .market-row > span:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
-#market-list .market-row > span:nth-child(8) { justify-self: end; }
 #market-list .market-head {
     color: var(--ink);
     font-weight: 700;
@@ -767,15 +763,10 @@ th.sort-desc {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
-    #market-list .market-head,
-    #market-list .market-row {
-        min-width: 620px; /* keep 8 columns intact, scroll instead of reflow */
-    }
 }
 /* Manage a position / Stake buyer reward buttons: same look as Create listing */
 #mf-split-btn,#mf-move-btn,#mf-maxlock-btn,#br-submit{margin-top:12px;padding:10px 16px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-13);cursor:pointer;justify-self:start;align-self:end;}
 #mf-split-btn,#mf-move-btn,#mf-maxlock-btn{grid-column:1/-1;}
-#mf-split-btn:disabled,#mf-move-btn:disabled,#mf-maxlock-btn:disabled,#br-submit:disabled{opacity:.5;cursor:default;}
 #manage-form{margin-top:32px;}
 /* listing caveats: quiet sans text instead of mono lines */
 #market-list .market-caveat{font-family:var(--font-sans);line-height:1.5;margin-top:4px;}
@@ -799,27 +790,22 @@ button.cancel:hover{color:var(--ink);border-color:var(--muted);}
 
 /* Listings rendered as the positions table */
 #market-list{font-family:var(--font-sans);background-color:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;}
-#market-list .market-head,#market-list .market-row{grid-template-columns:4ch 9ch 10ch 9ch 10ch 6ch 11ch 12ch 1fr;padding:8px 12px;gap:8px 12px;}
 #market-list .market-head{color:var(--muted);font-weight:500;font-size:var(--fs-10);text-transform:uppercase;border-bottom:1px solid var(--line);}
 #market-list .market-head .th-note{display:block;color:var(--muted);font-weight:400;font-size:var(--fs-10);letter-spacing:0;text-transform:none;}
 #market-list .market-row > span:nth-child(3),#market-list .market-row > span:nth-child(4),#market-list .market-row > span:nth-child(5),#market-list .market-row > span:nth-child(6),#market-list .market-row > span:nth-child(7){text-align:right;font-variant-numeric:tabular-nums;}
 #market-list .market-head > span:nth-child(8),#market-list .market-row > span:nth-child(8){justify-self:start;}
 #market-list .market-head > span:nth-child(9),#market-list .market-row > span:nth-child(9){justify-self:end;}
-@media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:700px;}}
 /* listings table alignment: header over values, wider columns, padded caveats */
-#market-list .market-head,#market-list .market-row{grid-template-columns:5ch 10ch 12ch 10ch 13ch 7ch 11ch 13ch 1fr;}
 #market-list .market-head > span:nth-child(3),#market-list .market-head > span:nth-child(4),#market-list .market-head > span:nth-child(5),#market-list .market-head > span:nth-child(6),#market-list .market-head > span:nth-child(7){text-align:right;}
 #market-list .market-head > span{white-space:nowrap;}
 #market-list .market-caveat{padding:0 12px;}
 #market-list .market-caveat:first-of-type{margin-top:10px;}
 #market-list .market-caveat:last-child{padding-bottom:12px;}
 #market-list .market-empty{padding:12px;}
-@media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:780px;}}
 /* grid columns are in ch, which follows the container font: keep the header container at the row font size, shrink only its cells */
 #market-list .market-head{font-size:inherit;}
 #market-list .market-head > span{font-size:var(--fs-10);}
 /* font-independent column widths so header and rows line up exactly */
-#market-list .market-head,#market-list .market-row{grid-template-columns:48px 96px 112px 96px 120px 64px 104px 120px 1fr;}
 @media (max-width:640px){#market-list .market-head,#market-list .market-row{min-width:860px;}}
 /* My Portfolio view */
 body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio .panel{display:none !important;}
