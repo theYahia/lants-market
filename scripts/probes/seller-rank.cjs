@@ -18,7 +18,8 @@ const read = (address, f, args = []) => c.readContract({ address, abi, functionN
 
 (async () => {
   // Seller addresses and names come from the public explorer API.
-  const sellers = await (await fetch('https://antscan.co/api/sellers')).json();
+  // antscan also lists sellers without an agent id; they have no pool and no recognized sales
+  const sellers = (await (await fetch('https://antscan.co/api/sellers')).json()).filter((s) => s.agentId != null);
   const current = await read(ACCOUNTING, 'currentEpoch');
   const total = await read(ACCOUNTING, 'totalSellerPointsByEpoch', [epoch]);
   const points = await Promise.all(sellers.map((s) => read(ACCOUNTING, 'sellerPointsByEpoch', [epoch, s.address])));

@@ -4,6 +4,8 @@
   "private": true,
   "description": "Valuation board and market layer for locked ANTS positions (lANTS) on AntSeed",
   "scripts": {
+    "build": "node scripts/site/build-dist.mjs",
+    "test": "node --test site/*.test.mjs",
     "probe:state": "node scripts/probes/net-state.cjs",
     "probe:sellers": "node scripts/probes/seller-rank.cjs"
   },
