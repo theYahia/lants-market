@@ -18,7 +18,9 @@ Example — position #27, read on-chain:
 
 **Epochs.** An epoch lasts one week. Epoch 23 began 2026-09-17 09:54 UTC; epoch 24 begins 2026-09-24 09:54 UTC. `currentEpoch()` at snapshot time was 23.
 
-**Activation.** `stakeActivationDelay()` = 1, so a position is not active in the epoch it is created. Calling `splitStake` on an inactive position reverts with `PositionClosed()` even though `closedAtEpoch` is 0.
+**Activation.** `stakeActivationDelay()` = 1, so a position is not active in the epoch it is created; it earns from the next epoch.
+
+**Max-lock.** `enableMaxLock` keeps a position's weight at `amount × 104`. After it, `splitStake` and `moveStake` revert with `PositionClosed()` even though `closedAtEpoch` is 0 (measured on 2026-09-26 on #27 and #111; the same calls pass on positions without max-lock). Split or move first, then enable max-lock.
 
 **Lock bounds.** `minStakeEpochs()` = 1, `MAX_STAKE_EPOCHS()` = 104.
 
@@ -33,7 +35,7 @@ positionReward = poolReward * positionWeight / poolWeight
 
 `stakerBudget` = 100,000 ANTS per epoch, read via raw selector `0x56ab55c5` on the `emissionsGate` contract `0xE60a31E6CD2F8455503cA0B3f6545Dd3DDF543BD` at block 51613321. This selector has no name in any signature database and the contract ABI is not verified. The value is constant across epochs 21, 22 and 23 and equals 2% of the weekly emission of 5,000,000 ANTS derived from `currentEmissionRate()`.
 
-Position #27 metrics for the next epoch:
+Position #27 metrics at snapshot block 51613321 (epoch 23), for the next epoch:
 
 | Metric | Value | Definition |
 |---|---|---|

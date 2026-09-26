@@ -47,14 +47,24 @@ that NFT at once by incrementing the nonce; you cannot cancel a single lot by id
 The records are not deleted, they just become unbuyable. The only cost is gas.
 
 ### How much will my position sell for?
-We don't know, and we won't pretend to. **There have been zero sales.** There is
-no trade history, no volume, and no discount range to quote. The first sale will
-be the first data point. Anyone citing an expected price right now is guessing.
+We don't predict prices. The data so far: one internal test trade on 2026-09-25
+(50 ANTS for 1.00 USDC, between our own wallets, not counted in volume) and five
+public lots of 10 ANTS at 0.10 USDC each, listed on 2026-09-26. Every lot shows
+the MC and FDV its price implies. Anyone citing an expected price is guessing.
 
 ### Are there any listings right now?
-Currently none. The market is empty. When it isn't, listings appear here
-automatically from on-chain data. There is no offer system: buyers fill listings
+Open the Listings tab: listings are read live from the chain, and sold or
+cancelled ones are labelled. There is no offer system: buyers fill listings
 directly, they do not bid.
+
+### What do MC and FDV mean on a lot?
+They translate a lot's price into a valuation of ANTS: price per ANTS times ANTS
+minted so far (MC) and times the 1.04B max supply (FDV). A bare USDC price for a
+position is hard to compare; these two numbers make lots of any size comparable.
+
+### Why are Split and Move disabled for my position?
+The position is on max-lock. The contract reverts split and move on a max-locked
+position, so the site disables those buttons. Split or move before enabling max-lock.
 
 ### How does the interface read data?
 This site is static. All reads come from your connected wallet or a public RPC

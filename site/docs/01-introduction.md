@@ -25,6 +25,8 @@ ENS name: `lants.eth`.
 - List an lANTS position you own for a USDC price.
 - Buy a listed position; the token transfers directly from seller to buyer.
 - Cancel your own listings at any time, for free.
+- Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.
+- See your positions and your listings in My Portfolio.
 
 A 1% fee is taken from each sale and sent to the fee recipient.
 
@@ -32,15 +34,14 @@ A 1% fee is taken from each sale and sent to the fee recipient.
 
 - **Offers.** There is no offer contract for this market. The storefront
   shows a "coming soon" label. Do not expect offer functionality.
-- **Listings.** The market is empty at the time of writing
-  (`listingsLength() = 0`). No position has been listed yet.
+- **Seller perks board.** Planned, not built.
 
 ## How this site reads the chain
 
-The storefront works from a snapshot taken at a fixed block, not from a
-live read of the whole network. Every data table is labelled with its
-snapshot block and epoch (for example: block 51613321, epoch 23). Values
-you see reflect that block, not the current head.
+The positions table works from a snapshot taken at a fixed block, refreshed
+three times a day; the line under the table shows its block, epoch and time.
+Listings, sales, My Portfolio and the MC / FDV figures are read live from
+Base in your browser.
 
 ## Origin
 

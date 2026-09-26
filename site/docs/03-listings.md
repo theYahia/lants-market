@@ -68,3 +68,17 @@ Conditions that must all hold:
 When all conditions hold, the buyer pays `price` in USDC. The seller
 receives `price - fee`, the fee recipient receives `fee`, and the NFT is
 transferred from seller to buyer in the same transaction.
+
+## MC / FDV on each lot
+
+The table shows what a lot's price implies for ANTS as a whole:
+
+```
+price per ANTS = price / ANTS in the position
+MC  = price per ANTS * totalSupply()   // ANTS minted so far, read live from the token
+FDV = price per ANTS * MAX_SUPPLY()    // 1,040,000,000 ANTS
+```
+
+Example: 10 ANTS for 0.10 USDC is $0.01 per ANTS, an MC of about $1.19M and
+an FDV of about $10.4M. Trades between our own wallets are labelled
+*internal* and are not counted in volume or in the Implied FDV tile.
