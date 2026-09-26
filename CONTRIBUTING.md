@@ -15,7 +15,8 @@ cd site && python -m http.server 8098
 ## Run the tests before you push
 
 ```bash
-node site/metrics.test.mjs
+node --test site/*.test.mjs          # unit tests
+python scripts/site/qa_sweep.py       # Playwright sweep of the built site (run node scripts/site/build-dist.mjs first)
 
 git submodule update --init      # pulls lib/forge-std
 cd contracts && forge test --fork-url https://mainnet.base.org   # fork tests on Base

@@ -10,3 +10,9 @@ site/fixtures/snapshot-e23.live.json
 # build output
 contracts/out/
 contracts/cache/
+# local screenshots and build artefacts
+/*.png
+*.car
+sellers.json
+__pycache__/
+scripts/site/*.png

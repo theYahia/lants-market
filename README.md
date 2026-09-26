@@ -35,18 +35,24 @@ becoming something sellers should care about — and pay for.
 
 | v1 does | v1 does not |
 |---|---|
-| Reads every position straight from Base in your browser | Hold anyone's NFTs or funds — purchases are atomic |
-| Shows amount, lock, pool, weight, exit penalty, pending reward | Custody anything: the contract never holds NFTs or USDC |
-| Links each position to its OpenSea page and shows the listing price per locked ANTS | Let the owner touch your money — owner can only change `feeRecipient` |
-| Adds a thin USDC-only marketplace contract on Base (fork of Vexy) | Charge more than a fixed 1% fee on a completed purchase |
-| Publishes seller perks for pool stakers | Duplicate pool analytics — [antseed-zh](https://antseed-zh.com) already does that well |
+| Shows every lANTS position: amount, lock, pool, weight, exit penalty, pending reward | Hold anyone's NFTs or funds — purchases are atomic |
+| Lists, buys and cancels lots through a thin USDC-only contract on Base (fork of Vexy) | Custody anything: the contract never holds NFTs or USDC |
+| Shows each lot's implied **MC and FDV** at its price per ANTS, and every completed sale | Let the owner touch your money — owner can only change `feeRecipient` |
+| Manages positions from the site: stake a buyer reward, split, move, enable max-lock | Charge more than a fixed 1% fee on a completed purchase |
+| My Portfolio: your positions (List / Manage) and your listings | Duplicate pool analytics — [antseed-zh](https://antseed-zh.com) already does that well |
+| Cross-checks every snapshot number on two RPCs at one block | Publish seller perks yet — that board is still planned |
+
+## Status (26.09.2026)
+
+- **First trade** on 25.09, every step through the site: stake a buyer reward, split off 50 ANTS, max-lock the rest, list, buy from our second wallet ([tx](https://basescan.org/tx/0x33ed01b75166aa1c17388fc92bd1bbbd9e2bcd17cff68b139fa4ce227a8fc610), [video](https://x.com/TheTieTieTies/status/2103556306388844621)). Marked *internal*: it is not counted in volume or FDV.
+- **First public lots** on 26.09: five positions of 10 ANTS at 0.10 USDC each (implied MC ≈ $1.19M, FDV ≈ $10.4M).
+- Pending: listing on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)), claim/restake buttons, seller perks board. See [ROADMAP.md](ROADMAP.md).
 
 ## How it fits together
 
 ```mermaid
 flowchart LR
   B[(Base: AntSeed contracts)] -->|read in browser| L[lants.eth board]
-  O[OpenSea listings] -->|price per locked ANTS| L
   M[VexyMarketplace fork — USDC only] -->|atomic buy| L
   S[Sellers] -->|perks for their pool| P[perks board]
   P --> L
@@ -68,7 +74,8 @@ cd site && python -m http.server 8098
 Run the tests:
 
 ```bash
-node site/metrics.test.mjs
+node --test site/*.test.mjs                  # unit tests
+python scripts/site/qa_sweep.py               # 21-check Playwright sweep of the built site
 
 git submodule update --init      # pulls lib/forge-std
 cd contracts && forge test --fork-url https://mainnet.base.org   # fork tests on Base
@@ -96,7 +103,10 @@ A GitHub Actions job (`snapshot.yml`) publishes a fresh snapshot for each 06/14/
 every hour and skips when the live snapshot is already fresh, so a delayed or dropped GitHub cron is caught up
 within the hour. Each run builds a snapshot of
 positions (`site/enrich-snapshot.mjs`, `site/enrich-sales.mjs`), gates it through
-`site/sanity-check.mjs`, and publishes to IPNS. Filebase secrets live only in CI.
+`site/sanity-check.mjs`, builds the site and pins it to IPFS (Filebase). The live snapshot is also
+pushed to the `data` branch, which the site reads at runtime, so data stays fresh between releases.
+`lants.eth` points at the CID of a release (one ENS transaction per release — IPNS caching lagged
+for hours). Filebase secrets live only in CI.
 
 ## Where to read next
 
@@ -111,9 +121,11 @@ positions (`site/enrich-snapshot.mjs`, `site/enrich-sales.mjs`), gates it throug
 
 ## How it is built
 
-The plan is written in one paid planning session. **All code is written by free models served on the
-AntSeed network itself**, routed through [Akilon](https://akilon.ru), and every stage is accepted by a
-human with commands, not by the model's own report.
+Plans, diagnoses and reviews come from `claude-opus-4.8` served on AntSeed. Most of the code is written
+by free and cheap models on AntSeed itself (`deepseek-v4-flash`, `gpt-oss-120b`, `mercury-2-5`,
+`glm-5.3-flash`), routed through our AntSeed buyer node; a few late fixes were written directly in
+Claude Code. Every stage is accepted by a human with commands, not by the model's own report.
+AntSeed inference spent up to 25.09: **$17.58**.
 
 ## Reproduce the numbers
 

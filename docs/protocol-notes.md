@@ -71,6 +71,7 @@ positions #15 and #9.
 | `splitStake` | free | body and weight split proportionally, lock terms kept |
 | `mergeStakes` | free | |
 | `extendLock` / enable–disable max-lock | free | |
+| split or move a **max-locked** position | reverts | measured 26.09 with `eth_call`: `PositionClosed()` (`0x9e684275`) on #27/#111, while the same calls pass on non-max-locked #29/#30 — split and move before enabling max-lock |
 | Early exit | **max(5 %, 50 % × remaining / total)** of principal, burned | right after staking for 104 epochs this is 50 % |
 | Transfer the NFT | gas | nothing in the contract blocks it |
 

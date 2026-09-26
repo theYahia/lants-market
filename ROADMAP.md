@@ -3,9 +3,10 @@
 A public board and USDC market for locked ANTS (lANTS) positions on Base. Everything here is dated
 and honest: what shipped, what didn't, and what's next.
 
-Built the AntSeed way: planned once with a strong model, then coded by **free models served on
-AntSeed itself**, with a human accepting every stage by command — never by the model's own report.
-This roadmap, the build log, and what breaks are all public.
+Built the AntSeed way: planned and reviewed by `claude-opus-4.8` on AntSeed, coded mostly by **free and
+cheap models served on AntSeed itself**, with a human accepting every stage by command — never by the
+model's own report. AntSeed inference up to 25.09: $17.58. This roadmap, the build log, and what breaks
+are all public.
 
 **The question this iteration answers:** by **22 October 2026**, will lANTS have its first market
 price and its first seller paying for pool weight?
@@ -34,7 +35,10 @@ market layer (phase 4) does not start.
 | 24.09 | Repo made public; contract source verified on Basescan and Blockscout | 3 | ✅ |
 | 25.09 | Full trade flow through the site (create · buy · cancel · manage position); 8-column listings grid with on-chain fallback; snapshot cross-checked on two RPCs with a freshness gate; portfolio and positions fixes; e2e fork test (injected + Privy) and 19-check QA sweep both pass | 3 | ✅ |
 | 25.09 | First trade on our market, every step through the site: stake buyer reward → #110, split → #111 + #112, max-lock #111, list #112 for 1.00 USDC, buy from our second wallet ([tx](https://basescan.org/tx/0x33ed01b75166aa1c17388fc92bd1bbbd9e2bcd17cff68b139fa4ce227a8fc610)); marked internal, not in volume | 3 | ✅ |
-| this week | Listing on antseed.com/ecosystem | 3 | 🔜 |
+| 25.09 | Sales panel reads sold lots from the chain; My Positions shows positions newer than the snapshot and refreshes after a transaction (two bugs found by replaying the trade on a Base fork) | 3 | ✅ |
+| 26.09 | First public lots: five positions of 10 ANTS at 0.10 USDC each | 3 | ✅ |
+| 26.09 | Implied MC / FDV on every lot and sale (feedback from the AntSeed chat); lots load in parallel (~1 s); clearer manage flow: next-step hints, plain-word errors, Split/Move disabled on max-locked positions | 3 | ✅ |
+| waiting | Listing on antseed.com/ecosystem — [PR #1065](https://github.com/AntSeed/antseed/pull/1065) opened 24.09, waiting for review | 3 | 🔜 |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
 | every Thu | Epoch recap (08.10, 15.10, …) | build in public | 🔜 |
@@ -51,8 +55,11 @@ market layer (phase 4) does not start.
   ANTS**. Contract: VexyMarketplace fork, `0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660` on Base,
   source-verified on Basescan and Blockscout.
 - **Docs page** and wallet connect via Privy.
-- **Hosting** — static site on IPFS, addressed by `lants.eth` (via ENS). Content is served through
-  IPNS on Filebase, so updates need no gas. Live at https://lants.eth.limo since 23.09.
+- **Portfolio** — your positions with List / Manage buttons, and your listings; manage actions (stake a
+  buyer reward, split, move, max-lock) and a Sales panel with each sale's implied FDV.
+- **Hosting** — static site on IPFS, addressed by `lants.eth` (via ENS). Since 25.09 `lants.eth` points at
+  each release's CID directly (one ENS transaction per release; IPNS caching lagged for hours). Live at
+  https://lants.eth.limo since 23.09.
 - **Fresh data** — a snapshot refreshes automatically 3× a day (GitHub Actions, since 23.09).
 
 ---
@@ -69,15 +76,18 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
 | Seller perks board | — | open |
-| List on antseed.com/ecosystem | this week | open |
+| List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065), waiting for review) | — | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
 | First trade on our market: stake the epoch-23 buyer reward in Apex, split off 50 ANTS, list and buy it (internal test) | 25.09 | ✅ done |
-| Confirm staking decisions: #27 stays in Apex and is not listed; restake its rewards in Apex; small thank-you stake in Open Forge | 25.09 | open |
-| Post on X about the first trade: [reply with video](https://x.com/TheTieTieTies/status/2102802534259916926) to our contest entry, models and AntSeed cost ($17.58) | 25.09 | ✅ done |
+| Confirm staking decisions: #27 stays in Apex and is not listed; restake its rewards in Apex; a stake in Open Forge | 26.09 | ✅ decided |
+| Post on X about the first trade: [reply with video](https://x.com/TheTieTieTies/status/2103556306388844621) to our contest entry, models and AntSeed cost ($17.58) | 25.09 | ✅ done |
+| First public lots: split a 50-ANTS position into five lots of 10 ANTS at 0.10 USDC | 26.09 | ✅ done |
+| Implied MC / FDV on every lot and sale; faster listings; manage-flow hints and plain-word errors | 26.09 | ✅ done |
+| Page order that follows the flow (stake → split → list); show "sold" from the receipt right after Buy | — | open |
 | Check the AntSeed contest results | 29.09 | open |
 | Claim and Restake staker rewards with buttons in My Positions (fork e2e covers Restake) | 30.09 | open |
-| Restake #27's epoch-24 staker reward in Apex; move a small piece to Open Forge (the free-model network lants.eth was built on) | 01.10 | open |
+| Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
 | Signal check + money-model decision; stop rule check on 05.11 | 22.10 | open |
@@ -135,6 +145,7 @@ Every post carries real numbers. No price predictions for ANTS.
 | When | Post |
 |---|---|
 | 23.09 | AntSeed contest entry — [x.com/TheTieTieTies/status/2102802534259916926](https://x.com/TheTieTieTies/status/2102802534259916926) |
+| 25.09 | First trade, with video, models and AntSeed cost — [reply](https://x.com/TheTieTieTies/status/2103556306388844621) |
 | Every Thursday after the epoch boundary | Epoch recap — positions, ANTS staked, weight by pool, reward per weight, our own rewards |
 | After each stage | Stage done — what was built, which free model built it, what the human caught at acceptance |
 | 01.10 | First staker reward for #27 — the real number vs our estimate |
@@ -170,6 +181,16 @@ Most concrete first. Nothing here is decided before 22.10.
 
 ## Build log
 
+**26.09.2026** — First public lots: our buyer wallet split its 50-ANTS position into five lots of 10 ANTS
+at 0.10 USDC. Feedback from the AntSeed chat: a bare USDC price is hard to read, so every lot now shows
+its implied MC (× ANTS minted, read from the token) and FDV (× 1.04B max supply). Also measured: the
+contract refuses to split or move a max-locked position, so the site now disables those buttons.
+
+**25.09.2026** — First trade on our market, every step through the site ([tx](https://basescan.org/tx/0x33ed01b75166aa1c17388fc92bd1bbbd9e2bcd17cff68b139fa4ce227a8fc610)). Replaying it on a
+Base fork from the block before the trade exposed two portfolio bugs (positions newer than the snapshot
+were hidden; the portfolio did not refresh after a transaction); both fixed the same day. `lants.eth`
+now points at each release's CID directly.
+
 **24.09.2026** — Repo made public (ahead of the planned 02.10). Contract source verified on
 Basescan and Blockscout the same day.
 
@@ -191,11 +212,11 @@ is why this repo exists.
 
 ## Metrics
 
-| Metric | Source | Baseline 17.09 |
-|---|---|---:|
-| lANTS transfers between wallets | Blockscout token transfers | 0 |
-| Positions > 1 ANTS | on-chain snapshot | 5 |
-| Listings not by us | market data | not measured |
-| Seller perks | perks list | 0 |
-| X followers / impressions | X analytics | — |
-| Paid planning sessions | this log | 1 |
+| Metric | Source | Baseline 17.09 | 26.09 |
+|---|---|---:|---:|
+| lANTS transfers between wallets | Blockscout token transfers | 0 | ≥ 5 (4 on antseedmarkets.com, 1 internal on ours) |
+| Positions > 1 ANTS | on-chain snapshot | 5 | 76 |
+| Listings not by us | market data | not measured | 0 |
+| Seller perks | perks list | 0 | 0 |
+| X followers / impressions | X analytics | — | — |
+| AntSeed inference spent on this build | call logs | — | $17.58 (to 25.09) |
