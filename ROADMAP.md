@@ -137,6 +137,15 @@ Every item below touches other people's assets, so each one gets its own review.
 - [ ] A fee, only once there is volume
 - [ ] Explore a pool-weight hub (pooled positions, holder voting on weight). Needs an audit first.
 
+### Ideas (not scheduled)
+
+- **lANTS Allocator — where to stake ANTS, for people and agents.** A pools table (seller name, sales,
+  weight, forecast reward for *your* amount after your own dilution, plus the buyer-reward boost if you buy
+  from that seller) with a one-signature "Stake here"; the same answer as a pay-per-query API for agents
+  over x402 (USDC on Base, no keys or accounts) and as an MCP tool. Needs a small server and a check of x402
+  facilitator terms on Base mainnet. Worth it once there are many more stakers or agents that stake their own
+  rewards.
+
 ---
 
 ## Build in public on X
