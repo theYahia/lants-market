@@ -27,14 +27,17 @@ ENS name: `lants.eth`.
 - Cancel your own listings at any time, for free.
 - Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.
 - See your positions and your listings in My Portfolio.
+- Claim a position's staker reward to your wallet, or restake it as a new position, with one click.
+- On the Incentives tab: see which pools would pay most for 1,000 ANTS next epoch, and sellers' USDC
+  offers for weight in their pool.
 
 A 1% fee is taken from each sale and sent to the fee recipient.
 
 ## What does not exist yet
 
-- **Offers.** There is no offer contract for this market. The storefront
-  shows a "coming soon" label. Do not expect offer functionality.
-- **Seller perks board.** Planned, not built.
+- **Bids on positions.** The market contract stores listings only; you cannot bid on a position yet.
+- **Escrow for incentive offers.** No contract holds offer money. The payer named on each offer pays
+  after the epoch.
 
 ## How this site reads the chain
 

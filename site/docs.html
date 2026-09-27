@@ -116,6 +116,7 @@
             <a href="#how-it-works">How it works</a>
             <a href="#listings">Listings</a>
             <a href="#positions-rewards">Positions & Rewards</a>
+            <a href="#incentives">Incentives</a>
             <a href="#snapshot-data">Snapshot & Data</a>
             <a href="#faq">FAQ</a>
             <a href="#contact">Contact</a>
@@ -148,15 +149,14 @@
 <li>Cancel your own listings at any time, for free.</li>
 <li>Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.</li>
 <li>See your positions and your listings in My Portfolio.</li>
+<li>Claim a position's staker reward to your wallet, or restake it as a new position, with one click.</li>
+<li>On the Incentives tab: see which pools would pay most for 1,000 ANTS next epoch, and sellers' USDC offers for weight in their pool.</li>
 </ul>
 <p>A 1% fee is taken from each sale and sent to the fee recipient.</p>
 <h2>What does not exist yet</h2>
 <ul>
-<li><strong>Offers.</strong> There is no offer contract for this market. The storefront</li>
-</ul>
-<p>shows a "coming soon" label. Do not expect offer functionality.</p>
-<ul>
-<li><strong>Seller perks board.</strong> Planned, not built.</li>
+<li><strong>Bids on positions.</strong> The market contract stores listings only; you cannot bid on a position yet.</li>
+<li><strong>Escrow for incentive offers.</strong> No contract holds offer money. The payer named on each offer pays after the epoch.</li>
 </ul>
 <h2>How this site reads the chain</h2>
 <p>The positions table works from a snapshot taken at a fixed block, refreshed three times a day; the line under the table shows its block, epoch and time. Listings, sales, My Portfolio and the MC / FDV figures are read live from Base in your browser.</p>
@@ -295,6 +295,16 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 </tbody>
 </table>
 <p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The stake contract is on the <code>transferWhitelist</code>, so you can stake, but you cannot send ANTS to another person. Because of this, the position NFT is the only way to move locked ANTS.</p>
+<p>---</p>
+</section>
+<section id="incentives">
+<h1>Incentives</h1>
+<p>Stake in a seller pool works like a vote: it multiplies rewards for that seller's buyers. The Incentives tab lets sellers pay stakers for that weight, the way protocols pay voters on Votium and Aerodrome.</p>
+<p><strong>The board.</strong> Every pool, ranked by what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution. It takes this epoch's staker budget and each pool's share of it, and assumes both hold and that no one else joins the pool. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply. Click any column header to sort. Seller names come from <code>antseedstats.com/sellers</code>.</p>
+<p><strong>Offers.</strong> An offer pays a fixed USDC amount per 1,000 ANTS at max lock (weight ÷ 104) in one pool for one epoch, up to a cap. <code>pays: all</code> — every position in the pool, pro rata when over the cap. <code>pays: new</code> — only positions staked for that epoch, in the order they were created, until the cap is used.</p>
+<p><strong>Payout.</strong> USDC on Base to the position owner within 7 days after the epoch ends, from the last published snapshot of that epoch. No contract holds the money: the payer is named on the offer.</p>
+<p><strong>Post an offer.</strong> The "Post an offer on GitHub" button opens an issue with the fields pre-filled; once checked, the offer is added to <code>site/offers.json</code> and appears on the tab.</p>
+<p>Full model and field list: <code>docs/incentives.md</code> in the repository.</p>
 <p>---</p>
 </section>
 <section id="snapshot-data">

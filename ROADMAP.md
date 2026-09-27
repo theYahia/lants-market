@@ -15,9 +15,11 @@ price and its first seller paying for pool weight?
 |---|---:|---:|
 | lANTS transfers between wallets | 0 | ≥ 1 |
 | Listings not made by us | not measured | ≥ 1 |
-| Seller perks on the board | 0 | ≥ 1 |
+| Seller incentive offers on the board | 0 | ≥ 1 |
 
 *Note (25.09): "lANTS transfers between wallets" is no longer 0 on-chain — antseedmarkets.com (a community Seaport marketplace) shows 4 lANTS trades on 20–24.09 (positions #46 and #49 between two wallets) plus an open lot #106 (100 ANTS for $300). None of these are on our market; our own first trade followed on 25.09 (internal test, not counted in volume).*
+
+*Note (27.09): the Incentives tab is live with one offer — ours, as a sponsor (Open Forge, epoch 25). The target counts offers from sellers themselves; that is still 0.*
 
 **Stop rule.** If both are still zero on **5 November 2026**, the board keeps running as is, and the
 market layer (phase 4) does not start.
@@ -38,7 +40,9 @@ market layer (phase 4) does not start.
 | 25.09 | Sales panel reads sold lots from the chain; My Positions shows positions newer than the snapshot and refreshes after a transaction (two bugs found by replaying the trade on a Base fork) | 3 | ✅ |
 | 26.09 | First public lots: five positions of 10 ANTS at 0.10 USDC each | 3 | ✅ |
 | 26.09 | Implied MC / FDV on every lot and sale (feedback from the AntSeed chat); lots load in parallel (~1 s); clearer manage flow: next-step hints, plain-word errors, Split/Move disabled on max-locked positions | 3 | ✅ |
-| waiting | Listing on antseed.com/ecosystem — [PR #1065](https://github.com/AntSeed/antseed/pull/1065) opened 24.09, waiting for review | 3 | 🔜 |
+| 27.09 | Claim and Restake buttons for staker rewards; portfolio polish (empty states, Staker Rewards tile, Est. reward column, snapshot caption) | 3 | ✅ |
+| 27.09 | Listed on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 3 | ✅ |
+| 27.09 | Incentives tab (Votium for AntSeed): pools ranked by next-epoch yield, seller names, sortable columns, USDC offers with a payout rule, calculator; an address for every view ([docs](docs/incentives.md)) | 3 | ✅ |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
 | every Thu | Epoch recap (08.10, 15.10, …) | build in public | 🔜 |
@@ -56,7 +60,11 @@ market layer (phase 4) does not start.
   source-verified on Basescan and Blockscout.
 - **Docs page** and wallet connect via Privy.
 - **Portfolio** — your positions with List / Manage buttons, and your listings; manage actions (stake a
-  buyer reward, split, move, max-lock) and a Sales panel with each sale's implied FDV.
+  buyer reward, split, move, max-lock), Claim / Restake for staker rewards, and a Sales panel with each
+  sale's implied FDV.
+- **Incentives** — every seller pool ranked by what 1,000 ANTS at max lock would earn next epoch after
+  dilution; sellers' USDC offers for weight in their pool, paid by the named payer after the epoch;
+  a calculator for your own amount. How it works: [docs/incentives.md](docs/incentives.md).
 - **Hosting** — static site on IPFS, addressed by `lants.eth` (via ENS). Since 25.09 `lants.eth` points at
   each release's CID directly (one ENS transaction per release; IPNS caching lagged for hours). Live at
   https://lants.eth.limo since 23.09.
@@ -88,7 +96,10 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Page order that follows the flow (stake → split → list); show "sold" from the receipt right after Buy | — | open |
 | Check the AntSeed contest results | 29.09 | open |
 | Claim and Restake staker rewards with buttons in My Positions (fork e2e covers both) | 27.09 | ✅ done |
-| Portfolio polish: no duplicate rows with pre-connected wallets, hide the table header when there are no positions, a proper empty state for My Listings, "Staker Rewards" tile, "Est. reward" column, labelled listing rows, shorter listing rules, real refresh times in the snapshot note | 28.09 | open |
+| Portfolio polish: hide the table header when there are no positions, empty state for My Listings, "Staker Rewards" tile, "Est. reward" column, labelled listing rows, snapshot refresh caption | 27.09 | ✅ done |
+| Portfolio polish, rest: no duplicate rows with pre-connected wallets, shorter listing rules | 28.09 | open |
+| Incentives polish: a "how to stake into a pool" line, collapse the board to 10 rows on phones | 01.10 | open |
+| Before the next offer: pick the best offer per pool by payout, validate offer fields strictly | 01.10 | open |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
@@ -109,8 +120,8 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 
 - [x] A lens that reads every position and pool, cross-checked on two RPCs before anything is written
 - [x] Positions page: metric tiles and the positions table (amount, lock, reward, exit)
-- [ ] Pools table: seller names, sales, weight and expected reward per unit of weight (the data is already in the snapshot)
-- [ ] **Seller perks board** — a schema-checked list plus instructions for sellers to add their perks
+- [x] Pools table: seller names, sales, weight and expected reward after dilution — the Incentives board, 27.09
+- [x] **Seller incentives** — offers in `site/offers.json`, posted through a GitHub issue — 27.09
 
 ### Phase 2 — Publish ✅ (20.09 → 23.09)
 
@@ -121,10 +132,12 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 ### Phase 3 — Launch and listen (24.09 → 22.10)
 
 - [x] Repo public; contract source verified on Basescan and Blockscout — 24.09
-- [ ] Listed on antseed.com/ecosystem — this week
+- [x] Listed on antseed.com/ecosystem — 27.09
+- [x] Claim / Restake buttons and the Incentives tab — 27.09
 - [ ] First staker reward for #27 + weekly recap #1 — 01.10
 - [ ] Launch announcement on X and in the AntSeed chat — 02.10
-- [ ] Weekly recaps + seller conversations about perks — every Thursday
+- [ ] Pay the first incentive offer (Open Forge, epoch 25) and publish the transaction — 09.10
+- [ ] Weekly recaps + seller conversations about incentive offers — every Thursday
 - [ ] Signal check and money decision — 22.10 · stop rule check — 05.11
 
 ### Phase 4 — Market layer 🔒 (after 22.10, only if phase 3 passes)
@@ -148,7 +161,8 @@ Every item below touches other people's assets, so each one gets its own review.
   from that seller) with a one-signature "Stake here"; the same answer as a pay-per-query API for agents
   over x402 (USDC on Base, no keys or accounts) and as an MCP tool. Needs a small server and a check of x402
   facilitator terms on Base mainnet. Worth it once there are many more stakers or agents that stake their own
-  rewards.
+  rewards. *(27.09: the pools table and the forecast after your own dilution shipped as the Incentives board;
+  the one-signature "Stake here", the buyer-reward boost and the API are still open.)*
 
 ---
 
@@ -163,7 +177,8 @@ Every post carries real numbers. No price predictions for ANTS.
 | Every Thursday after the epoch boundary | Epoch recap — positions, ANTS staked, weight by pool, reward per weight, our own rewards |
 | After each stage | Stage done — what was built, which free model built it, what the human caught at acceptance |
 | 01.10 | First staker reward for #27 — the real number vs our estimate |
-| 02.10 | Launch — what `lants.eth` shows, an invitation for sellers to list perks |
+| 27.09 | Contest entry #3: the Incentives tab, with video |
+| 02.10 | Launch — what `lants.eth` shows, an invitation for sellers to post incentive offers |
 
 ---
 
@@ -174,7 +189,7 @@ Most concrete first. Nothing here is decided before 22.10.
 | Source | How | Today |
 |---|---|---|
 | Our own staking | #27 plus weekly restakes and buyer rewards compound in ANTS | first staker reward after 01.10 |
-| Seller perks | perks for our pool weight turn into discounts or quota | 0 perks |
+| Seller incentives | sellers' offers pay our own stake; v2 — an escrow contract with a 2–5% fee | 1 offer, ours as a sponsor |
 | Being the first buyer | with no market yet, whoever buys first sets the discount | 0 transfers |
 | Market fee | a small USDC fee on our own order book | phase 4, with volume |
 | Audience | the X account and the board become a channel for the next project | building |
@@ -245,11 +260,11 @@ is why this repo exists.
 
 ## Metrics
 
-| Metric | Source | Baseline 17.09 | 26.09 |
-|---|---|---:|---:|
-| lANTS transfers between wallets | Blockscout token transfers | 0 | ≥ 5 (4 on antseedmarkets.com, 1 internal on ours) |
-| Positions > 1 ANTS | on-chain snapshot | 5 | 76 |
-| Listings not by us | market data | not measured | 0 |
-| Seller perks | perks list | 0 | 0 |
+| Metric | Source | Baseline 17.09 | 26.09 | 27.09 |
+|---|---|---:|---:|---:|
+| lANTS transfers between wallets | Blockscout token transfers | 0 | ≥ 5 (4 on antseedmarkets.com, 1 internal on ours) | — |
+| Positions > 1 ANTS | on-chain snapshot | 5 | 76 | 96 |
+| Listings not by us | market data | not measured | 0 | — |
+| Seller incentive offers | `site/offers.json` | 0 | 0 | 1 (ours, sponsor) |
 | X followers / impressions | X analytics | — | — |
 | AntSeed inference spent on this build | call logs | — | $17.58 (to 25.09) |

@@ -29,7 +29,7 @@ becoming something sellers should care about — and pay for.
 
 1. **What is this position worth?** Every lANTS position with its real contents and, where a
    listing exists, the price per locked ANTS.
-2. **What does a seller give for weight?** A public board of seller perks for stakers of their pool.
+2. **What does a seller give for weight?** The [Incentives tab](https://lants.eth.limo/#incentives): sellers pay stakers USDC for weight in their pool.
 
 ## What v1 is — and is not
 
