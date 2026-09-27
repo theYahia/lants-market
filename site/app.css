@@ -920,3 +920,9 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
 }
 .inc-pool-id{color:var(--muted);font-size:.85em;margin-left:6px}
 .inc-offer-note{display:block;color:var(--muted);font-size:.9em;margin-top:4px}
+.inc-sort{background:none;border:0;padding:0;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer;text-align:left}
+.inc-sort:hover{color:var(--ink)}
+.inc-sort:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+th[aria-sort] .inc-sort{color:var(--accent)}
+th[aria-sort="descending"] .inc-sort::after{content:" \2193"}
+th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
