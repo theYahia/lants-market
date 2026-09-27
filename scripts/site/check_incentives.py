@@ -227,7 +227,9 @@ def run_guard() -> int:
                         return
                 # Offer responses: return the currently injected offers list.
                 if "offers.json" in url:
-                    offers_requests.append(url)
+                    # only the data branch is wrong (CI rebuilds it with live.json alone); main/site and ./ are fine
+                    if "/data/offers.json" in url:
+                        offers_requests.append(url)
                     route.fulfill(
                         status=200,
                         content_type="application/json",
