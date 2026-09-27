@@ -177,7 +177,7 @@ Every post carries real numbers. No price predictions for ANTS.
 | Every Thursday after the epoch boundary | Epoch recap — positions, ANTS staked, weight by pool, reward per weight, our own rewards |
 | After each stage | Stage done — what was built, which free model built it, what the human caught at acceptance |
 | 01.10 | First staker reward for #27 — the real number vs our estimate |
-| 27.09 | Contest entry #3: the Incentives tab, with video |
+| 27.09 | Contest entry #3: the Incentives tab, with video — [thread](https://x.com/TheTieTieTies/status/2104281429886513316) |
 | 02.10 | Launch — what `lants.eth` shows, an invitation for sellers to post incentive offers |
 
 ---
