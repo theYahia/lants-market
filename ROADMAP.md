@@ -86,7 +86,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Implied MC / FDV on every lot and sale; faster listings; manage-flow hints and plain-word errors | 26.09 | ✅ done |
 | Page order that follows the flow (stake → split → list); show "sold" from the receipt right after Buy | — | open |
 | Check the AntSeed contest results | 29.09 | open |
-| Claim and Restake staker rewards with buttons in My Positions (fork e2e covers Restake) | 30.09 | open |
+| Claim and Restake staker rewards with buttons in My Positions (fork e2e covers both) | 27.09 | ✅ done |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
@@ -192,6 +192,11 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
+transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a
+Base fork at the next epoch: Claim sent 28,341.83 ANTS to the wallet, Restake minted position #110 with the same amount.
+On mainnet the buttons light up once the first staker rewards are indexed, from 01.10.
 
 **26.09.2026 (later)** — Full repo audit before more eyes land on it: no secrets in 351 commits, no
 broken links, every contract fact re-read on chain (ANTS `MAX_SUPPLY()` is 1.04B, so the FDV basis is the
