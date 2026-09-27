@@ -87,6 +87,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Page order that follows the flow (stake → split → list); show "sold" from the receipt right after Buy | — | open |
 | Check the AntSeed contest results | 29.09 | open |
 | Claim and Restake staker rewards with buttons in My Positions (fork e2e covers both) | 27.09 | ✅ done |
+| Portfolio polish: hide the table header when there are no positions, a proper empty state for My Listings, "Staker Rewards" tile label, real refresh times in the snapshot note | 28.09 | open |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
