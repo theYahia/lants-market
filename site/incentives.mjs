@@ -25,7 +25,7 @@ async function loadSnapshot() {
 
 async function loadOffers() {
   const data = await loadJSON([
-    'https://raw.githubusercontent.com/theYahia/lants-market/data/offers.json',
+    'https://raw.githubusercontent.com/theYahia/lants-market/main/site/offers.json',
     './offers.json'
   ]);
   if (!Array.isArray(data)) return null;
