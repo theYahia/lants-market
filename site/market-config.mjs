@@ -35,6 +35,7 @@ export const SEL = {
   stakerPositionIds: '0x5630d00a', // stakerPositionIds(address,uint256,uint256)
   pendingIndexedStakerReward: '0x0b19b283', // pendingIndexedStakerReward(uint256)
   restakePendingReward: '0x0b19b283', // pendingIndexedStakerReward(uint256) - alias for portfolio Restake buttons
+  claimReward: '0x0b19b283', // pendingIndexedStakerReward(uint256) - alias for portfolio Claim buttons
 };
 
 // Normalize input (BigInt / number / hex or decimal string) to BigInt.

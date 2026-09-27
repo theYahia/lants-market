@@ -1324,6 +1324,19 @@ export async function renderMyPositions(account, ids, snapshot) {
     }
     actions.appendChild(restakeBtn);
 
+    // Claim button: shows the same pending indexed staker reward, formatted in ANTS with two decimals.
+    // Disabled when the amount is zero.
+    const claimBtn = document.createElement('button');
+    claimBtn.className = 'claim';
+    claimBtn.dataset.id = id.toString();
+    const claimText = restakeAnts.toFixed(2);
+    claimBtn.textContent = 'Claim ' + claimText;
+    claimBtn.title = 'Claim ' + claimText + ' ANTS pending';
+    if (restakeAnts === 0) {
+      claimBtn.disabled = true;
+    }
+    actions.appendChild(claimBtn);
+
     row.appendChild(actions);
     container.appendChild(row);
     rows.push(row);
