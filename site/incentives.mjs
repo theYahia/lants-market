@@ -43,6 +43,7 @@ function isValidOffer(offer, displayEpoch) {
     if (typeof ep !== 'number' || !Number.isInteger(ep)) return false;
     if (ep !== displayEpoch) return false;
   }
+  if (offer.pays !== 'all' && offer.pays !== 'new') return false;
   if (offer.note !== undefined && offer.note !== null && typeof offer.note !== 'string') return false;
   if (typeof offer.note === 'string' && offer.note.length > 140) return false;
   return true;
@@ -51,6 +52,11 @@ function isValidOffer(offer, displayEpoch) {
 function offerLine(offer, displayEpoch) {
   const usdc = offer.capAnts / 1000 * offer.usdcPer1k;
   let line = `${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · Pool ${offer.pool} · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
+  if (offer.pays === 'new') {
+    line += ' · new stakes only';
+  } else if (offer.pays === 'all') {
+    line += ' · all stakers, pro rata';
+  }
   if (offer.note) line += ` · ${offer.note}`;
   return line;
 }
@@ -87,7 +93,9 @@ function buildOfferSection(offers, displayEpoch) {
     'epochs: ' + JSON.stringify([displayEpoch]),
     'USDC per 1,000 ANTS: ',
     'Cap: ',
-    'Payer: '
+    'Payer: ',
+    'Pays: all | new',
+    'Paid in USDC on Base to the position owner within 7 days after epoch ' + displayEpoch + ' ends, from the last published snapshot of epoch ' + displayEpoch + '.'
   ];
   const body = bodyLines.join('\n');
   postBtn.href = 'https://github.com/theYahia/lants-market/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
@@ -268,8 +276,20 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
         if (!best || offer.usdcPer1k > best.usdcPer1k) best = offer;
       }
       if (best) {
-        const usdcValue = Math.min(Y, best.capAnts) / 1000 * best.usdcPer1k;
-        usdc = usdcValue.toFixed(2) + ' USDC';
+        if (best.pays === 'new') {
+          let newN = 0;
+          for (const pos of positions) {
+            if (String(pos.agentId) === pool && Number(pos.stakeStartEpoch) === displayEpoch) {
+              newN += Number(pos.weightsByEpoch?.[String(displayEpoch)] || 0) / 1e18 / 104;
+            }
+          }
+          const usdcValue = Math.min(Y, Math.max(0, best.capAnts - newN)) / 1000 * best.usdcPer1k;
+          usdc = usdcValue.toFixed(2) + ' USDC';
+        } else if (best.pays === 'all') {
+          const wN = (poolData.get(pool)?.WN || 0) / 104;
+          const usdcValue = Y / 1000 * best.usdcPer1k * Math.min(1, best.capAnts / (wN + Y));
+          usdc = usdcValue.toFixed(2) + ' USDC';
+        }
       }
     }
 
