@@ -413,8 +413,8 @@ td.badge-deal::before {
 @media (max-width:480px) {
     .inc-board-table .board-row td:nth-child(2),
     .inc-board-table .board-row td:nth-child(3),
-    .inc-board-table .board-row th:nth-child(2),
-    .inc-board-table .board-row th:nth-child(3) {
+    .inc-board-table thead th:nth-child(2),
+    .inc-board-table thead th:nth-child(3) {
         display: none;
     }
 }
