@@ -92,6 +92,7 @@ def run_guard() -> int:
         "head_first": 0,
         "rules_live": 0,
         "snap_note": 0,
+        "rules_short": 0,
     }
     reasons = []
 
@@ -439,10 +440,90 @@ def run_guard() -> int:
             except Exception as exc:
                 reasons.append(f"{type(exc).__name__}: {exc}")
 
-            # 15. Print results.
+            # 15. Check rules_short: a dedicated page (live RPC, wallet with
+            # data) with the listing rules split into a visible line and a
+            # collapsed <details> block containing exactly the three short
+            # rules. Reuse open_live_page which already routes to live RPC.
+            try:
+                short_context, short_page = open_live_page(browser, site_port)
+                try:
+                    # Wait a moment for the page to settle.
+                    short_page.wait_for_timeout(3000)
+
+                    # Ensure the market listings are visible (default view).
+                    market_list = short_page.locator("#market-list")
+                    market_list.wait_for(state="visible", timeout=15000)
+
+                    # Wait until at least one market row exists (caveats are
+                    # rendered after real listings).
+                    short_page.wait_for_selector(
+                        "#market-list .market-row",
+                        timeout=30000
+                    )
+
+                    # (a) The visible line must be present in the market list.
+                    market_list_text = market_list.inner_text()
+                    visible_line_ok = (
+                        "Unclaimed rewards pass to the buyer with the NFT."
+                        in market_list_text
+                    )
+
+                    # (b) The <details> collapse with exactly three short rules.
+                    details_ok = False
+                    summary_ok = False
+                    short_rules_ok = False
+                    details_present = market_list.locator("details").count() > 0
+                    if details_present:
+                        summary_text = market_list.locator("details summary").first.inner_text().strip()
+                        summary_ok = summary_text == "Listing rules"
+
+                        details_content = market_list.locator("details").first.inner_text() or ""
+                        required_lines = [
+                            "Contents can change until the sale.",
+                            "One active listing per NFT.",
+                            "Closed, split, moved or transferred positions can't be bought.",
+                        ]
+                        short_rules_ok = all(line in details_content for line in required_lines)
+
+                        # Ensure no extra rule lines inside the details.
+                        extra_lines_present = False
+                        for unexpected in [
+                            "Only one active listing per NFT.",
+                            "Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT.",
+                            "A listing on a closed, split, moved or transferred position is invalid and cannot be bought.",
+                        ]:
+                            if unexpected in details_content:
+                                extra_lines_present = True
+                                break
+                        if extra_lines_present:
+                            short_rules_ok = False
+
+                    if details_present and summary_ok and short_rules_ok:
+                        details_ok = True
+
+                    if visible_line_ok and details_ok:
+                        results["rules_short"] = 1
+                    else:
+                        reasons_list = []
+                        if not visible_line_ok:
+                            reasons_list.append("visible line 'Unclaimed rewards pass to the buyer with the NFT.'")
+                        if not details_present:
+                            reasons_list.append("details element")
+                        if details_present and not summary_ok:
+                            reasons_list.append("summary 'Listing rules'")
+                        if details_present and not short_rules_ok:
+                            reasons_list.append("exact short rules inside details")
+                        for reason_item in reasons_list:
+                            reasons.append(reason_item)
+                finally:
+                    short_context.close()
+            except Exception as exc:
+                reasons.append(f"{type(exc).__name__}: {exc}")
+
+            # 16. Print results.
             for key in ["empty_head", "listings_empty", "tile_label", "refresh_note",
                         "listing_label", "reward_head", "rules_compact",
-                        "head_first", "rules_live", "snap_note"]:
+                        "head_first", "rules_live", "snap_note", "rules_short"]:
                 print(f"{key}={results[key]}")
 
             for reason in reasons:
