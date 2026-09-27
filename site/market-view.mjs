@@ -1207,7 +1207,6 @@ export async function renderMyPositions(account, ids, snapshot) {
     span.textContent = text;
     head.appendChild(span);
   });
-  container.appendChild(head);
 
   for (const id of ids) {
     let amount, lockWeeks, rewardText, exitText, exitTitle = '', skip = false;
@@ -1343,6 +1342,12 @@ export async function renderMyPositions(account, ids, snapshot) {
   }
 
   if (rows.length === 0) {
+    // Remove header row when there are no positions
+    const existingHead = container.querySelector('.pf-pos-head');
+    if (existingHead) {
+      existingHead.remove();
+    }
+
     const empty = document.createElement('div');
     empty.className = 'pf-empty';
     empty.textContent = 'No lANTS positions in this wallet. ';
