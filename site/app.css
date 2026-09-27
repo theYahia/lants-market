@@ -87,6 +87,17 @@ header {
     overflow-x: auto;
 }
 
+.inc-board-table {
+    table-layout: auto;
+    min-width: 0;
+}
+
+.inc-board-table th,
+.inc-board-table td {
+    width: auto;
+    overflow-wrap: normal;
+}
+
 table {
     width: 100%;
     min-width: 560px;
@@ -397,6 +408,15 @@ td.badge-deal::before {
 }
 @media (max-width:480px){
   .ms-action{border-left:0;border-top:1px solid var(--line);}
+}
+
+@media (max-width:480px) {
+    .inc-board-table .board-row td:nth-child(2),
+    .inc-board-table .board-row td:nth-child(3),
+    .inc-board-table .board-row th:nth-child(2),
+    .inc-board-table .board-row th:nth-child(3) {
+        display: none;
+    }
 }
 
 /* Header button alignment */
@@ -771,7 +791,12 @@ th.sort-desc {
 /* listing caveats: quiet sans text instead of mono lines */
 #market-list .market-caveat{font-family:var(--font-sans);line-height:1.5;margin-top:4px;}
 /* phone header on one row */
-@media (max-width:480px){header{display:grid;flex-direction:initial;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;}.hdr-nav{justify-self:center;gap:12px;}.hdr-link{font-size:var(--fs-13);}#hdr-connect{padding:6px 10px;font-size:var(--fs-12);}}
+@media (max-width:480px){
+    header{display:grid;flex-direction:initial;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;grid-template-columns:1fr auto;}
+    .hdr-nav{grid-column:1/-1;grid-row:2;justify-self:start;gap:12px;}
+    .hdr-link{font-size:var(--fs-13);}
+    #hdr-connect{padding:6px 10px;font-size:var(--fs-12);justify-self:end;}
+}
 /* Cancel buttons (listing grid and My Listings) */
 button.cancel{padding:4px 10px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;margin-left:6px;}
 button.cancel:hover{color:var(--ink);border-color:var(--muted);}
