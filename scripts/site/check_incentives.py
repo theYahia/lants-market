@@ -591,7 +591,7 @@ def run_guard() -> int:
                 # for each and checking the offer text and calculator values.
                 for case in pays_cases:
                     offers = [case["offer"]]
-                    page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                    page.goto(f"http://127.0.0.1:{site_port}/index.html?r={id(offers)}#incentives")  # unique URL: same-hash goto does not reload
                     page.wait_for_load_state("networkidle")
                     page.wait_for_timeout(1500)
 
@@ -617,7 +617,7 @@ def run_guard() -> int:
 
                 # Post-offer body must contain 'Pays:'.
                 offers = DEFAULT_OFFERS
-                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r={id(offers)}#incentives")  # unique URL: same-hash goto does not reload
                 page.wait_for_load_state("networkidle")
                 page.wait_for_timeout(1500)
                 post_btn = page.locator('#incentives a[href*="issues/new"], #incentives a:has-text("Post an offer")')
@@ -633,7 +633,7 @@ def run_guard() -> int:
 
                 # Invalid pays value: offer must not be shown.
                 offers = [dict(DEFAULT_OFFERS[0], pays="invalid")]
-                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r={id(offers)}#incentives")  # unique URL: same-hash goto does not reload
                 page.wait_for_load_state("networkidle")
                 page.wait_for_timeout(1500)
                 invalid_text = page.locator("#incentives").inner_text()
@@ -643,7 +643,7 @@ def run_guard() -> int:
                 no_pays_offer = dict(DEFAULT_OFFERS[0])
                 del no_pays_offer["pays"]
                 offers = [no_pays_offer]
-                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r={id(offers)}#incentives")  # unique URL: same-hash goto does not reload
                 page.wait_for_load_state("networkidle")
                 page.wait_for_timeout(1500)
                 no_pays_text = page.locator("#incentives").inner_text()
