@@ -825,8 +825,11 @@ body.view-portfolio .market-strip,body.view-portfolio .tabs,body.view-portfolio 
 #pf-positions .pf-pos-head > span:nth-child(2),#pf-positions .pf-pos-head > span:nth-child(3),#pf-positions .pf-pos-head > span:nth-child(4),#pf-positions .pf-pos-head > span:nth-child(5),
 #pf-positions .pf-pos-row > span:nth-child(2),#pf-positions .pf-pos-row > span:nth-child(3),#pf-positions .pf-pos-row > span:nth-child(4),#pf-positions .pf-pos-row > span:nth-child(5){text-align:right;font-variant-numeric:tabular-nums;}
 #pf-positions .pf-actions{justify-self:end;display:flex;gap:8px;}
-#pf-positions button.pf-list,#pf-positions button.pf-manage{padding:4px 10px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;}
+#pf-positions button.pf-list,#pf-positions button.pf-manage,#pf-positions button.pf-restake{padding:4px 10px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;}
 #pf-positions button.pf-manage{border-color:var(--line);color:var(--ink);}
+#pf-positions button.pf-restake{border-color:var(--accent);color:var(--accent);}
+#pf-positions button.pf-restake:disabled{border-color:var(--line);color:var(--muted);cursor:not-allowed;opacity:.6;}
+#pf-positions button.pf-restake:not(:disabled):hover{filter:brightness(0.92);box-shadow:0 2px 8px oklch(0.927 0.189 129.5 / .25);}
 #pf-positions .pf-empty{padding:16px 12px;color:var(--muted);}
 #pf-positions .pf-empty a{color:var(--accent);}
 [data-panel="my-listings"] .market-row,[data-panel="my-listings"] .feed-empty{padding:8px 12px;}

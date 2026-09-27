@@ -1295,6 +1295,35 @@ export async function renderMyPositions(account, ids, snapshot) {
     manageBtn.textContent = 'Manage';
     actions.appendChild(manageBtn);
 
+    // Restake button: shows the pending indexed staker reward, formatted in ANTS with two decimals.
+    // Reads from the snapshot `pendingIndexedStakerReward` field when present, otherwise falls back
+    // to the chain via the same selector used in the portfolio summary above.
+    let restakeAnts = 0;
+    if (pos && pos.pendingIndexedStakerReward != null) {
+      restakeAnts = Number(pos.pendingIndexedStakerReward) / 1e18;
+    } else {
+      try {
+        const rewardRaw = await ethCallTo(MARKET.stakerRewards, SEL.restakePendingReward + encUint(id));
+        if (rewardRaw !== '0x') {
+          restakeAnts = Number(wordToBigInt(decodeWords(rewardRaw)[0] || rewardRaw)) / 1e18;
+        }
+      } catch (e) {
+        console.error('Error reading pending reward for position', id, e);
+      }
+    }
+    if (!Number.isFinite(restakeAnts) || restakeAnts < 0) restakeAnts = 0;
+
+    const restakeBtn = document.createElement('button');
+    restakeBtn.className = 'pf-restake restake';
+    restakeBtn.dataset.id = id.toString();
+    const restakeText = restakeAnts.toFixed(2);
+    restakeBtn.textContent = 'Restake ' + restakeText;
+    restakeBtn.title = 'Restake ' + restakeText + ' ANTS pending';
+    if (restakeAnts === 0) {
+      restakeBtn.disabled = true;
+    }
+    actions.appendChild(restakeBtn);
+
     row.appendChild(actions);
     container.appendChild(row);
     rows.push(row);
