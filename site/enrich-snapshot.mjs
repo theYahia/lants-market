@@ -6,6 +6,11 @@ import { base } from 'viem/chains'
 
 const POOLS_ADDRESS = '0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652'
 const REWARDS_ADDRESS = '0x83cc5b9aa0c8cb8683f35462c385a5baaa755ee5'
+const ACCOUNTING_ADDRESS = '0xAdd2D85316153D7bfaF7921EE9Bf1Bb6c7A1cBc9'
+const ACCOUNTING_ABI = parseAbi([
+  'function weightedPoolPointsByEpoch(uint256, uint256) view returns (uint256)',
+  'function totalWeightedPoolPointsByEpoch(uint256) view returns (uint256)',
+])
 const RPC_URLS = (process.env.RPC_URLS && process.env.RPC_URLS.split(',')) || ['https://base-rpc.publicnode.com', 'https://base-mainnet.public.blastapi.io']
 
 // New contract to fetch stakerBudget
@@ -174,6 +179,29 @@ async function main() {
   console.log('pools_with_sales=' + poolIds.length + ' pool_weight_errors=' + weightErrors)
   if (weightErrors > 0) throw new Error('pool weights incomplete: ' + weightErrors + ' failures')
 
+  // What each pool paid its stakers in completed epochs since M001 (epoch 22), the last three at most:
+  // stakerEpochBudget(h) x weightedPoolPoints(h, pool) / totalWeightedPoolPoints(h), as _poolGrossReward computes it.
+  const histEpochs = []
+  for (let h = Math.max(22, currentEpoch - 3); h < currentEpoch; h++) histEpochs.push(h)
+  const boardPools = [...new Set(positions.map(p => String(p.agentId)))]
+  const headRes = await xmulticall(histEpochs.flatMap(h => [
+    { address: REWARDS_ADDRESS, abi: REWARDS_ABI, functionName: 'stakerEpochBudget', args: [BigInt(h)] },
+    { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'totalWeightedPoolPointsByEpoch', args: [BigInt(h)] }]))
+  const ptsRes = await xmulticall(histEpochs.flatMap(h => boardPools.map(a => (
+    { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'weightedPoolPointsByEpoch', args: [BigInt(h), BigInt(a)] }))))
+  const poolRewardByEpoch = {}
+  histEpochs.forEach((h, hi) => {
+    const budget = headRes[2 * hi], total = headRes[2 * hi + 1]
+    if (!budget.ok || !total.ok) throw new Error('pool history: budget or total failed for epoch ' + h)
+    boardPools.forEach((a, ai) => {
+      const r = ptsRes[hi * boardPools.length + ai]
+      if (!r.ok) throw new Error('pool history: points failed for pool ' + a + ' epoch ' + h)
+      const reward = total.value === 0n ? 0n : budget.value * r.value / total.value
+      ;(poolRewardByEpoch[a] ||= {})[String(h)] = String(reward)
+    })
+  })
+  console.log('pool_history_epochs=' + histEpochs.join(',') + ' pools=' + boardPools.length)
+
   const output = {
     epoch: String(currentEpoch),
     snapshotBlock: String(blockNumber),
@@ -185,7 +213,9 @@ async function main() {
     stakerBudget,
     stakerBudgetSource,
     stakerBudgetNext,
-    stakerBudgetNextEpoch: String(currentEpoch + 1)
+    stakerBudgetNextEpoch: String(currentEpoch + 1),
+    poolHistoryEpochs: histEpochs.map(String),
+    poolRewardByEpoch
   }
 
   if (rpcMismatches.length > 0) throw new Error('RPC mismatch on ' + rpcMismatches.length + ' reads, first: ' + rpcMismatches.slice(0, 5).join('; '))

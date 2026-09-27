@@ -926,3 +926,6 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
 th[aria-sort] .inc-sort{color:var(--accent)}
 th[aria-sort="descending"] .inc-sort::after{content:" \2193"}
 th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
+.inc-tag{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--warn);border-radius:999px;color:var(--warn);font-size:.75em;cursor:help}
+.inc-board-table th{white-space:normal;vertical-align:bottom}
+@media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}}

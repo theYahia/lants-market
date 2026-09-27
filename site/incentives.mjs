@@ -330,6 +330,35 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   const nextEpoch = String(N);
   const positions = snapshot.positions || [];
   const salesByPool = snapshot.salesByPool || {};
+  // What each pool paid its stakers in completed epochs (newest first); older snapshots have none.
+  const histEpochs = (snapshot.poolHistoryEpochs || []).slice().reverse();
+  const hasHistory = histEpochs.length > 0 && !!snapshot.poolRewardByEpoch;
+  const paidList = (pool) => histEpochs.map(h => Number(BigInt(snapshot.poolRewardByEpoch?.[pool]?.[h] || '0')) / 1e18);
+  const shortAnts = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0);
+  const THIN_ANTS = 100; // ponytail: fixed cut for 'almost nothing staked'; move to a share of the median pool once stakes grow
+
+  // Pool name cell tags: new (paid nothing in completed epochs) and thin (almost nothing staked next epoch).
+  const tagPool = (td, pool) => {
+    if (!hasHistory) return;
+    const tags = [];
+    if (hasHistory && paidList(pool).every(v => v === 0)) tags.push(['new', 'No rewards in completed epochs yet: a new seller or no sales so far.']);
+    if ((poolData.get(pool)?.WN || 0) / 104 < THIN_ANTS) tags.push(['thin', 'Almost nothing staked here: the network has not backed this seller yet. Check it before staking.']);
+    for (const [label, why] of tags) {
+      const tag = document.createElement('span');
+      tag.className = 'inc-tag';
+      tag.textContent = label;
+      tag.title = why;
+      td.appendChild(tag);
+    }
+  };
+  const addPaid = (tr, pool) => {
+    if (!hasHistory) return;
+    const list = paidList(pool);
+    tr.dataset.paid = String(list.reduce((s, v) => s + v, 0));
+    const td = document.createElement('td');
+    td.textContent = list.every(v => v === 0) ? '—' : list.map(shortAnts).join(' · ');
+    tr.insertBefore(td, tr.children[3]);
+  };
 
   // Aggregate position data per pool: R, We, WN
   const poolData = new Map();
@@ -437,6 +466,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     } else {
       tdPool.textContent = pool;
     }
+    tagPool(tdPool, pool);
     const tdStaked = document.createElement('td');
     tdStaked.textContent = stakedAmount(WN);
     const tdSales = document.createElement('td');
@@ -455,6 +485,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     tr.appendChild(tdSales);
     tr.appendChild(tdEst);
     tr.appendChild(tdOffer);
+    addPaid(tr, pool);
     rows.push(tr);
   }
 
@@ -480,6 +511,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     } else {
       tdPool.textContent = pool;
     }
+    tagPool(tdPool, pool);
     const tdStaked = document.createElement('td');
     tdStaked.textContent = '0.00';
     const tdSales = document.createElement('td');
@@ -494,6 +526,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     tr.appendChild(tdSales);
     tr.appendChild(tdEst);
     tr.appendChild(tdOffer);
+    addPaid(tr, pool);
     rows.push(tr);
   }
 
@@ -508,6 +541,11 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     'Est. ANTS per 1,000 ANTS at max lock',
     'Offer'
   ];
+  if (hasHistory) {
+    headings.splice(3, 0, `Paid to stakers (ANTS), epoch ${histEpochs.join(' · ')}`);
+    headings[4] = 'Next epoch est. per 1,000 ANTS (what-if)';
+  }
+  const sortKeys = hasHistory ? ['name', 'staked', 'sales', 'paid', 'est', 'offer'] : ['name', 'staked', 'sales', 'est', 'offer'];
   for (const h of headings) {
     const th = document.createElement('th');
     const button = document.createElement('button');
@@ -527,27 +565,19 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   // Sorting logic: each header button sorts the tbody rows.
   const headerThs = table.querySelectorAll('thead th');
   const headerButtons = table.querySelectorAll('thead th button.inc-sort');
-  let activeColumn = 3; // Est column
+  let activeColumn = 3; // Paid with history, Est without
   let activeDirection = 'descending';
   headerThs[activeColumn].setAttribute('aria-sort', activeDirection);
 
-  headerButtons.forEach((button, index) => {
-    button.addEventListener('click', () => {
-      if (index === activeColumn) {
-        activeDirection = activeDirection === 'ascending' ? 'descending' : 'ascending';
-      } else {
-        activeColumn = index;
-        activeDirection = index === 0 ? 'ascending' : 'descending';
-      }
-
+  const sortRows = (index) => {
       const rows = Array.from(tbody.querySelectorAll('tr.board-row'));
       rows.sort((a, b) => {
         let cmp = 0;
         if (index === 0) {
           cmp = a.dataset.name.localeCompare(b.dataset.name);
         } else {
-          const aVal = Number(a.dataset[index === 1 ? 'staked' : index === 2 ? 'sales' : index === 3 ? 'est' : 'offer']);
-          const bVal = Number(b.dataset[index === 1 ? 'staked' : index === 2 ? 'sales' : index === 3 ? 'est' : 'offer']);
+          const aVal = Number(a.dataset[sortKeys[index]]);
+          const bVal = Number(b.dataset[sortKeys[index]]);
           cmp = aVal - bVal;
         }
         if (cmp === 0) {
@@ -557,7 +587,6 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       });
 
       rows.forEach(row => tbody.appendChild(row));
-
       headerThs.forEach((th, i) => {
         if (i === activeColumn) {
           th.setAttribute('aria-sort', activeDirection);
@@ -565,6 +594,18 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
           th.removeAttribute('aria-sort');
         }
       });
+  };
+  if (hasHistory) sortRows(activeColumn);
+
+  headerButtons.forEach((button, index) => {
+    button.addEventListener('click', () => {
+      if (index === activeColumn) {
+        activeDirection = activeDirection === 'ascending' ? 'descending' : 'ascending';
+      } else {
+        activeColumn = index;
+        activeDirection = index === 0 ? 'ascending' : 'descending';
+      }
+      sortRows(index);
     });
   });
 
@@ -610,6 +651,7 @@ async function init() {
       const budget = nextBudget(snapshot, N);
       const budgetText = budget ? `, with the contract's staker budget for epoch ${N} (${Math.round(budget).toLocaleString('en-US')} ANTS)` : '';
       note.textContent = `Est. per epoch for 1,000 ANTS at max lock (weight 104,000) added to the pool${budgetText}, if this epoch's sales shares hold and no one else joins the pool.`;
+      if (snapshot.poolHistoryEpochs?.length) note.textContent = 'Ranked by what each pool paid its stakers in completed epochs; a new stake only counts from the next epoch. Tags: new = nothing paid yet, thin = under 100 ANTS staked. ' + note.textContent;
     } else {
       note.textContent = 'est. after the first purchases this epoch';
     }
