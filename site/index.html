@@ -73,7 +73,6 @@
         <div class="tabs" id="tabs">
           <button class="tab is-active" data-tab="all">All positions</button>
           <button class="tab" data-tab="listings">Listings</button>
-          <button class="tab" data-tab="offers">Offers</button>
         </div>
 
         <div class="panel is-open" data-panel="all">
@@ -158,12 +157,6 @@
                   <button id="br-submit" type="button">Stake buyer reward</button>
                   <div id="br-status" class="cf-status"></div>
                 </form>
-            </div>
-        </div>
-
-        <div class="panel" data-panel="offers">
-            <div id="offers">
-                <div class="feed-empty" data-empty="offers">Offers &mdash; coming soon. The VexyMarketplace contract stores listings only; there are no on-chain offers yet.</div>
             </div>
         </div>
 
@@ -275,7 +268,6 @@
         tabs.forEach(function(t){t.classList.toggle('is-active',t.dataset.tab===name);});
         panels.forEach(function(p){p.classList.toggle('is-open',p.dataset.panel===name);});
       }
-      tabs.forEach(function(t){t.addEventListener('click',function(){open(t.dataset.tab);});});
       var brand=document.querySelector('.brand');
       var pfLinks=document.querySelectorAll('.hdr-link');
       var pfPanel=document.getElementById('portfolio');
@@ -302,14 +294,21 @@
         open('all');
         window.scrollTo(0,0);
       }
-      brand.addEventListener('click',function(e){e.preventDefault();showView('market');});
-      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var href=l.getAttribute('href');showView(href.replace('#',''));});});
+      // Every view has an address: #market, #listings, #portfolio, #incentives.
+      function route(hash){
+        if(hash==='#portfolio'||hash==='#incentives'){showView(hash.slice(1));return;}
+        showView('tabs');
+        if(hash==='#listings')open('listings');
+      }
+      function push(hash){if(location.hash!==hash)history.pushState(null,'',hash);}
+      function go(hash){push(hash);route(hash);}
+      tabs.forEach(function(t){t.addEventListener('click',function(){push(t.dataset.tab==='listings'?'#listings':'#market');open(t.dataset.tab);});});
+      brand.addEventListener('click',function(e){e.preventDefault();go('#market');});
+      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var h=l.getAttribute('href');go(h==='#tabs'?'#market':h);});});
+      window.addEventListener('popstate',function(){route(location.hash);});
       var pfConnect=document.getElementById('pf-connect');
       if(pfConnect)pfConnect.addEventListener('click',function(){var c=document.getElementById('hdr-connect');if(c)c.click();});
-      if(location.hash==='#portfolio')showView('portfolio');
-      else if(location.hash==='#incentives')showView('incentives');
-      else showView('market');
-      open('all');
+      route(location.hash);
     })();
     </script>
     <script>

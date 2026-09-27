@@ -36,10 +36,8 @@ SEL = {
     "brand": "a.brand",
     "tab_all": ".tab[data-tab=all]",
     "tab_listings": ".tab[data-tab=listings]",
-    "tab_offers": ".tab[data-tab=offers]",
     "panel_all": ".panel[data-panel=all]",
     "panel_listings": ".panel[data-panel=listings]",
-    "panel_offers": ".panel[data-panel=offers]",
     "hdr_connect": "#hdr-connect",
     "hdr_link_market": "a.hdr-link[href=\"#tabs\"]",
     "hdr_link_portfolio": "a.hdr-link[href=\"#portfolio\"]",
@@ -355,7 +353,6 @@ class QASweep:
         tabs_panels = [
             ("all", SEL["tab_all"], SEL["panel_all"]),
             ("listings", SEL["tab_listings"], SEL["panel_listings"]),
-            ("offers", SEL["tab_offers"], SEL["panel_offers"]),
         ]
         ok_all = True
         for name, tab_sel, panel_sel in tabs_panels:
@@ -1144,7 +1141,7 @@ class QASweep:
             self.ensure_market_view()
             # go through each tab
             ok_all = True
-            for tab_sel in [SEL["tab_all"], SEL["tab_listings"], SEL["tab_offers"]]:
+            for tab_sel in [SEL["tab_all"], SEL["tab_listings"]]:
                 self.page.locator(tab_sel).click()
                 self.page.wait_for_timeout(200)
                 overflow = self.page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
