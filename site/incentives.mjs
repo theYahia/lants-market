@@ -562,7 +562,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   ];
   const tips = [
     'The seller of this pool (name or pool id).',
-    'Estimated ANTS reward next epoch for each 1,000 ANTS you stake at max lock in this pool.',
+    `Estimated ANTS reward per epoch for each 1,000 ANTS staked at max lock (104 epochs), assuming no one else joins the pool. The estimate uses the projected staker budget of ${nextBudget(snapshot, N)?.toFixed(0) ?? 'the current'} ANTS for the next epoch.`,
     'What this pool paid its stakers in the completed epochs shown, newest first.',
     'Best USDC offer per 1,000 ANTS for this pool in the next epoch.'
   ];
