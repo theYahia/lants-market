@@ -10,6 +10,7 @@ const FILES = [
   ['site/docs.html', 'dist/docs.html'],
   ['site/app.css', 'dist/app.css'],
   ['site/render.mjs', 'dist/render.mjs'],
+  ['site/incentives.mjs', 'dist/incentives.mjs'],
   ['site/metrics.mjs', 'dist/metrics.mjs'],
   ['site/market-config.mjs', 'dist/market-config.mjs'],
   ['site/market-stats.mjs', 'dist/market-stats.mjs'],
