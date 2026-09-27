@@ -450,7 +450,19 @@ def run_guard() -> int:
                     # Wait a moment for the page to settle.
                     short_page.wait_for_timeout(3000)
 
-                    # Ensure the market listings are visible (default view).
+                    # Make the Listings tab visible: same navigation as other
+                    # handlers - click the header tabs link, then the listings tab.
+                    short_page.locator('a.hdr-link[href="#tabs"]').click()
+                    short_page.locator('.tab[data-tab="listings"]').click()
+                    short_page.wait_for_timeout(500)
+
+                    # Ensure at least one market row is present before reading.
+                    short_page.wait_for_selector(
+                        "#market-list .market-row",
+                        timeout=30000
+                    )
+
+                    # Ensure the market list is visible.
                     market_list = short_page.locator("#market-list")
                     market_list.wait_for(state="visible", timeout=15000)
 
