@@ -1085,6 +1085,11 @@ def run_guard() -> int:
                 # 20c. First offer li (with DEFAULT_OFFERS) must contain
                 #      "paid by 0x0000…0001" and "for the first 10,000 ANTS"
                 #      and must NOT contain "up to ".
+                # earlier checks leave other test offers served; reload with the default one
+                offers = DEFAULT_OFFERS
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r=copy{id(offers)}#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
                 first_li = page.locator("#incentives .inc-offers-list li").first
                 if first_li.count() == 0:
                     copy_failures.append("missing: first offers list li")
