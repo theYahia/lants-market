@@ -409,8 +409,15 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     const tr = document.createElement('tr');
     tr.className = 'board-row';
     tr.dataset.pool = pool;
-    const tdPool = document.createElement('td');
     const name = poolNames[pool];
+    tr.dataset.name = name || pool;
+    tr.dataset.staked = String(WN / 104);
+    const salesVal = salesByPool[pool];
+    tr.dataset.sales = salesVal === undefined || salesVal === null ? '-1' : String(Number(salesVal) / 1e6);
+    tr.dataset.est = isLive ? String(est) : '-1';
+    const bestOfferVal = bestOfferByPool.get(pool);
+    tr.dataset.offer = bestOfferVal === undefined ? '-1' : String(bestOfferVal);
+    const tdPool = document.createElement('td');
     if (name) {
       tdPool.textContent = name;
       const idSpan = document.createElement('span');
@@ -445,8 +452,15 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     const tr = document.createElement('tr');
     tr.className = 'board-row';
     tr.dataset.pool = pool;
-    const tdPool = document.createElement('td');
     const name = poolNames[pool];
+    tr.dataset.name = name || pool;
+    tr.dataset.staked = '0';
+    const salesVal = salesByPool[pool];
+    tr.dataset.sales = salesVal === undefined || salesVal === null ? '-1' : String(Number(salesVal) / 1e6);
+    tr.dataset.est = '-1';
+    const bestOfferVal = bestOfferByPool.get(pool);
+    tr.dataset.offer = bestOfferVal === undefined ? '-1' : String(bestOfferVal);
+    const tdPool = document.createElement('td');
     if (name) {
       tdPool.textContent = name;
       const idSpan = document.createElement('span');
@@ -486,7 +500,10 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   ];
   for (const h of headings) {
     const th = document.createElement('th');
-    th.textContent = h;
+    const button = document.createElement('button');
+    button.className = 'inc-sort';
+    button.textContent = h;
+    th.appendChild(button);
     headTr.appendChild(th);
   }
   thead.appendChild(headTr);
@@ -496,6 +513,51 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+
+  // Sorting logic: each header button sorts the tbody rows.
+  const headerThs = table.querySelectorAll('thead th');
+  const headerButtons = table.querySelectorAll('thead th button.inc-sort');
+  let activeColumn = 3; // Est column
+  let activeDirection = 'descending';
+  headerThs[activeColumn].setAttribute('aria-sort', activeDirection);
+
+  headerButtons.forEach((button, index) => {
+    button.addEventListener('click', () => {
+      if (index === activeColumn) {
+        activeDirection = activeDirection === 'ascending' ? 'descending' : 'ascending';
+      } else {
+        activeColumn = index;
+        activeDirection = index === 0 ? 'ascending' : 'descending';
+      }
+
+      const rows = Array.from(tbody.querySelectorAll('tr.board-row'));
+      rows.sort((a, b) => {
+        let cmp = 0;
+        if (index === 0) {
+          cmp = a.dataset.name.localeCompare(b.dataset.name);
+        } else {
+          const aVal = Number(a.dataset[index === 1 ? 'staked' : index === 2 ? 'sales' : index === 3 ? 'est' : 'offer']);
+          const bVal = Number(b.dataset[index === 1 ? 'staked' : index === 2 ? 'sales' : index === 3 ? 'est' : 'offer']);
+          cmp = aVal - bVal;
+        }
+        if (cmp === 0) {
+          cmp = a.dataset.name.localeCompare(b.dataset.name);
+        }
+        return activeDirection === 'ascending' ? cmp : -cmp;
+      });
+
+      rows.forEach(row => tbody.appendChild(row));
+
+      headerThs.forEach((th, i) => {
+        if (i === activeColumn) {
+          th.setAttribute('aria-sort', activeDirection);
+        } else {
+          th.removeAttribute('aria-sort');
+        }
+      });
+    });
+  });
+
   return table;
 }
 
