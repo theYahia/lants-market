@@ -643,10 +643,10 @@ export async function renderMyListingsPanel() {
     row.className = 'market-row';
     row.setAttribute('data-listing-id', item.listingId.toString());
 
-    row.appendChild(document.createTextNode('#'));
+    row.appendChild(document.createTextNode('Listing #'));
     row.appendChild(makeSpan('listingId', item.listingId.toString()));
 
-    row.appendChild(document.createTextNode(' '));
+    row.appendChild(document.createTextNode(' \u00b7 position #'));
     row.appendChild(makeSpan('nftId', item.nftId.toString()));
 
     row.appendChild(document.createTextNode(' \u00b7 '));
