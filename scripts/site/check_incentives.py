@@ -184,6 +184,7 @@ def run_guard() -> int:
         "inc_calcui": 0,
         "inc_names": 0,
         "inc_sort": 0,
+        "inc_copy": 0,
     }
     subchecks = {key: [] for key in results}
     calcui_failures = []
@@ -1052,7 +1053,90 @@ def run_guard() -> int:
                     + str(exc)
                 )
 
-            # 20. Finalize and print all keys with honest aggregation.
+            # 20. inc_copy: verify the copy in the incentives view.
+            try:
+                copy_failures = []
+
+                # 20a. h2 title must contain "stake now to count from it"
+                #      and match r"in \d+d \d+h \d+m".
+                h2 = page.locator("#incentives h2").first
+                if h2.count() == 0:
+                    copy_failures.append("missing: h2 element not found")
+                else:
+                    h2_text = h2.inner_text()
+                    if "stake now to count from it" not in h2_text:
+                        copy_failures.append("missing: 'stake now to count from it' in h2")
+                    import re as _re
+                    if _re.search(r"in \d+d \d+h \d+m", h2_text) is None:
+                        copy_failures.append("missing: countdown pattern 'in NdXh YmZ' in h2")
+
+                # 20b. .inc-note must contain "per epoch" and
+                #      "no one else joins the pool".
+                note_el = page.locator("#incentives .inc-note")
+                if note_el.count() == 0:
+                    copy_failures.append("missing: .inc-note element not found")
+                else:
+                    note_text = note_el.inner_text()
+                    if "per epoch" not in note_text:
+                        copy_failures.append("missing: 'per epoch' in .inc-note")
+                    if "no one else joins the pool" not in note_text:
+                        copy_failures.append("missing: 'no one else joins the pool' in .inc-note")
+
+                # 20c. First offer li (with DEFAULT_OFFERS) must contain
+                #      "paid by 0x0000…0001" and "for the first 10,000 ANTS"
+                #      and must NOT contain "up to ".
+                first_li = page.locator("#incentives .inc-offers-list li").first
+                if first_li.count() == 0:
+                    copy_failures.append("missing: first offers list li")
+                else:
+                    first_li_text = first_li.inner_text()
+                    if "paid by 0x0000…0001" not in first_li_text:
+                        copy_failures.append("missing: 'paid by 0x0000…0001' in first offer line")
+                    if "for the first 10,000 ANTS" not in first_li_text:
+                        copy_failures.append("missing: 'for the first 10,000 ANTS' in first offer line")
+                    if "up to " in first_li_text:
+                        copy_failures.append("missing: 'up to ' should not appear in first offer line")
+
+                # 20d. With a substituted offer note="Test note" (via unique
+                #      ?r=), the element #incentives .inc-offer-note must
+                #      have text equal to "Test note".
+                note_offer = [
+                    {
+                        "pool": "52894",
+                        "epochs": [25],
+                        "usdcPer1k": 5,
+                        "capAnts": 10000,
+                        "payer": "0x0000000000000000000000000000000000000001",
+                        "note": "Test note",
+                        "pays": "new",
+                    }
+                ]
+                offers = note_offer
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r={id(note_offer)}#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                note_el = page.locator("#incentives .inc-offer-note")
+                if note_el.count() == 0:
+                    copy_failures.append("missing: .inc-offer-note element not found")
+                else:
+                    note_text_val = note_el.first.inner_text()
+                    if note_text_val != "Test note":
+                        copy_failures.append(f"missing: .inc-offer-note text '{note_text_val}' != 'Test note'")
+
+                if not copy_failures:
+                    results["inc_copy"] = 1
+                    subchecks["inc_copy"].append(True)
+                else:
+                    results["inc_copy"] = 0
+                    subchecks["inc_copy"].append(False)
+                    for fail in copy_failures:
+                        reasons.append(fail)
+            except Exception as exc:
+                results["inc_copy"] = 0
+                subchecks["inc_copy"].append(False)
+                reasons.append("missing: inc_copy raised " + type(exc).__name__ + ": " + str(exc))
+
+            # 21. Finalize and print all keys with honest aggregation.
             finalize_results()
             for key in sorted(results.keys()):
                 print(f"{key}={results[key]}")
@@ -1081,6 +1165,7 @@ def run_guard() -> int:
         print("inc_mobhead=0")
         print("inc_cta=0")
         print("inc_rule=0")
+        print("inc_copy=0")
         print(f"reason={type(exc).__name__}: {exc}")
         return 1
     finally:
