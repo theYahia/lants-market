@@ -185,6 +185,7 @@ def run_guard() -> int:
         "inc_names": 0,
         "inc_sort": 0,
         "inc_copy": 0,
+        "inc_layout": 0,
     }
     subchecks = {key: [] for key in results}
     calcui_failures = []
@@ -239,6 +240,9 @@ def run_guard() -> int:
                 },
             ]
 
+            # the served snapshot; inc_layout swaps in one with pool history, then restores it
+            snapshot_body = [FIXTURE.read_bytes()]
+
             def route_handler(route):
                 url = route.request.url
                 if url.startswith("http://127.0.0.1:"):
@@ -252,7 +256,7 @@ def run_guard() -> int:
                         route.fulfill(
                             status=200,
                             content_type="application/json",
-                            body=FIXTURE.read_bytes(),
+                            body=snapshot_body[0],
                         )
                         return
                 # Offer responses: return the currently injected offers list.
@@ -327,45 +331,20 @@ def run_guard() -> int:
                 if not board_rows:
                     record("inc_board", "missing: board rows", False)
                 else:
-                    # Extract (pool, est) pairs from the first two columns.
-                    rows_data = []
-                    for row in board_rows:
-                        cells = row.locator("td").all()
-                        if len(cells) >= 2:
-                            pool = (row.get_attribute("data-pool") or "").strip()
-                            # Column 2 is staked; column 4 is est. ANTS for 1,000 staked.
-                            if len(cells) >= 5:
-                                est = cells[3].inner_text().strip()
-                                rows_data.append((pool, est))
-                            else:
-                                rows_data.append((pool, ""))
-
-                    top_ok = len(rows_data) >= 3
-                    for idx, (exp_pool, exp_est) in enumerate(expected_board):
-                        if idx >= len(rows_data):
-                            top_ok = False
-                            break
-                        pool = rows_data[idx][0]
-                        est = rows_data[idx][1]
-                        if pool != exp_pool or est != exp_est:
-                            top_ok = False
-                            break
-
-                    # Pool 87124 present with est 1155.48.
-                    pool_87124_ok = any(pool == "87124" and est == "1155.48" for pool, est in rows_data)
-
-                    # Exactly one pool marked 'no stake next epoch' — check the
-                    # est column text (4th cell) for "no stake next epoch".
-                    no_stake_pools = [pool for pool, est in rows_data if "no stake next epoch" in est and pool == "94725"]
-                    exactly_one_no_stake = len(no_stake_pools) == 1
-                    # And no OTHER pool (besides 94725) has that marker.
-                    other_no_stake = [pool for pool, est in rows_data if "no stake next epoch" in est and pool != "94725"]
-                    only_94725_no_stake = len(other_no_stake) == 0
-
+                    # Layout-free: pool and estimate come from the row's data attributes, not column positions,
+                    # and the three highest estimates are checked whatever the default order is.
+                    rows_data = [
+                        ((r.get_attribute("data-pool") or "").strip(), r.get_attribute("data-est") or "", r.inner_text())
+                        for r in board_rows
+                    ]
+                    ests = sorted(((float(e), p) for p, e, _ in rows_data if e not in ("", "-1")), reverse=True)
+                    top_ok = [(p, f"{v:.2f}") for v, p in ests[:3]] == expected_board
+                    pool_87124_ok = any(p == "87124" and e and abs(float(e) - 1155.48) < 0.005 for p, e, _ in rows_data)
+                    no_stake = [p for p, _, t in rows_data if "no stake next epoch" in t]
                     record(
                         "inc_board",
                         "board literal rows/markers",
-                        top_ok and pool_87124_ok and exactly_one_no_stake and only_94725_no_stake,
+                        top_ok and pool_87124_ok and no_stake == ["94725"],
                     )
             except Exception as exc:
                 record("inc_board", "board raised " + type(exc).__name__ + ": " + str(exc), False)
@@ -487,8 +466,9 @@ def run_guard() -> int:
                     failures.append("missing: row for pool 86897")
                 else:
                     pool_86897_text = pool_86897.inner_text().strip()
-                    if pool_86897_text != "86897":
-                        failures.append("missing: pool 86897 cell text equals 86897")
+                    # no name: the cell starts with the id (stake and tags may follow)
+                    if not pool_86897_text.startswith("86897") or "Test" in pool_86897_text:
+                        failures.append("missing: pool 86897 cell starts with 86897 and has no name")
 
                 option_52894 = page.locator('#incentives .inc-calc select option[value="52894"]')
                 if option_52894.count() == 0:
@@ -583,14 +563,13 @@ def run_guard() -> int:
             except Exception as exc:
                 record("inc_nav", "nav raised " + type(exc).__name__ + ": " + str(exc), False)
 
-            # 13. inc_units: #incentives text contains 'max lock' in the column
-            #     heading and in the explanatory note.
+            # 13. inc_units: a heading names the unit ('1,000 ANTS') and a heading tip explains 'max lock'.
             try:
-                units_text = page.locator("#incentives").inner_text()
-                # 'max-lock eq.' is the heading text (from the site's board).
-                has_heading = "max-lock eq" in units_text
-                has_note = "max lock" in units_text
-                record("inc_units", "missing: 'max lock' in heading and note", has_heading and has_note)
+                heads_text = page.locator("#incentives .inc-board-table thead").inner_text().lower()
+                tips = page.eval_on_selector_all(
+                    "#incentives .inc-board-table thead th .info", "e => e.map(x => (x.dataset.tip || '').toLowerCase())")
+                record("inc_units", "missing: '1,000 ANTS' in a heading and 'max lock' in a heading tip",
+                       "1,000 ants" in heads_text and any("max lock" in t for t in tips))
             except Exception as exc:
                 record("inc_units", "units raised " + type(exc).__name__ + ": " + str(exc), False)
 
@@ -850,20 +829,8 @@ def run_guard() -> int:
                 subchecks["inc_calcui"].append(False)
                 reasons.append("missing: dark styles on #incentives .inc-calc fields — " + type(exc).__name__ + ": " + str(exc))
 
-            # 19. inc_sort: before checking, click the Incentives nav link.
-            #     Each of the 5 board headers must contain exactly one
-            #     button.inc-sort. Initially the Est column (4th) has
-            #     aria-sort="descending" and no other th has aria-sort.
-            #     After clicking the Staked header's button (2nd), the first
-            #     data row must have the maximum Staked value across all rows
-            #     (compared numerically by parsing the text with commas
-            #     stripped), th[2] must have aria-sort="descending", and no
-            #     other th may have aria-sort. A second click on Staked must
-            #     sort ascending (first row = minimum, aria-sort="ascending").
-            #     After clicking the Pool header's button (1st), rows must be
-            #     ordered by pool name (or id when no name) ascending using
-            #     localeCompare semantics. Failures print reasons with a
-            #     "missing:" prefix.
+            # 19. inc_sort: four headings with one sort button each; the estimate is the default sort without
+            #     pool history; clicks toggle it; Seller sorts by name. Read from row data attributes.
             try:
                 nav_link = page.locator('a.hdr-link[href="#incentives"]')
                 if nav_link.count() == 0 or not nav_link.first.is_visible():
@@ -879,161 +846,53 @@ def run_guard() -> int:
                 def incsort_headers():
                     return page.locator("#incentives .inc-board-table thead th").all()
 
-                def incsort_th_aria(th):
-                    attr = th.get_attribute("aria-sort")
-                    return attr
+                def incsort_aria():
+                    return {i: th.get_attribute("aria-sort") for i, th in enumerate(incsort_headers(), start=1)
+                            if th.get_attribute("aria-sort") is not None}
 
-                def incsort_rows_data():
-                    rows = page.locator("#incentives .board-row").all()
-                    out = []
-                    for row in rows:
-                        cells = row.locator("td").all()
-                        if len(cells) < 5:
-                            continue
-                        # Pool cell text: name (id) when name exists, else id.
-                        pool_text = cells[0].inner_text().strip()
-                        # Staked text is in the 2nd column and uses the
-                        # format "1,234.56".
-                        staked_text = cells[1].inner_text().strip()
-                        try:
-                            staked_val = float(staked_text.replace(",", ""))
-                        except ValueError:
-                            staked_val = 0.0
-                        out.append({"pool_text": pool_text, "staked": staked_val})
-                    return out
+                def incsort_rows():
+                    return [{"name": r.get_attribute("data-name") or "", "est": float(r.get_attribute("data-est") or "-1")}
+                            for r in page.locator("#incentives .board-row").all()]
 
-                # 19a. Exactly one button.inc-sort in every header th.
+                # 19a. Four headings (Seller, per 1,000 ANTS, Paid, Offer), one button.inc-sort in each.
                 headers = incsort_headers()
-                if len(headers) != 5:
-                    sort_failures.append("не 5 заголовков")
-                else:
-                    for idx, th in enumerate(headers, start=1):
-                        btns = th.locator("button.inc-sort")
-                        count = btns.count()
-                        if count != 1:
-                            sort_failures.append(
-                                f"кнопка в th[{idx}]: найдено {count} (ожидалось 1)"
-                            )
-                        else:
-                            # The button must be a child of the th.
-                            parent = btns.first.evaluate("el => el.parentElement.tagName.toLowerCase()")
-                            if parent != "th":
-                                sort_failures.append(f"кнопка в th[{idx}] не в th")
-
-                # 19b. Initial aria-sort state.
-                init_aria = {}
+                if len(headers) != 4:
+                    sort_failures.append(f"{len(headers)} headings, want 4")
                 for idx, th in enumerate(headers, start=1):
-                    attr = incsort_th_aria(th)
-                    if attr is not None:
-                        init_aria[idx] = attr
-                if init_aria.get(4) != "descending":
-                    sort_failures.append(
-                        "стартовый aria-sort: Est не descending (получено "
-                        + str(init_aria.get(4))
-                        + ")"
-                    )
-                for idx, attr in init_aria.items():
-                    if idx != 4:
-                        sort_failures.append(
-                            f"стартовый aria-sort присутствует на th[{idx}]"
-                        )
+                    count = th.locator("button.inc-sort").count()
+                    if count != 1:
+                        sort_failures.append(f"th[{idx}] has {count} sort buttons, want 1")
 
-                def incsort_all_rows_data():
-                    return incsort_rows_data()
+                # 19b. No pool history in the fixture: the estimate (th[2]) is the default sort, descending.
+                if incsort_aria() != {2: "descending"}:
+                    sort_failures.append(f"start aria-sort {incsort_aria()}, want {{2: 'descending'}}")
 
-                # 19c. Click Staked header (2nd th) → descending by staked.
+                # 19c. Click the estimate heading: ascending, first row is the minimum.
                 headers[1].locator("button.inc-sort").click()
                 page.wait_for_timeout(300)
-                rows_after_first = incsort_all_rows_data()
-                if not rows_after_first:
-                    sort_failures.append("нет строк доски после клика по Staked")
-                else:
-                    max_val = max(row["staked"] for row in rows_after_first)
-                    first_val = rows_after_first[0]["staked"]
-                    if abs(first_val - max_val) > 1e-9:
-                        sort_failures.append(
-                            "первая строка после клика по Staked не максимум"
-                        )
-                    # aria-sort state after first Staked click.
-                    headers2 = incsort_headers()
-                    aria2 = {}
-                    for idx, th in enumerate(headers2, start=1):
-                        attr = incsort_th_aria(th)
-                        if attr is not None:
-                            aria2[idx] = attr
-                    if aria2.get(2) != "descending":
-                        sort_failures.append(
-                            "после 1-го клика Staked: th[2] не descending"
-                        )
-                    for idx, attr in aria2.items():
-                        if idx != 2:
-                            sort_failures.append(
-                                f"после 1-го клика Staked: aria-sort на th[{idx}]"
-                            )
+                rows = incsort_rows()
+                if not rows or rows[0]["est"] != min(r["est"] for r in rows):
+                    sort_failures.append("after 1st click on the estimate the first row is not the minimum")
+                if incsort_aria() != {2: "ascending"}:
+                    sort_failures.append(f"after 1st click aria-sort {incsort_aria()}")
 
-                # 19d. Second click on Staked → ascending.
+                # 19d. Click again: descending, first row is the maximum.
                 headers[1].locator("button.inc-sort").click()
                 page.wait_for_timeout(300)
-                rows_after_second = incsort_all_rows_data()
-                if not rows_after_second:
-                    sort_failures.append("нет строк доски после 2-го клика по Staked")
-                else:
-                    min_val = min(row["staked"] for row in rows_after_second)
-                    first_val = rows_after_second[0]["staked"]
-                    if abs(first_val - min_val) > 1e-9:
-                        sort_failures.append(
-                            "первая строка после 2-го клика Staked не минимум"
-                        )
-                    headers3 = incsort_headers()
-                    aria3 = {}
-                    for idx, th in enumerate(headers3, start=1):
-                        attr = incsort_th_aria(th)
-                        if attr is not None:
-                            aria3[idx] = attr
-                    if aria3.get(2) != "ascending":
-                        sort_failures.append(
-                            "после 2-го клика Staked: th[2] не ascending"
-                        )
-                    for idx, attr in aria3.items():
-                        if idx != 2:
-                            sort_failures.append(
-                                f"после 2-го клика Staked: aria-sort на th[{idx}]"
-                            )
+                rows = incsort_rows()
+                if not rows or rows[0]["est"] != max(r["est"] for r in rows):
+                    sort_failures.append("after 2nd click on the estimate the first row is not the maximum")
+                if incsort_aria() != {2: "descending"}:
+                    sort_failures.append(f"after 2nd click aria-sort {incsort_aria()}")
 
-                # 19e. Click Pool header (1st) → ascending by name then id.
-                headers[1].locator("button.inc-sort").click()  # reset staked first
-                page.wait_for_timeout(300)
-                headers = incsort_headers()
+                # 19e. Click Seller: rows by name (or id when no name), ascending.
                 headers[0].locator("button.inc-sort").click()
                 page.wait_for_timeout(300)
-                rows_pool = incsort_all_rows_data()
-                if not rows_pool:
-                    sort_failures.append("нет строк доски после клика по Pool")
-                else:
-                    # LocaleCompare-like comparison: lowercase for stability.
-                    texts = [row["pool_text"] for row in rows_pool]
-                    expected = sorted(texts, key=lambda s: s.lower())
-                    for i in range(len(texts)):
-                        if texts[i] != expected[i]:
-                            sort_failures.append(
-                                "неверный порядок Pool после клика (на индексе "
-                                + str(i)
-                                + ")"
-                            )
-                            break
-                    headers4 = incsort_headers()
-                    aria4 = {}
-                    for idx, th in enumerate(headers4, start=1):
-                        attr = incsort_th_aria(th)
-                        if attr is not None:
-                            aria4[idx] = attr
-                    if aria4.get(1) != "ascending":
-                        sort_failures.append("после клика Pool: th[1] не ascending")
-                    for idx, attr in aria4.items():
-                        if idx != 1:
-                            sort_failures.append(
-                                f"после клика Pool: aria-sort на th[{idx}]"
-                            )
+                names = [r["name"] for r in incsort_rows()]
+                if names != sorted(names, key=lambda s: s.lower()):
+                    sort_failures.append("Seller sort is not ascending by name")
+                if incsort_aria() != {1: "ascending"}:
+                    sort_failures.append(f"after Seller click aria-sort {incsort_aria()}")
 
                 if not sort_failures:
                     results["inc_sort"] = 1
@@ -1070,17 +929,13 @@ def run_guard() -> int:
                     if _re.search(r"in \d+d \d+h \d+m", h2_text) is None:
                         copy_failures.append("missing: countdown pattern 'in NdXh YmZ' in h2")
 
-                # 20b. .inc-note must contain "per epoch" and
-                #      "no one else joins the pool".
-                note_el = page.locator("#incentives .inc-note")
-                if note_el.count() == 0:
-                    copy_failures.append("missing: .inc-note element not found")
-                else:
-                    note_text = note_el.inner_text()
-                    if "per epoch" not in note_text:
-                        copy_failures.append("missing: 'per epoch' in .inc-note")
-                    if "no one else joins the pool" not in note_text:
-                        copy_failures.append("missing: 'no one else joins the pool' in .inc-note")
+                # 20b. The estimate heading's tip (th[2]) says "per epoch" and "no one else joins the pool".
+                est_tip = page.locator("#incentives .inc-board-table thead th:nth-child(2) .info")
+                tip_text = (est_tip.first.get_attribute("data-tip") or "") if est_tip.count() else ""
+                if "per epoch" not in tip_text:
+                    copy_failures.append("missing: 'per epoch' in the estimate heading tip")
+                if "no one else joins the pool" not in tip_text:
+                    copy_failures.append("missing: 'no one else joins the pool' in the estimate heading tip")
 
                 # 20c. First offer li (with DEFAULT_OFFERS) must contain
                 #      "paid by 0x0000…0001" and "for the first 10,000 ANTS"
@@ -1140,6 +995,73 @@ def run_guard() -> int:
                 results["inc_copy"] = 0
                 subchecks["inc_copy"].append(False)
                 reasons.append("missing: inc_copy raised " + type(exc).__name__ + ": " + str(exc))
+
+            # 20e. inc_layout: four columns Seller / per 1,000 ANTS / Paid to stakers / Offer, one tip (span.info
+            #      with data-tip) on every heading, stake shown in the seller cell, no analyst jargon and no note
+            #      paragraph; with pool history in the snapshot the Paid column shows it and is the default sort;
+            #      on a phone the estimate and Paid headings stay visible without sideways scroll.
+            try:
+                lay = []
+                hist = json.loads(FIXTURE.read_bytes())
+                hist["poolHistoryEpochs"] = ["22", "23"]
+                hist["poolRewardByEpoch"] = {
+                    "52894": {"22": str(21807 * 10**18), "23": str(18549 * 10**18)},
+                    "59969": {"22": "0", "23": "0"},
+                }
+                snapshot_body[0] = json.dumps(hist).encode()
+                offers = DEFAULT_OFFERS
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r=layout#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                ths = page.locator("#incentives .inc-board-table thead th").all()
+                if len(ths) != 4:
+                    lay.append(f"{len(ths)} headings, want 4")
+                else:
+                    for i, want in enumerate(["seller", "1,000 ants", "paid", "offer"]):
+                        if want not in ths[i].inner_text().lower():
+                            lay.append(f"heading {i + 1} lacks '{want}'")
+                    for i, th in enumerate(ths):
+                        tip = th.locator(".info[data-tip]")
+                        if tip.count() != 1 or not (tip.first.get_attribute("data-tip") or "").strip():
+                            lay.append(f"heading {i + 1} has no single tip")
+                    if ths[2].get_attribute("aria-sort") != "descending":
+                        lay.append("Paid is not the default sort")
+                body = page.locator("#incentives").inner_text().lower()
+                for bad in ("max-lock eq", "sales, lifetime", "weight 104,000"):
+                    if bad in body:
+                        lay.append(f"jargon on screen: '{bad}'")
+                if page.locator("#incentives .inc-note").count():
+                    lay.append(".inc-note paragraph still on the page")
+                apex = page.locator('#incentives .board-row[data-pool="52894"]')
+                if apex.count() == 0:
+                    lay.append("no row for 52894")
+                else:
+                    cells = apex.first.locator("td").all()
+                    if "staked" not in cells[0].inner_text().lower():
+                        lay.append("seller cell lacks 'staked'")
+                    if len(cells) < 3 or cells[2].inner_text().strip() != "18.5k · 21.8k":
+                        lay.append("Paid cell for 52894 is not '18.5k · 21.8k'")
+                tags = page.locator('#incentives .board-row[data-pool="59969"] .inc-tag').all()
+                if not any(t.inner_text().strip() == "new" for t in tags):
+                    lay.append("59969 lacks the 'new' tag")
+                phone = context.new_page()
+                phone.set_viewport_size({"width": 390, "height": 844})
+                phone.goto(f"http://127.0.0.1:{site_port}/index.html?r=layoutphone#incentives")
+                phone.wait_for_load_state("networkidle")
+                phone.wait_for_timeout(1500)
+                visible = phone.eval_on_selector_all(
+                    "#incentives .inc-board-table thead th",
+                    "e => e.filter(t => getComputedStyle(t).display !== 'none').map(t => t.innerText.toLowerCase())")
+                if not (any("1,000 ants" in v for v in visible) and any("paid" in v for v in visible)):
+                    lay.append(f"phone headings {visible}")
+                if phone.evaluate("document.documentElement.scrollWidth") > 390:
+                    lay.append("phone scrolls sideways")
+                phone.close()
+                snapshot_body[0] = FIXTURE.read_bytes()
+                record("inc_layout", "missing: " + "; ".join(lay), not lay)
+            except Exception as exc:
+                snapshot_body[0] = FIXTURE.read_bytes()
+                record("inc_layout", "layout raised " + type(exc).__name__ + ": " + str(exc), False)
 
             # 21. Finalize and print all keys with honest aggregation.
             finalize_results()
