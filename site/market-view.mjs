@@ -1424,7 +1424,7 @@ export async function renderMyPositions(account, ids, snapshot) {
               target.textContent = originalText;
               target.disabled = false;
               if (connectedAccount) {
-                await renderMyPositions(connectedAccount, myIds, await loadSnapshot());
+                await loadPublicMarket();
               }
             }, 2000);
           } else {
@@ -1473,7 +1473,7 @@ export async function renderMyPositions(account, ids, snapshot) {
               target.textContent = originalText;
               target.disabled = false;
               if (connectedAccount) {
-                await renderMyPositions(connectedAccount, myIds, await loadSnapshot());
+                await loadPublicMarket();
               }
             }, 2000);
           } else {
