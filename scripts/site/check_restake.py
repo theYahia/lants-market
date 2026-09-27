@@ -23,6 +23,7 @@ from playwright.sync_api import sync_playwright
 import fork_prep
 
 EXPECTED_PENDING_REWARD = 28341831743556013816873
+EXPECTED_PENDING_REWARD_FORMATTED = "28341.83"
 POSITION_ID = 110
 STAKER_REWARDS = fork_prep.STAKER_REWARDS
 SEL_PENDING_INDEXED = fork_prep.SEL_PENDING_INDEXED
@@ -31,15 +32,6 @@ SEL_PENDING_INDEXED = fork_prep.SEL_PENDING_INDEXED
 def enc_uint(value: int) -> str:
     """Encode uint256 as 64 hex chars (no 0x prefix)."""
     return f"{value:064x}"
-
-
-def get_pending_reward():
-    """Fetch pendingIndexedStakerReward(27) via eth_call."""
-    calldata = SEL_PENDING_INDEXED + enc_uint(27)
-    result = eth_call(STAKER_REWARDS, calldata)
-    if not result or result == "0x":
-        raise RuntimeError("empty eth_call result for pendingIndexedStakerReward(27)")
-    return int(result, 16)
 
 
 def get_position_owner(token_id: int) -> str:
@@ -62,14 +54,6 @@ def run():
 
         # Apply the shared fork preparation: timestamp/mine, setBalance, indexPoolRewards.
         fork_prep.prepare_restake_fork()
-
-        # Verify pending reward before UI.
-        pending = get_pending_reward()
-        if pending != EXPECTED_PENDING_REWARD:
-            reason = f"pending reward mismatch: got {pending}, expected {EXPECTED_PENDING_REWARD}"
-            print(f"reason={reason}")
-            print("restake_ok=0")
-            return
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -104,8 +88,9 @@ def run():
                     break
                 page.wait_for_timeout(500)
             else:
-                reason = "portfolio body did not become visible after connect"
+                reason = "missing: portfolio body after connect"
                 print(f"reason={reason}")
+                print("restake_btn=0")
                 print("restake_ok=0")
                 return
 
@@ -124,8 +109,9 @@ def run():
                 page.wait_for_timeout(500)
 
             if not row:
-                reason = "position row 27 not found"
+                reason = "missing: position row 27"
                 print(f"reason={reason}")
+                print("restake_btn=0")
                 print("restake_ok=0")
                 return
 
@@ -134,17 +120,22 @@ def run():
             if not restake_buttons:
                 reason = "missing: Restake button in row #27"
                 print(f"reason={reason}")
+                print("restake_btn=0")
                 print("restake_ok=0")
                 return
 
             restake_btn = restake_buttons[0]
             text = restake_btn.inner_text()
-            # Ensure the pending amount is shown before sign.
-            if str(EXPECTED_PENDING_REWARD) not in text:
-                reason = f"Restake button does not show pending amount, got: {text}"
+            title = restake_btn.get_attribute("title") or ""
+            # Ensure the pending amount is shown before sign (UI shows ANTS with 2 decimals).
+            if EXPECTED_PENDING_REWARD_FORMATTED not in text and EXPECTED_PENDING_REWARD_FORMATTED not in title:
+                reason = "missing: pending ANTS amount on Restake button"
                 print(f"reason={reason}")
+                print("restake_btn=0")
                 print("restake_ok=0")
                 return
+
+            print("restake_btn=1")
 
             # Click restake, wait for the transaction to be mined.
             restake_btn.click()
@@ -162,14 +153,14 @@ def run():
                 page.wait_for_timeout(1000)
 
             if amount is None or amount != EXPECTED_PENDING_REWARD:
-                reason = f"position {POSITION_ID} amount mismatch, got: {amount}"
+                reason = "missing: minted position 110"
                 print(f"reason={reason}")
                 print("restake_ok=0")
                 return
 
             owner = get_position_owner(POSITION_ID)
             if owner != OPERATOR.lower():
-                reason = f"position {POSITION_ID} owner mismatch, got: {owner}"
+                reason = "missing: position 110 owner"
                 print(f"reason={reason}")
                 print("restake_ok=0")
                 return
