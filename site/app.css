@@ -919,3 +919,4 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
   color-scheme:dark;
 }
 .inc-pool-id{color:var(--muted);font-size:.85em;margin-left:6px}
+.inc-offer-note{display:block;color:var(--muted);font-size:.9em;margin-top:4px}

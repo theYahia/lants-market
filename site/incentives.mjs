@@ -61,15 +61,11 @@ function isValidOffer(offer, displayEpoch) {
 function offerLine(offer, displayEpoch, poolNames) {
   const usdc = offer.capAnts / 1000 * offer.usdcPer1k;
   const name = poolNames[offer.pool];
-  const prefix = name ? `${name} (${offer.pool})` : `Pool ${offer.pool}`;
-  let line = `${prefix} · ${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
-  if (offer.pays === 'new') {
-    line += ' · new stakes only';
-  } else if (offer.pays === 'all') {
-    line += ' · all stakers, pro rata';
-  }
-  if (offer.note) line += ` · ${offer.note}`;
-  return line;
+  const prefix = name ? `${name} (pool ${offer.pool})` : `Pool ${offer.pool}`;
+  const rule = offer.pays === 'new' ? 'new stakes only' : 'all stakers, pro rata';
+  const payer = `${offer.payer.slice(0, 6)}…${offer.payer.slice(-4)}`;
+  const line = `${prefix} · ${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · epoch ${displayEpoch} · ${rule} · max ${usdc} USDC for the first ${offer.capAnts.toLocaleString('en-US')} ANTS · paid by ${payer}`;
+  return { line, note: offer.note || '' };
 }
 
 function buildOfferRows(offers, displayEpoch, poolNames) {
@@ -132,7 +128,13 @@ function buildOfferSection(offers, displayEpoch, poolNames) {
     } else {
       for (const row of validRows) {
         const li = document.createElement('li');
-        li.textContent = row;
+        li.textContent = row.line;
+        if (row.note) {
+          const note = document.createElement('span');
+          note.className = 'inc-offer-note';
+          note.textContent = row.note;
+          li.appendChild(note);
+        }
         ul.appendChild(li);
       }
     }
@@ -572,9 +574,6 @@ async function init() {
     const e = Number(mode.epoch);
     const N = e + 1;
     const boundary = epochBoundary(N);
-    const now = new Date();
-    const countdownMs = boundary.getTime() - now.getTime();
-    const countdown = formatCountdown(countdownMs);
 
     let offers = null;
     try {
@@ -587,7 +586,12 @@ async function init() {
     header.className = 'inc-header';
     header.innerHTML = '';
     const title = document.createElement('h2');
-    title.textContent = `Epoch ${N} · starts ${formatUtc(boundary)} · ${countdown}`;
+    const setTitle = () => {
+      const left = formatCountdown(boundary.getTime() - Date.now());
+      title.textContent = `Epoch ${N} · stake now to count from it · starts ${formatUtc(boundary)} · in ${left}`;
+    };
+    setTitle();
+    setInterval(setTitle, 60000);
     header.appendChild(title);
 
     const board = buildBoard(snapshot, mode, offers, N, poolNames);
@@ -595,7 +599,7 @@ async function init() {
     const note = document.createElement('p');
     note.className = 'inc-note';
     if (mode.mode === 'live') {
-      note.textContent = 'Est. for 1,000 ANTS at max lock (weight 104,000) added to the pool, if this epoch\'s sales repeat.';
+      note.textContent = 'Est. per epoch for 1,000 ANTS at max lock (weight 104,000) added to the pool, if this epoch\'s sales shares hold and no one else joins the pool.';
     } else {
       note.textContent = 'est. after the first purchases this epoch';
     }
