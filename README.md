@@ -40,13 +40,16 @@ becoming something sellers should care about — and pay for.
 | Shows each lot's implied **MC and FDV** at its price per ANTS, and every completed sale | Let the owner touch your money — owner can only change `feeRecipient` or hand over ownership |
 | Manages positions from the site: stake a buyer reward, split, move, enable max-lock | Charge more than a fixed 1% fee on a completed purchase |
 | My Portfolio: your positions (List / Manage) and your listings | Duplicate pool analytics — [antseed-zh](https://antseed-zh.com) already does that well |
-| Cross-checks every snapshot number on two RPCs at one block | Publish seller perks yet — that board is still planned |
+| Cross-checks every snapshot number on two RPCs at one block | Hold incentive money — the payer named on each offer pays after the epoch ([how](docs/incentives.md)) |
+| **Incentives** (Votium for AntSeed): pools ranked by what 1,000 ANTS earn next epoch, seller offers in USDC, a payout calculator | Guarantee an estimate — it assumes this epoch's sales shares hold and no one else joins the pool |
 
-## Status (26.09.2026)
+## Status (27.09.2026)
 
 - **First trade** on 25.09, every step through the site: stake a buyer reward, split off 50 ANTS, max-lock the rest, list, buy from our second wallet ([tx](https://basescan.org/tx/0x33ed01b75166aa1c17388fc92bd1bbbd9e2bcd17cff68b139fa4ce227a8fc610), [video](https://x.com/TheTieTieTies/status/2103556306388844621)). Marked *internal*: it is not counted in volume or FDV.
 - **First public lots** on 26.09: five positions of 10 ANTS at 0.10 USDC each (implied MC ≈ $1.19M, FDV ≈ $10.4M).
-- Pending: listing on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)), claim/restake buttons, seller perks board. See [ROADMAP.md](ROADMAP.md).
+- **27.09:** Claim and Restake buttons in My Portfolio; listed on [antseed.com/ecosystem](https://antseed.com/ecosystem).
+- **27.09:** [Incentives tab](https://lants.eth.limo/#incentives) — sellers pay stakers for weight in their pool. First offer is ours: 1 USDC per 1,000 ANTS for new stakes in Open Forge, epoch 25, up to 10 USDC. See [docs/incentives.md](docs/incentives.md).
+- Next: see [ROADMAP.md](ROADMAP.md).
 
 ## How it fits together
 
@@ -54,7 +57,7 @@ becoming something sellers should care about — and pay for.
 flowchart LR
   B[(Base: AntSeed contracts)] -->|read in browser| L[lants.eth board]
   M[VexyMarketplace fork — USDC only] -->|atomic buy| L
-  S[Sellers] -->|perks for their pool| P[perks board]
+  S[Sellers] -->|USDC offers for their pool| P[Incentives tab]
   P --> L
   L -->|where weight is worth more| H[lANTS holders]
   H -->|moveStake / list| B
@@ -114,6 +117,7 @@ for hours). Filebase secrets live only in CI.
 | File | What is inside |
 |---|---|
 | [ROADMAP.md](ROADMAP.md) | Build-in-public roadmap, milestones, build log, metrics |
+| [docs/incentives.md](docs/incentives.md) | Incentives: the yield model, offer fields, payout rules, trust model |
 | [docs/protocol-notes.md](docs/protocol-notes.md) | How lANTS works: contracts, weights, penalties, rewards |
 | [docs/network-snapshot-2026-09-17.md](docs/network-snapshot-2026-09-17.md) | Every number we rely on, with the command that produced it |
 | [docs/market-research.md](docs/market-research.md) | What Vexy (veAERO market) teaches us, Seaport, OpenSea, the community landscape |

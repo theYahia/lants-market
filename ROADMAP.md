@@ -199,7 +199,9 @@ Most concrete first. Nothing here is decided before 22.10.
 rate per 1,000 ANTS with a cap, either to every staker pro rata (like Votium / Aerodrome) or to new stakes only. The board
 ranks every pool by what 1,000 ANTS at max lock would earn next epoch after dilution, using the protocol's own split
 (pool share grows with pool weight). First offer is ours: 1 USDC per 1,000 ANTS for new stakes in Open Forge, epoch 25,
-up to 10 USDC. lANTS Market is also listed on antseed.com/ecosystem.
+up to 10 USDC. lANTS Market is also listed on antseed.com/ecosystem. Later that evening: seller names from
+antseedstats.com, sortable columns, a live countdown, and an address for every view (#market, #listings, #portfolio,
+#incentives). How it works: [docs/incentives.md](docs/incentives.md).
 
 **27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
 transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a
