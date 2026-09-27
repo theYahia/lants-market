@@ -631,7 +631,10 @@ export async function renderMyListingsPanel() {
   );
 
   if (!mine.length) {
-    panel.textContent = 'no listings for this wallet';
+    const empty = document.createElement('div');
+    empty.className = 'pf-empty';
+    empty.textContent = 'No listings yet.';
+    panel.appendChild(empty);
     return;
   }
 
