@@ -41,7 +41,7 @@ becoming something sellers should care about — and pay for.
 | Manages positions from the site: stake a buyer reward, split, move, enable max-lock | Charge more than a fixed 1% fee on a completed purchase |
 | My Portfolio: your positions (List / Manage) and your listings | Duplicate pool analytics — [antseed-zh](https://antseed-zh.com) already does that well |
 | Cross-checks every snapshot number on two RPCs at one block | Hold incentive money — the payer named on each offer pays after the epoch ([how](docs/incentives.md)) |
-| **Incentives** (Votium for AntSeed): pools ranked by what 1,000 ANTS earn next epoch, seller offers in USDC, a payout calculator | Guarantee an estimate — it assumes this epoch's sales shares hold and no one else joins the pool |
+| **Incentives** (Votium for AntSeed): pools ranked by what they paid stakers in completed epochs, new and thin pools tagged, seller offers in USDC, a payout calculator | Guarantee an estimate — it assumes this epoch's sales shares hold and no one else joins the pool |
 
 ## Status (27.09.2026)
 

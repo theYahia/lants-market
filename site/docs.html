@@ -150,7 +150,7 @@
 <li>Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.</li>
 <li>See your positions and your listings in My Portfolio.</li>
 <li>Claim a position's staker reward to your wallet, or restake it as a new position, with one click.</li>
-<li>On the Incentives tab: see which pools would pay most for 1,000 ANTS next epoch, and sellers' USDC offers for weight in their pool.</li>
+<li>On the Incentives tab: see what each pool paid its stakers in completed epochs, what 1,000 ANTS would earn next epoch as a what-if, and sellers' USDC offers for weight in their pool.</li>
 </ul>
 <p>A 1% fee is taken from each sale and sent to the fee recipient.</p>
 <h2>What does not exist yet</h2>
@@ -300,7 +300,7 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <section id="incentives">
 <h1>Incentives</h1>
 <p>Stake in a seller pool works like a vote: it multiplies rewards for that seller's buyers. The Incentives tab lets sellers pay stakers for that weight, the way protocols pay voters on Votium and Aerodrome.</p>
-<p><strong>The board.</strong> Every pool, ranked by what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution. It takes this epoch's staker budget and each pool's share of it, and assumes both hold and that no one else joins the pool. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply. Click any column header to sort. Seller names come from <code>antseedstats.com/sellers</code>.</p>
+<p><strong>The board.</strong> Every pool, ranked by what it paid its stakers in completed epochs: a new stake only counts from the next epoch, so history says more than this week's volume. Tags: <code>new</code> — paid nothing yet; <code>thin</code> — under 100 ANTS staked. Next to it, a what-if: what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution. It takes this epoch's staker budget and each pool's share of it, and assumes both hold and that no one else joins the pool. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply. Click any column header to sort. Seller names come from <code>antseedstats.com/sellers</code>.</p>
 <p><strong>Offers.</strong> An offer pays a fixed USDC amount per 1,000 ANTS at max lock (weight ÷ 104) in one pool for one epoch, up to a cap. <code>pays: all</code> — every position in the pool, pro rata when over the cap. <code>pays: new</code> — only positions staked for that epoch, in the order they were created, until the cap is used.</p>
 <p><strong>Payout.</strong> USDC on Base to the position owner within 7 days after the epoch ends, from the last published snapshot of that epoch. No contract holds the money: the payer is named on the offer.</p>
 <p><strong>Post an offer.</strong> The "Post an offer on GitHub" button opens an issue with the fields pre-filled; once checked, the offer is added to <code>site/offers.json</code> and appears on the tab.</p>

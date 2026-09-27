@@ -8,7 +8,13 @@ contract in v1: offers are public JSON, payouts are computed from on-chain weigh
 
 ## The board
 
-Pools ranked by what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution.
+Pools ranked by what each one paid its stakers in completed epochs since M001 (epoch 22):
+`stakerEpochBudget(h) × weightedPoolPointsByEpoch(h, pool) / totalWeightedPoolPointsByEpoch(h)`, as the rewards
+contract computes it. A new stake only counts from the next epoch, so history says more than this week's volume.
+Tags: `new` — paid nothing in completed epochs; `thin` — under 100 ANTS staked next epoch (little trust from the
+network yet). Per unit of weight, epochs 22–23 are not comparable: every pool held only its starter stake (weight ≈ 104).
+
+Next to it, a what-if: what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution.
 Click any column header to sort.
 
 For the current epoch `e` and the next epoch `N = e + 1`, per pool `p` (all sums over the pool's positions):

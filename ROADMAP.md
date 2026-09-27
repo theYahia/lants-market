@@ -42,7 +42,7 @@ market layer (phase 4) does not start.
 | 26.09 | Implied MC / FDV on every lot and sale (feedback from the AntSeed chat); lots load in parallel (~1 s); clearer manage flow: next-step hints, plain-word errors, Split/Move disabled on max-locked positions | 3 | ✅ |
 | 27.09 | Claim and Restake buttons for staker rewards; portfolio polish (empty states, Staker Rewards tile, Est. reward column, snapshot caption) | 3 | ✅ |
 | 27.09 | Listed on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 3 | ✅ |
-| 27.09 | Incentives tab (Votium for AntSeed): pools ranked by next-epoch yield, seller names, sortable columns, USDC offers with a payout rule, calculator; an address for every view ([docs](docs/incentives.md)) | 3 | ✅ |
+| 27.09 | Incentives tab (Votium for AntSeed): pools ranked by what they paid stakers in completed epochs, seller names, sortable columns, USDC offers with a payout rule, calculator; an address for every view ([docs](docs/incentives.md)) | 3 | ✅ |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
 | every Thu | Epoch recap (08.10, 15.10, …) | build in public | 🔜 |
@@ -62,8 +62,8 @@ market layer (phase 4) does not start.
 - **Portfolio** — your positions with List / Manage buttons, and your listings; manage actions (stake a
   buyer reward, split, move, max-lock), Claim / Restake for staker rewards, and a Sales panel with each
   sale's implied FDV.
-- **Incentives** — every seller pool ranked by what 1,000 ANTS at max lock would earn next epoch after
-  dilution; sellers' USDC offers for weight in their pool, paid by the named payer after the epoch;
+- **Incentives** — every seller pool ranked by what it paid its stakers in completed epochs (new and thin
+  pools tagged), with what 1,000 ANTS at max lock would earn next epoch as a what-if; sellers' USDC offers for weight in their pool, paid by the named payer after the epoch;
   a calculator for your own amount. How it works: [docs/incentives.md](docs/incentives.md).
 - **Hosting** — static site on IPFS, addressed by `lants.eth` (via ENS). Since 25.09 `lants.eth` points at
   each release's CID directly (one ENS transaction per release; IPNS caching lagged for hours). Live at
@@ -218,7 +218,9 @@ up to 10 USDC. lANTS Market is also listed on antseed.com/ecosystem. Later that 
 antseedstats.com, sortable columns, a live countdown, and an address for every view (#market, #listings, #portfolio,
 #incentives). How it works: [docs/incentives.md](docs/incentives.md). After a review in the AntSeed chat (the model
 holds under the live linear weight policy, `poolWeightPolicy() = 0x0`), the estimate now takes next epoch's staker
-budget straight from the rewards contract (`stakerEpochBudget(25)` = 101,600 ANTS) instead of this epoch's.
+budget straight from the rewards contract (`stakerEpochBudget(25)` = 101,600 ANTS) instead of this epoch's. Second
+point from the same review: ranking by the estimate puts thin pools on top, and if everyone follows it they stop
+being thin. The board is now ranked by what each pool paid its stakers in completed epochs, with `new` and `thin` tags.
 
 **27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
 transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a
