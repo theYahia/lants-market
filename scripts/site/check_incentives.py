@@ -180,8 +180,10 @@ def run_guard() -> int:
         "inc_mobile": 0,
         "inc_cta": 0,
         "inc_rule": 0,
+        "inc_calcui": 0,
     }
     subchecks = {key: [] for key in results}
+    calcui_failures = []
     reasons = []
 
     def record(key, name, ok):
@@ -653,7 +655,72 @@ def run_guard() -> int:
             except Exception as exc:
                 record("inc_rule", "inc_rule raised " + type(exc).__name__ + ": " + str(exc), False)
 
-            # 18. Finalize and print all keys.
+            # 18. inc_calcui: verify dark background, font-size >= 16px and
+            #     rendered height >= 40px on every input/select inside
+            #     #incentives .inc-calc. The Incentives view must be active
+            #     because earlier checks leave another view active and a
+            #     hidden element reports no size.
+            try:
+                inc_link = page.locator('a.hdr-link[href="#incentives"]')
+                if inc_link.count() > 0 and inc_link.first.is_visible():
+                    inc_link.first.click()
+                    page.wait_for_timeout(800)
+                else:
+                    # ensure #incentives is visible anyway (set location hash)
+                    page.goto(f"http://127.0.0.1:{site_port}/index.html?r=calcui#incentives")
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(800)
+
+                fields = page.locator('#incentives .inc-calc input, #incentives .inc-calc select').all()
+                print(f"inc_calcui_fields={len(fields)}")
+
+                ok = True
+                for field in fields:
+                    tag_name = field.evaluate("el => el.tagName.toLowerCase()")
+                    field_id = field.evaluate("el => el.id || el.name || ''")
+                    if not field_id:
+                        field_id = tag_name
+
+                    bg = field.evaluate("el => getComputedStyle(el).backgroundColor")
+                    fs = field.evaluate("el => getComputedStyle(el).fontSize")
+                    box = field.bounding_box()
+
+                    bg_ok = bg.lower() != "rgb(255, 255, 255)"
+                    fs_px = 0.0
+                    try:
+                        fs_px = float(fs.replace("px", ""))
+                    except ValueError:
+                        fs_px = 0.0
+                    fs_ok = fs_px >= 16
+
+                    height_ok = box is not None and box["height"] >= 40
+
+                    if not bg_ok:
+                        ok = False
+                        calcui_failures.append(f"#{field_id}.background-color={bg}")
+                    if not fs_ok:
+                        ok = False
+                        calcui_failures.append(f"#{field_id}.font-size={fs}")
+                    if not height_ok:
+                        ok = False
+                        calcui_failures.append(f"#{field_id}.height={box['height'] if box else 'hidden'}")
+
+                if ok and len(fields) > 0:
+                    results["inc_calcui"] = 1
+                    subchecks["inc_calcui"].append(True)
+                else:
+                    results["inc_calcui"] = 0
+                    subchecks["inc_calcui"].append(False)
+                    if len(fields) == 0:
+                        reasons.append("missing: no fields found under #incentives .inc-calc")
+                    for fail in calcui_failures:
+                        reasons.append("missing: dark styles on #incentives .inc-calc fields — " + fail)
+            except Exception as exc:
+                results["inc_calcui"] = 0
+                subchecks["inc_calcui"].append(False)
+                reasons.append("missing: dark styles on #incentives .inc-calc fields — " + type(exc).__name__ + ": " + str(exc))
+
+            # 19. Finalize and print all keys with honest aggregation.
             finalize_results()
             for key in sorted(results.keys()):
                 print(f"{key}={results[key]}")
