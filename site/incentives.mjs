@@ -160,19 +160,50 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
   const poolSelect = document.createElement('select');
 
   const e = Number(mode.epoch);
-  const nextEpoch = String(e + 1);
+  const N = e + 1;
+  const nextEpoch = String(N);
   const positions = snapshot.positions || [];
-  const poolReward = new Map();
-  const poolOrder = [];
+
+  // Aggregate position data per pool: R, We, WN
+  const poolData = new Map();
   for (const pos of positions) {
     const pool = String(pos.agentId);
-    const reward = BigInt(pos.rewardByEpoch?.[String(e)] || 0);
-    if (!poolReward.has(pool)) {
-      poolReward.set(pool, 0n);
-      poolOrder.push(pool);
+    const reward = Number(pos.rewardByEpoch?.[String(e)] || 0) / 1e18;
+    const we = Number(pos.weightsByEpoch?.[String(e)] || 0) / 1e18;
+    const wn = Number(pos.weightsByEpoch?.[nextEpoch] || 0) / 1e18;
+    if (!poolData.has(pool)) {
+      poolData.set(pool, { R: 0, We: 0, WN: 0 });
     }
-    poolReward.set(pool, poolReward.get(pool) + reward);
+    const data = poolData.get(pool);
+    data.R += reward;
+    data.We += we;
+    data.WN += wn;
   }
+
+  const poolOrder = [...poolData.keys()];
+
+  // Compute k, B, S
+  let B = 0;
+  for (const data of poolData.values()) {
+    B += data.R;
+  }
+  const kMap = new Map();
+  for (const [pool, data] of poolData.entries()) {
+    kMap.set(pool, data.We > 0 ? data.R / data.We : 0);
+  }
+  let S = 0;
+  for (const [pool, data] of poolData.entries()) {
+    S += kMap.get(pool) * data.WN;
+  }
+
+  // Compute est for a pool with given v
+  const estForPool = (pool, v) => {
+    const data = poolData.get(pool);
+    if (!data) return 0;
+    const k = kMap.get(pool) || 0;
+    if (k === 0 || S === 0) return 0;
+    return B * v * k / (S + k * v);
+  };
 
   const defaultPool = '52894';
   if (!poolOrder.includes(defaultPool) && defaultPool) {
@@ -220,15 +251,13 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
       return;
     }
     const poolWeights = snapshot.poolWeightByEpoch?.[pool];
-    const wNext = BigInt(poolWeights?.[nextEpoch] || 0);
-    const rE = poolReward.get(pool) || 0n;
-    if (wNext === 0n) {
+    const wNext = poolData.get(pool)?.WN || 0;
+    if (wNext === 0) {
       output.textContent = 'This pool is not counted next epoch.';
       return;
     }
-    const vWei = BigInt(Y) * 104n * 10n ** 18n;
-    const estWei = rE * vWei / (wNext + vWei);
-    const estAnts = Number(estWei) / 1e18;
+    const v = Y * 104;
+    const estAnts = estForPool(pool, v);
 
     let usdc = '—';
     if (offers) {
@@ -256,11 +285,40 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
 
 function buildBoard(snapshot, mode, offers, displayEpoch) {
   const e = Number(mode.epoch);
-  const nextEpoch = String(e + 1);
-  const vWei = BigInt(1000 * 104) * 10n ** 18n;
+  const N = e + 1;
+  const nextEpoch = String(N);
   const positions = snapshot.positions || [];
   const salesByPool = snapshot.salesByPool || {};
-  const poolWeightByEpoch = snapshot.poolWeightByEpoch || {};
+
+  // Aggregate position data per pool: R, We, WN
+  const poolData = new Map();
+  for (const pos of positions) {
+    const pool = String(pos.agentId);
+    const reward = Number(pos.rewardByEpoch?.[String(e)] || 0) / 1e18;
+    const we = Number(pos.weightsByEpoch?.[String(e)] || 0) / 1e18;
+    const wn = Number(pos.weightsByEpoch?.[nextEpoch] || 0) / 1e18;
+    if (!poolData.has(pool)) {
+      poolData.set(pool, { R: 0, We: 0, WN: 0 });
+    }
+    const data = poolData.get(pool);
+    data.R += reward;
+    data.We += we;
+    data.WN += wn;
+  }
+
+  // Compute k, B, S
+  let B = 0;
+  for (const data of poolData.values()) {
+    B += data.R;
+  }
+  const kMap = new Map();
+  for (const [pool, data] of poolData.entries()) {
+    kMap.set(pool, data.We > 0 ? data.R / data.We : 0);
+  }
+  let S = 0;
+  for (const [pool, data] of poolData.entries()) {
+    S += kMap.get(pool) * data.WN;
+  }
 
   // Best offer per pool: highest usdcPer1k among valid offers.
   const bestOfferByPool = new Map();
@@ -275,45 +333,38 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
     }
   }
 
-  // Aggregate rewards and register pools in order of first appearance
-  const poolReward = new Map();
-  const poolOrder = [];
-  for (const pos of positions) {
-    const pool = String(pos.agentId);
-    const reward = BigInt(pos.rewardByEpoch?.[String(e)] || 0);
-    if (!poolReward.has(pool)) {
-      poolReward.set(pool, 0n);
-      poolOrder.push(pool);
-    }
-    poolReward.set(pool, poolReward.get(pool) + reward);
-  }
+  // Compute est for a pool with given v
+  const estForPool = (pool, v) => {
+    const data = poolData.get(pool);
+    if (!data) return 0;
+    const k = kMap.get(pool) || 0;
+    if (k === 0 || S === 0) return 0;
+    return B * v * k / (S + k * v);
+  };
 
   const ranked = [];
   const unranked = [];
-  for (const pool of poolOrder) {
-    const wNext = BigInt(poolWeightByEpoch?.[pool]?.[nextEpoch] || 0);
-    if (wNext === 0n) {
+  for (const [pool, data] of poolData.entries()) {
+    if (data.WN > 0) {
+      const v = 1000 * 104;
+      const est = estForPool(pool, v);
+      ranked.push({ pool, est, WN: data.WN });
+    } else {
       unranked.push(pool);
-      continue;
     }
-    const rE = poolReward.get(pool);
-    const estWei = rE * vWei / (wNext + vWei);
-    ranked.push({ pool, estWei, wNext, rE });
   }
 
-  // Sort strictly by estWei descending using BigInt comparison;
-  // stable for identical estWei (preserve poolOrder).
+  // Sort by est descending, stable by insertion order
   const rankedWithIndex = ranked.map((item, idx) => ({ ...item, idx }));
   rankedWithIndex.sort((a, b) => {
-    if (a.estWei > b.estWei) return -1;
-    if (a.estWei < b.estWei) return 1;
+    if (a.est > b.est) return -1;
+    if (a.est < b.est) return 1;
     return a.idx - b.idx;
   });
 
   const isLive = mode.mode === 'live';
-  const stakedAmount = (wNext) => {
-    const ants = Number(wNext) / 1e18 / 104;
-    return ants.toFixed(2);
+  const stakedAmount = (WN) => {
+    return (WN / 104).toFixed(2);
   };
   const salesText = (pool) => {
     const val = salesByPool[pool];
@@ -322,18 +373,18 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
   };
 
   const rows = [];
-  for (const { pool, estWei, wNext } of rankedWithIndex) {
+  for (const { pool, est, WN } of rankedWithIndex) {
     const tr = document.createElement('tr');
     tr.className = 'board-row';
     const tdPool = document.createElement('td');
     tdPool.textContent = pool;
     const tdStaked = document.createElement('td');
-    tdStaked.textContent = stakedAmount(wNext);
+    tdStaked.textContent = stakedAmount(WN);
     const tdSales = document.createElement('td');
     tdSales.textContent = salesText(pool);
     const tdEst = document.createElement('td');
     if (isLive) {
-      tdEst.textContent = (Number(estWei) / 1e18).toFixed(2);
+      tdEst.textContent = est.toFixed(2);
     } else {
       tdEst.textContent = 'est. after the first purchases this epoch';
     }
@@ -354,12 +405,11 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
     const tdPool = document.createElement('td');
     tdPool.textContent = pool;
     const tdStaked = document.createElement('td');
-    const wNext = BigInt(poolWeightByEpoch?.[pool]?.[nextEpoch] || 0);
-    tdStaked.textContent = wNext === 0n ? '0.00' : stakedAmount(wNext);
+    tdStaked.textContent = '0.00';
     const tdSales = document.createElement('td');
     tdSales.textContent = salesText(pool);
     const tdEst = document.createElement('td');
-    tdEst.textContent = 'not counted next epoch';
+    tdEst.textContent = isLive ? 'no stake next epoch' : 'est. after the first purchases this epoch';
     const tdOffer = document.createElement('td');
     const best = bestOfferByPool.get(pool);
     tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
