@@ -918,3 +918,4 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
   font-size:var(--fs-15);
   color-scheme:dark;
 }
+.inc-pool-id{color:var(--muted);font-size:.85em;margin-left:6px}

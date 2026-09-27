@@ -32,6 +32,15 @@ async function loadOffers() {
   return data;
 }
 
+async function loadPoolNames() {
+  const data = await loadJSON([
+    'https://raw.githubusercontent.com/theYahia/lants-market/main/site/pool-names.json',
+    './pool-names.json'
+  ]);
+  if (!data || typeof data !== 'object') return {};
+  return data;
+}
+
 function isValidOffer(offer, displayEpoch) {
   if (!offer || typeof offer !== 'object') return false;
   if (typeof offer.pool !== 'string' || !/^\d+$/.test(offer.pool)) return false;
@@ -49,9 +58,11 @@ function isValidOffer(offer, displayEpoch) {
   return true;
 }
 
-function offerLine(offer, displayEpoch) {
+function offerLine(offer, displayEpoch, poolNames) {
   const usdc = offer.capAnts / 1000 * offer.usdcPer1k;
-  let line = `${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · Pool ${offer.pool} · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
+  const name = poolNames[offer.pool];
+  const prefix = name ? `${name} (${offer.pool})` : `Pool ${offer.pool}`;
+  let line = `${prefix} · ${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
   if (offer.pays === 'new') {
     line += ' · new stakes only';
   } else if (offer.pays === 'all') {
@@ -61,19 +72,19 @@ function offerLine(offer, displayEpoch) {
   return line;
 }
 
-function buildOfferRows(offers, displayEpoch) {
+function buildOfferRows(offers, displayEpoch, poolNames) {
   const rows = [];
   if (offers) {
     for (const offer of offers) {
       if (isValidOffer(offer, displayEpoch)) {
-        rows.push(offerLine(offer, displayEpoch));
+        rows.push(offerLine(offer, displayEpoch, poolNames));
       }
     }
   }
   return rows;
 }
 
-function buildOfferSection(offers, displayEpoch) {
+function buildOfferSection(offers, displayEpoch, poolNames) {
   const div = document.createElement('div');
   div.className = 'inc-offers';
 
@@ -113,7 +124,7 @@ function buildOfferSection(offers, displayEpoch) {
     li.textContent = 'Offers unavailable';
     ul.appendChild(li);
   } else {
-    const validRows = buildOfferRows(offers, displayEpoch);
+    const validRows = buildOfferRows(offers, displayEpoch, poolNames);
     if (validRows.length === 0) {
       const li = document.createElement('li');
       li.textContent = `No offers for epoch ${displayEpoch} yet — be the first.`;
@@ -155,7 +166,7 @@ function formatUtc(date) {
   return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
 }
 
-function buildCalculator(snapshot, mode, offers, displayEpoch) {
+function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   const container = document.createElement('div');
   container.className = 'inc-calc';
 
@@ -222,7 +233,8 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
   for (const pool of poolOrder) {
     const option = document.createElement('option');
     option.value = pool;
-    option.textContent = pool;
+    const name = poolNames[pool];
+    option.textContent = name ? `${name} · ${pool}` : pool;
     if (pool === defaultPool) option.selected = true;
     poolSelect.appendChild(option);
   }
@@ -303,7 +315,7 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
   return container;
 }
 
-function buildBoard(snapshot, mode, offers, displayEpoch) {
+function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   const e = Number(mode.epoch);
   const N = e + 1;
   const nextEpoch = String(N);
@@ -396,8 +408,18 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
   for (const { pool, est, WN } of rankedWithIndex) {
     const tr = document.createElement('tr');
     tr.className = 'board-row';
+    tr.dataset.pool = pool;
     const tdPool = document.createElement('td');
-    tdPool.textContent = pool;
+    const name = poolNames[pool];
+    if (name) {
+      tdPool.textContent = name;
+      const idSpan = document.createElement('span');
+      idSpan.className = 'inc-pool-id';
+      idSpan.textContent = pool;
+      tdPool.appendChild(idSpan);
+    } else {
+      tdPool.textContent = pool;
+    }
     const tdStaked = document.createElement('td');
     tdStaked.textContent = stakedAmount(WN);
     const tdSales = document.createElement('td');
@@ -422,8 +444,18 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
   for (const pool of unranked) {
     const tr = document.createElement('tr');
     tr.className = 'board-row';
+    tr.dataset.pool = pool;
     const tdPool = document.createElement('td');
-    tdPool.textContent = pool;
+    const name = poolNames[pool];
+    if (name) {
+      tdPool.textContent = name;
+      const idSpan = document.createElement('span');
+      idSpan.className = 'inc-pool-id';
+      idSpan.textContent = pool;
+      tdPool.appendChild(idSpan);
+    } else {
+      tdPool.textContent = pool;
+    }
     const tdStaked = document.createElement('td');
     tdStaked.textContent = '0.00';
     const tdSales = document.createElement('td');
@@ -473,6 +505,7 @@ async function init() {
 
   try {
     const snapshot = await loadSnapshot();
+    const poolNames = await loadPoolNames();
     const mode = rewardMode(snapshot);
     const e = Number(mode.epoch);
     const N = e + 1;
@@ -495,7 +528,7 @@ async function init() {
     title.textContent = `Epoch ${N} · starts ${formatUtc(boundary)} · ${countdown}`;
     header.appendChild(title);
 
-    const board = buildBoard(snapshot, mode, offers, N);
+    const board = buildBoard(snapshot, mode, offers, N, poolNames);
 
     const note = document.createElement('p');
     note.className = 'inc-note';
@@ -505,9 +538,9 @@ async function init() {
       note.textContent = 'est. after the first purchases this epoch';
     }
 
-    const calculator = buildCalculator(snapshot, mode, offers, N);
+    const calculator = buildCalculator(snapshot, mode, offers, N, poolNames);
 
-    const offerSection = buildOfferSection(offers, N);
+    const offerSection = buildOfferSection(offers, N, poolNames);
 
     container.innerHTML = '';
     container.appendChild(header);

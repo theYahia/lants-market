@@ -12,6 +12,7 @@ const FILES = [
   ['site/render.mjs', 'dist/render.mjs'],
   ['site/incentives.mjs', 'dist/incentives.mjs'],
   ['site/offers.json', 'dist/offers.json'],
+  ['site/pool-names.json', 'dist/pool-names.json'],
   ['site/metrics.mjs', 'dist/metrics.mjs'],
   ['site/market-config.mjs', 'dist/market-config.mjs'],
   ['site/market-stats.mjs', 'dist/market-stats.mjs'],
