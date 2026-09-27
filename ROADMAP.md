@@ -216,7 +216,9 @@ ranks every pool by what 1,000 ANTS at max lock would earn next epoch after dilu
 (pool share grows with pool weight). First offer is ours: 1 USDC per 1,000 ANTS for new stakes in Open Forge, epoch 25,
 up to 10 USDC. lANTS Market is also listed on antseed.com/ecosystem. Later that evening: seller names from
 antseedstats.com, sortable columns, a live countdown, and an address for every view (#market, #listings, #portfolio,
-#incentives). How it works: [docs/incentives.md](docs/incentives.md).
+#incentives). How it works: [docs/incentives.md](docs/incentives.md). After a review in the AntSeed chat (the model
+holds under the live linear weight policy, `poolWeightPolicy() = 0x0`), the estimate now takes next epoch's staker
+budget straight from the rewards contract (`stakerEpochBudget(25)` = 101,600 ANTS) instead of this epoch's.
 
 **27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
 transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a

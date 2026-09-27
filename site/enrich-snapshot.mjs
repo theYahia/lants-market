@@ -22,6 +22,7 @@ const POOLS_ABI = parseAbi([
 
 const REWARDS_ABI = parseAbi([
   'function pendingStakerReward(uint256, uint256) view returns (uint256)',
+  'function stakerEpochBudget(uint256) view returns (uint256)',
 ])
 
 const clients = RPC_URLS.map(u => createPublicClient({ chain: base, transport: http(u), batch: { multicall: true } }))
@@ -91,6 +92,11 @@ async function main() {
   crossCheck(BigInt(rawBudget), BigInt(rawBudget2 || '0x0'), 'stakerBudget')
   const stakerBudget = String(BigInt(rawBudget))
   const stakerBudgetSource = `${STAKING_ADDRESS} 0x56ab55c5 block ${blockNumber} (2 RPCs)`
+  // Next epoch's staker budget as the rewards contract projects it now (it moves with total active stake)
+  const [nb1, nb2] = await Promise.all(clients.map(c => c.readContract({ address: REWARDS_ADDRESS, abi: REWARDS_ABI,
+    functionName: 'stakerEpochBudget', args: [BigInt(currentEpoch + 1)], blockNumber: PIN_BLOCK })))
+  crossCheck(nb1, nb2, 'stakerEpochBudget')
+  const stakerBudgetNext = String(nb1)
 
   const enrichedPositions = []
   const poolWeightByEpoch = {}
@@ -177,7 +183,9 @@ async function main() {
     poolWeightByEpoch,
     salesByPool,
     stakerBudget,
-    stakerBudgetSource
+    stakerBudgetSource,
+    stakerBudgetNext,
+    stakerBudgetNextEpoch: String(currentEpoch + 1)
   }
 
   if (rpcMismatches.length > 0) throw new Error('RPC mismatch on ' + rpcMismatches.length + ' reads, first: ' + rpcMismatches.slice(0, 5).join('; '))

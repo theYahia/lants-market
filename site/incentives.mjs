@@ -153,6 +153,12 @@ function epochBoundary(epochNum) {
   return new Date(EPOCH_BASE.getTime() + (epochNum - EPOCH_BASE_NUM) * WEEK_MS);
 }
 
+// Staker budget of epoch N as the rewards contract projects it; null for older snapshots or another epoch.
+function nextBudget(snapshot, N) {
+  if (!snapshot.stakerBudgetNext || snapshot.stakerBudgetNextEpoch !== String(N)) return null;
+  return Number(BigInt(snapshot.stakerBudgetNext)) / 1e18;
+}
+
 function formatCountdown(ms) {
   const totalMinutes = Math.max(0, Math.floor(ms / 60000));
   const days = Math.floor(totalMinutes / (24 * 60));
@@ -208,6 +214,7 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   for (const data of poolData.values()) {
     B += data.R;
   }
+  B = nextBudget(snapshot, N) ?? B;
   const kMap = new Map();
   for (const [pool, data] of poolData.entries()) {
     kMap.set(pool, data.We > 0 ? data.R / data.We : 0);
@@ -345,6 +352,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   for (const data of poolData.values()) {
     B += data.R;
   }
+  B = nextBudget(snapshot, N) ?? B;
   const kMap = new Map();
   for (const [pool, data] of poolData.entries()) {
     kMap.set(pool, data.We > 0 ? data.R / data.We : 0);
@@ -599,7 +607,9 @@ async function init() {
     const note = document.createElement('p');
     note.className = 'inc-note';
     if (mode.mode === 'live') {
-      note.textContent = 'Est. per epoch for 1,000 ANTS at max lock (weight 104,000) added to the pool, if this epoch\'s sales shares hold and no one else joins the pool.';
+      const budget = nextBudget(snapshot, N);
+      const budgetText = budget ? `, with the contract's staker budget for epoch ${N} (${Math.round(budget).toLocaleString('en-US')} ANTS)` : '';
+      note.textContent = `Est. per epoch for 1,000 ANTS at max lock (weight 104,000) added to the pool${budgetText}, if this epoch's sales shares hold and no one else joins the pool.`;
     } else {
       note.textContent = 'est. after the first purchases this epoch';
     }

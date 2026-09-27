@@ -18,13 +18,13 @@ For the current epoch `e` and the next epoch `N = e + 1`, per pool `p` (all sums
 | `R_p` | staker reward of the pool in epoch `e` (`pendingStakerReward`) |
 | `W_e,p`, `W_N,p` | pool weight in epochs `e` and `N` |
 | `k_p = R_p / W_e,p` | ANTS per unit of weight — follows the pool's share of sales |
-| `B = Σ R_p` | the staker budget of epoch `e` (100,750 ANTS in epoch 24) |
+| `B` | the staker budget of epoch `N` as the rewards contract projects it now (`stakerEpochBudget(N)`: 101,600 ANTS for epoch 25); older snapshots use `Σ R_p` of epoch `e` |
 | `S = Σ k_p · W_N,p` | the whole network's reward-weighted stake next epoch |
 
 `est_p = B · v · k_p / (S + k_p · v)`, with `v = 104,000` for 1,000 ANTS at max lock.
 
-**What it assumes:** next epoch has the same budget and each pool keeps its share of sales, and no one else changes
-their stake. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply.
+**What it assumes:** each pool keeps its share of sales, and no one else changes their stake. The budget moves with
+total active stake; one more stake barely changes it. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply.
 "Staked" is shown in ANTS at max lock (`weight / 104`). Pool names come from
 [antseedstats.com/sellers](https://antseedstats.com/sellers) (`site/pool-names.json`).
 
