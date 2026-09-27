@@ -44,6 +44,26 @@ POSITION_ID = str(fork_prep.POSITION_ID)
 # Marker for the claim button class (must match the site implementation).
 CLAIM_BTN_CLASS = "claim"
 
+# ANTS token on Base (same as scripts/site/check_restake.py).
+ANTS_TOKEN = "0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263"
+
+# Expected pending reward wei (from fork_prep recipe).
+EXPECTED_PENDING_REWARD = 28341831743556013816873
+
+
+def enc_uint(value: int) -> str:
+    """Encode uint256 as 64 hex chars (no 0x prefix)."""
+    return f"{value:064x}"
+
+
+def get_ants_balance(addr: str) -> int:
+    """Fetch balanceOf(addr) for the ANTS token via eth_call, returns wei."""
+    calldata = "0x70a08231" + enc_uint(int(addr, 16))
+    result = e2e.eth_call(ANTS_TOKEN, calldata)
+    if not result or result == "0x":
+        raise RuntimeError(f"empty eth_call result for balanceOf({addr})")
+    return int(result, 16)
+
 
 def run_guard() -> int:
     """Run the guard: prepare fork, open site, connect wallet, inspect row.
@@ -129,18 +149,53 @@ def run_guard() -> int:
             expected_str = f"{expected:.2f}"
 
             # The button must show the amount with two decimals (either in text or title).
-            if expected_str in combined:
-                # Make sure the amount is properly formatted with two decimals
-                # (we already have the exact string in the combined text)
-                print(f"claim_btn=1")
-                print(f"claim_amount={expected_str}")
-                return 0
-            else:
+            if expected_str not in combined:
                 print("claim_btn=0")
                 print(f"reason=missing: claim button amount {expected_str} not found in text or title")
                 print(f"button_text={btn_text}")
                 print(f"button_title={btn_title}")
                 return 1
+
+            print("claim_btn=1")
+            print(f"claim_amount={expected_str}")
+
+            # 11. Read pending before click and OPERATOR ANTS balance before click.
+            pending_before = fork_prep.read_pending_indexed_staker_reward()
+            balance_before = get_ants_balance(fork_prep.OPERATOR)
+
+            # 12. Click the claim button.
+            claim_btn.first.click()
+
+            # 13. Poll for the transaction to be mined by watching pending(27) become 0
+            #     (the tx itself mints/exits on the staker-rewards contract).  The mock
+            #     wallet sends the tx through the eth_sendTransaction RPC path, so the
+            #     click triggers the same underlying flow as check_restake.py's restake.
+            deadline = time.time() + 60
+            pending_after = None
+            while time.time() < deadline:
+                try:
+                    pending_after = fork_prep.read_pending_indexed_staker_reward()
+                    if pending_after == 0:
+                        break
+                except Exception:
+                    pending_after = None
+                page.wait_for_timeout(1000)
+
+            if pending_after != 0:
+                print(f"reason=missing: pending not zero after claim")
+                print("claim_ok=0")
+                return 1
+
+            # 14. Verify the OPERATOR ANTS balance grew by exactly the expected amount.
+            balance_after = get_ants_balance(fork_prep.OPERATOR)
+            diff = balance_after - balance_before
+            if diff != EXPECTED_PENDING_REWARD:
+                print(f"reason=missing: ANTS balance did not grow by expected amount")
+                print("claim_ok=0")
+                return 1
+
+            print("claim_ok=1")
+            return 0
 
     except Exception as exc:
         print("claim_btn=0")
