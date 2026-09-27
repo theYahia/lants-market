@@ -1,11 +1,6 @@
 import { rewardMode } from './metrics.mjs';
 
-async function loadSnapshot() {
-  const urls = [
-    'https://raw.githubusercontent.com/theYahia/lants-market/data/live.json',
-    'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json',
-    './fixtures/snapshot-e23.live.json'
-  ];
+async function loadJSON(urls) {
   for (const url of urls) {
     try {
       const r = await fetch(url);
@@ -14,7 +9,118 @@ async function loadSnapshot() {
       // try next URL
     }
   }
-  throw new Error('Failed to load incentive data.');
+  return null;
+}
+
+async function loadSnapshot() {
+  const urls = [
+    'https://raw.githubusercontent.com/theYahia/lants-market/data/live.json',
+    'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json',
+    './fixtures/snapshot-e23.live.json'
+  ];
+  const data = await loadJSON(urls);
+  if (!data) throw new Error('Failed to load incentive data.');
+  return data;
+}
+
+async function loadOffers() {
+  const data = await loadJSON([
+    'https://raw.githubusercontent.com/theYahia/lants-market/data/offers.json',
+    './offers.json'
+  ]);
+  if (!Array.isArray(data)) return null;
+  return data;
+}
+
+function isValidOffer(offer, displayEpoch) {
+  if (!offer || typeof offer !== 'object') return false;
+  if (typeof offer.pool !== 'string' || !/^\d+$/.test(offer.pool)) return false;
+  if (typeof offer.usdcPer1k !== 'number' || !(offer.usdcPer1k > 0)) return false;
+  if (typeof offer.capAnts !== 'number' || !(offer.capAnts > 0)) return false;
+  if (typeof offer.payer !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(offer.payer)) return false;
+  if (!Array.isArray(offer.epochs)) return false;
+  for (const ep of offer.epochs) {
+    if (typeof ep !== 'number' || !Number.isInteger(ep)) return false;
+    if (ep !== displayEpoch) return false;
+  }
+  if (offer.note !== undefined && offer.note !== null && typeof offer.note !== 'string') return false;
+  if (typeof offer.note === 'string' && offer.note.length > 140) return false;
+  return true;
+}
+
+function offerLine(offer, displayEpoch) {
+  const usdc = offer.capAnts / 1000 * offer.usdcPer1k;
+  let line = `${offer.usdcPer1k} USDC per 1,000 ANTS · Pool ${offer.pool} · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
+  if (offer.note) line += ` · ${offer.note}`;
+  return line;
+}
+
+function buildOfferRows(offers, displayEpoch) {
+  const rows = [];
+  if (offers) {
+    for (const offer of offers) {
+      if (isValidOffer(offer, displayEpoch)) {
+        rows.push(offerLine(offer, displayEpoch));
+      }
+    }
+  }
+  return rows;
+}
+
+function buildOfferSection(offers, displayEpoch) {
+  const div = document.createElement('div');
+  div.className = 'inc-offers';
+
+  const headingRow = document.createElement('div');
+  headingRow.className = 'inc-offers-head';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Offers';
+  headingRow.appendChild(h3);
+
+  const postBtn = document.createElement('a');
+  postBtn.className = 'inc-post-offer';
+  postBtn.textContent = 'Post an offer';
+  const title = `Incentive offer for pool (epoch ${displayEpoch})`;
+  const bodyLines = [
+    'Pool: ',
+    'epochs: ' + JSON.stringify([displayEpoch]),
+    'USDC per 1,000 ANTS: ',
+    'Cap: ',
+    'Payer: '
+  ];
+  const body = bodyLines.join('\n');
+  postBtn.href = 'https://github.com/theYahia/lants-market/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+  postBtn.target = '_blank';
+  postBtn.rel = 'noopener noreferrer';
+  headingRow.appendChild(postBtn);
+
+  div.appendChild(headingRow);
+
+  const ul = document.createElement('ul');
+  ul.className = 'inc-offers-list';
+
+  if (offers === null) {
+    const li = document.createElement('li');
+    li.textContent = 'Offers unavailable';
+    ul.appendChild(li);
+  } else {
+    const validRows = buildOfferRows(offers, displayEpoch);
+    if (validRows.length === 0) {
+      const li = document.createElement('li');
+      li.textContent = `No offers for epoch ${displayEpoch} yet — be the first.`;
+      ul.appendChild(li);
+    } else {
+      for (const row of validRows) {
+        const li = document.createElement('li');
+        li.textContent = row;
+        ul.appendChild(li);
+      }
+    }
+  }
+
+  div.appendChild(ul);
+  return div;
 }
 
 // Epoch boundary base: epoch 25 starts 2026-10-01T09:54:21Z, each next +7 days.
@@ -41,13 +147,26 @@ function formatUtc(date) {
   return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
 }
 
-function buildBoard(snapshot, mode) {
+function buildBoard(snapshot, mode, offers, displayEpoch) {
   const e = Number(mode.epoch);
   const nextEpoch = String(e + 1);
   const vWei = BigInt(1000 * 104) * 10n ** 18n;
   const positions = snapshot.positions || [];
   const salesByPool = snapshot.salesByPool || {};
   const poolWeightByEpoch = snapshot.poolWeightByEpoch || {};
+
+  // Best offer per pool: highest usdcPer1k among valid offers.
+  const bestOfferByPool = new Map();
+  if (offers) {
+    for (const offer of offers) {
+      if (!isValidOffer(offer, displayEpoch)) continue;
+      const pool = offer.pool;
+      const prev = bestOfferByPool.get(pool);
+      if (!prev || offer.usdcPer1k > prev) {
+        bestOfferByPool.set(pool, offer.usdcPer1k);
+      }
+    }
+  }
 
   // Aggregate rewards and register pools in order of first appearance
   const poolReward = new Map();
@@ -111,10 +230,14 @@ function buildBoard(snapshot, mode) {
     } else {
       tdEst.textContent = 'est. after the first purchases this epoch';
     }
+    const tdOffer = document.createElement('td');
+    const best = bestOfferByPool.get(pool);
+    tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
     tr.appendChild(tdPool);
     tr.appendChild(tdStaked);
     tr.appendChild(tdSales);
     tr.appendChild(tdEst);
+    tr.appendChild(tdOffer);
     rows.push(tr);
   }
 
@@ -130,10 +253,14 @@ function buildBoard(snapshot, mode) {
     tdSales.textContent = salesText(pool);
     const tdEst = document.createElement('td');
     tdEst.textContent = 'not counted next epoch';
+    const tdOffer = document.createElement('td');
+    const best = bestOfferByPool.get(pool);
+    tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
     tr.appendChild(tdPool);
     tr.appendChild(tdStaked);
     tr.appendChild(tdSales);
     tr.appendChild(tdEst);
+    tr.appendChild(tdOffer);
     rows.push(tr);
   }
 
@@ -145,7 +272,8 @@ function buildBoard(snapshot, mode) {
     'Pool',
     'Staked (ANTS, max-lock eq.)',
     'Sales, lifetime (USDC)',
-    'Est. ANTS for 1,000 staked'
+    'Est. ANTS for 1,000 staked',
+    'Offer'
   ];
   for (const h of headings) {
     const th = document.createElement('th');
@@ -176,6 +304,13 @@ async function init() {
     const countdownMs = boundary.getTime() - now.getTime();
     const countdown = formatCountdown(countdownMs);
 
+    let offers = null;
+    try {
+      offers = await loadOffers();
+    } catch {
+      offers = null;
+    }
+
     const header = document.createElement('div');
     header.className = 'inc-header';
     header.innerHTML = '';
@@ -183,7 +318,7 @@ async function init() {
     title.textContent = `Epoch ${N} · starts ${formatUtc(boundary)} · ${countdown}`;
     header.appendChild(title);
 
-    const board = buildBoard(snapshot, mode);
+    const board = buildBoard(snapshot, mode, offers, N);
 
     const note = document.createElement('p');
     note.className = 'inc-note';
@@ -193,10 +328,13 @@ async function init() {
       note.textContent = 'est. after the first purchases this epoch';
     }
 
+    const offerSection = buildOfferSection(offers, N);
+
     container.innerHTML = '';
     container.appendChild(header);
     container.appendChild(board);
     container.appendChild(note);
+    container.appendChild(offerSection);
   } catch (err) {
     container.innerHTML = '<p>Failed to load incentive data.</p>';
   }
