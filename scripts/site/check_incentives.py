@@ -182,6 +182,7 @@ def run_guard() -> int:
         "inc_cta": 0,
         "inc_rule": 0,
         "inc_calcui": 0,
+        "inc_names": 0,
     }
     subchecks = {key: [] for key in results}
     calcui_failures = []
@@ -263,6 +264,14 @@ def run_guard() -> int:
                         body=json.dumps(offers).encode(),
                     )
                     return
+                # Pool names: return the test mapping.
+                if url.startswith("https://raw.githubusercontent.com/theYahia/lants-market/main/site/pool-names.json"):
+                    route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body=json.dumps({"59969": "Test Deep", "52894": "Test Apex"}).encode(),
+                    )
+                    return
                 route.continue_()
 
             # Track HTTP 4xx responses for inc_clean.
@@ -321,7 +330,7 @@ def run_guard() -> int:
                     for row in board_rows:
                         cells = row.locator("td").all()
                         if len(cells) >= 2:
-                            pool = cells[0].inner_text().strip()
+                            pool = (row.get_attribute("data-pool") or "").strip()
                             # Column 2 is staked; column 4 is est. ANTS for 1,000 staked.
                             if len(cells) >= 5:
                                 est = cells[3].inner_text().strip()
@@ -457,6 +466,55 @@ def run_guard() -> int:
                     record("inc_calc", "missing: calc values note", got_2000 and got_20000)
             except Exception as exc:
                 record("inc_calc", "calc note raised " + type(exc).__name__ + ": " + str(exc), False)
+
+            # 11b. inc_names: with the routed pool names, verify the board,
+            #      calculator select and first offer line show the test names.
+            try:
+                failures = []
+
+                pool_59969 = page.locator('#incentives .board-row[data-pool="59969"] td').first
+                if pool_59969.count() == 0:
+                    failures.append("missing: row for pool 59969")
+                else:
+                    pool_59969_text = pool_59969.inner_text()
+                    if "Test Deep" not in pool_59969_text or "59969" not in pool_59969_text:
+                        failures.append("missing: pool 59969 cell text contains Test Deep and 59969")
+
+                pool_86897 = page.locator('#incentives .board-row[data-pool="86897"] td').first
+                if pool_86897.count() == 0:
+                    failures.append("missing: row for pool 86897")
+                else:
+                    pool_86897_text = pool_86897.inner_text().strip()
+                    if pool_86897_text != "86897":
+                        failures.append("missing: pool 86897 cell text equals 86897")
+
+                option_52894 = page.locator('#incentives .inc-calc select option[value="52894"]')
+                if option_52894.count() == 0:
+                    failures.append("missing: option value=52894 in calc select")
+                else:
+                    option_text = option_52894.first.inner_text()
+                    if "Test Apex" not in option_text:
+                        failures.append("missing: calc option 52894 contains Test Apex")
+
+                first_offer_li = page.locator("#incentives .inc-offers-list li").first
+                if first_offer_li.count() == 0:
+                    failures.append("missing: first offer line in offers list")
+                else:
+                    first_offer_text = first_offer_li.inner_text()
+                    if not first_offer_text.startswith("Test Apex"):
+                        failures.append("missing: first offer line starts with Test Apex")
+
+                if not failures:
+                    results["inc_names"] = 1
+                    subchecks["inc_names"].append(True)
+                else:
+                    results["inc_names"] = 0
+                    subchecks["inc_names"].append(False)
+                    reasons.extend(failures)
+            except Exception as exc:
+                results["inc_names"] = 0
+                subchecks["inc_names"].append(False)
+                reasons.append("missing: inc_names raised " + type(exc).__name__ + ": " + str(exc))
 
             # 12. inc_nav: click a.hdr-link[href='#tabs'] -> hide incentives and
             #     portfolio; click brand -> hide incentives; click portfolio link
@@ -814,6 +872,7 @@ def run_guard() -> int:
         print("inc_nav=0")
         print("inc_units=0")
         print("inc_clean=0")
+        print("inc_names=0")
         print("inc_mobile=0")
         print("inc_mobhead=0")
         print("inc_cta=0")
