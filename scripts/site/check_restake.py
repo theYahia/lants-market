@@ -167,6 +167,29 @@ def run():
 
             print("restake_ok=1")
 
+            # Final check: the portfolio table must refresh live after the restake,
+            # showing the new position id 110 without a full page reload.
+            new_row = None
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                rows = page.query_selector_all("#pf-positions .pf-pos-row")
+                for r in rows:
+                    d = r.get_attribute("data-id")
+                    if d == "110":
+                        new_row = r
+                        break
+                if new_row:
+                    break
+                page.wait_for_timeout(500)
+
+            if not new_row:
+                reason = "missing: position 110 row after restake"
+                print(f"reason={reason}")
+                print("restake_refresh=0")
+                return
+
+            print("restake_refresh=1")
+
     except Exception as e:
         cls = e.__class__.__name__
         msg = str(e)
