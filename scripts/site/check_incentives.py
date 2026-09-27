@@ -544,6 +544,9 @@ def run_guard() -> int:
             # 16. inc_cta: 'Post an offer' link computed color is not
             #     rgb(0, 0, 238) and height >= 40 px.
             try:
+                # the nav checks above leave another view open; a hidden link has no box
+                page.locator('a.hdr-link[href="#incentives"]').click()
+                page.wait_for_timeout(500)
                 post_link = page.locator("#incentives a.inc-post-offer, #incentives a:has-text('Post an offer')")
                 if post_link.count() == 0:
                     record("inc_cta", "missing: post offer cta link", False)
