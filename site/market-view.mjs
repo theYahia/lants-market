@@ -1345,7 +1345,7 @@ export async function renderMyPositions(account, ids, snapshot) {
   }
 
   if (rows.length > 0) {
-    container.appendChild(head);
+    container.insertBefore(head, container.firstChild);
   }
 
   if (rows.length === 0) {
