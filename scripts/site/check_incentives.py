@@ -61,8 +61,10 @@ LIVE_URLS = [
 DEFAULT_OFFERS = [
     {
         "pool": "52894",
+        "epochs": [25],
         "usdcPer1k": 5,
         "capAnts": 10000,
+        "payer": "0x0000000000000000000000000000000000000001",
         "note": "",
     }
 ]
@@ -393,8 +395,10 @@ def run_guard() -> int:
             offers = [
                 {
                     "pool": "52894",
+                    "epochs": [25],
                     "usdcPer1k": 5,
                     "capAnts": 10000,
+                    "payer": "0x0000000000000000000000000000000000000001",
                     "note": "<b>x</b>",
                 }
             ]
