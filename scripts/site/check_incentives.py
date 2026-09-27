@@ -186,6 +186,7 @@ def run_guard() -> int:
         "inc_sort": 0,
         "inc_copy": 0,
         "inc_layout": 0,
+        "inc_tips": 0,
     }
     subchecks = {key: [] for key in results}
     calcui_failures = []
@@ -1062,6 +1063,45 @@ def run_guard() -> int:
             except Exception as exc:
                 snapshot_body[0] = FIXTURE.read_bytes()
                 record("inc_layout", "layout raised " + type(exc).__name__ + ": " + str(exc), False)
+
+            # 20f. inc_tips: heading tips explain the columns; the estimate reads as the headline number.
+            #      Seller tip names 'staked', 'new' and 'thin'; estimate tip names this epoch's sales and the budget
+            #      with a thousands separator; the estimate cell of 52894 is a whole number with separators, bold.
+            try:
+                tips_fail = []
+                budgeted = json.loads(FIXTURE.read_bytes())
+                budgeted["stakerBudgetNext"] = str(101600 * 10**18)
+                budgeted["stakerBudgetNextEpoch"] = "25"
+                snapshot_body[0] = json.dumps(budgeted).encode()
+                page.goto(f"http://127.0.0.1:{site_port}/index.html?r=tips#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                tip_texts = page.eval_on_selector_all(
+                    "#incentives .inc-board-table thead th .info", "e => e.map(x => (x.dataset.tip || '').toLowerCase())")
+                if len(tip_texts) != 4:
+                    tips_fail.append(f"{len(tip_texts)} heading tips, want 4")
+                else:
+                    for word in ("staked", "new", "thin"):
+                        if word not in tip_texts[0]:
+                            tips_fail.append(f"Seller tip lacks '{word}'")
+                    if "this epoch's sales" not in tip_texts[1]:
+                        tips_fail.append("estimate tip lacks \"this epoch's sales\"")
+                    if "101,600 ants" not in tip_texts[1]:
+                        tips_fail.append("estimate tip lacks the budget as '101,600 ANTS'")
+                    if "newest first" not in tip_texts[2]:
+                        tips_fail.append("Paid tip lacks 'newest first'")
+                est_cell = page.locator('#incentives .board-row[data-pool="52894"] td').nth(1)
+                est_text = est_cell.inner_text().strip() if est_cell.count() else ""
+                if not _re.fullmatch(r"\d{1,3}(,\d{3})*", est_text):
+                    tips_fail.append(f"estimate cell '{est_text}' is not a whole number with separators")
+                weight = est_cell.evaluate("el => parseInt(getComputedStyle(el).fontWeight, 10)") if est_cell.count() else 0
+                if weight < 600:
+                    tips_fail.append(f"estimate cell font-weight {weight}, want >= 600")
+                snapshot_body[0] = FIXTURE.read_bytes()
+                record("inc_tips", "missing: " + "; ".join(tips_fail), not tips_fail)
+            except Exception as exc:
+                snapshot_body[0] = FIXTURE.read_bytes()
+                record("inc_tips", "tips raised " + type(exc).__name__ + ": " + str(exc), False)
 
             # 21. Finalize and print all keys with honest aggregation.
             finalize_results()
