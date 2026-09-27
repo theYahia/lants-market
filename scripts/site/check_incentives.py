@@ -66,6 +66,7 @@ DEFAULT_OFFERS = [
         "capAnts": 10000,
         "payer": "0x0000000000000000000000000000000000000001",
         "note": "",
+        "pays": "new",
     }
 ]
 
@@ -178,6 +179,7 @@ def run_guard() -> int:
         "inc_clean": 0,
         "inc_mobile": 0,
         "inc_cta": 0,
+        "inc_rule": 0,
     }
     subchecks = {key: [] for key in results}
     reasons = []
@@ -208,6 +210,28 @@ def run_guard() -> int:
             offers = DEFAULT_OFFERS
             offers_requests = []
             http_4xx_responses = []
+
+            rule_checks = []
+            pays_cases = [
+                {
+                    "label": "new",
+                    "offer": dict(DEFAULT_OFFERS[0], pays="new"),
+                    "expected": {
+                        "text": "new stakes only",
+                        "2000": "10.00 USDC",
+                        "20000": "44.50 USDC",
+                    },
+                },
+                {
+                    "label": "all",
+                    "offer": dict(DEFAULT_OFFERS[0], pays="all"),
+                    "expected": {
+                        "text": "all stakers, pro rata",
+                        "2000": "5.29 USDC",
+                        "20000": "27.09 USDC",
+                    },
+                },
+            ]
 
             def route_handler(route):
                 url = route.request.url
@@ -356,9 +380,9 @@ def run_guard() -> int:
                     y_input.first.fill("20000")
                     page.wait_for_timeout(300)
                     calc_text_20000 = page.locator("#incentives").inner_text()
-                    got_20000 = "50.00 USDC" in calc_text_20000
+                    got_20000 = "44.50 USDC" in calc_text_20000
 
-                    record("inc_calc", "missing: calc values 10/50 USDC", got_2000 and got_20000)
+                    record("inc_calc", "missing: calc values 10/44.50 USDC", got_2000 and got_20000)
             except Exception as exc:
                 record("inc_calc", "calc raised " + type(exc).__name__ + ": " + str(exc), False)
 
@@ -398,6 +422,7 @@ def run_guard() -> int:
                     "capAnts": 10000,
                     "payer": "0x0000000000000000000000000000000000000001",
                     "note": "<b>x</b>",
+                    "pays": "new",
                 }
             ]
             page.reload()
@@ -424,7 +449,7 @@ def run_guard() -> int:
                     y_input.first.fill("20000")
                     page.wait_for_timeout(300)
                     calc_text_20000 = page.locator("#incentives").inner_text()
-                    got_20000 = "50.00 USDC" in calc_text_20000
+                    got_20000 = "44.50 USDC" in calc_text_20000
 
                     record("inc_calc", "missing: calc values note", got_2000 and got_20000)
             except Exception as exc:
@@ -560,7 +585,75 @@ def run_guard() -> int:
             except Exception as exc:
                 record("inc_cta", "cta raised " + type(exc).__name__ + ": " + str(exc), False)
 
-            # 17. Finalize and print all keys.
+            # 17. inc_rule: the 'pays' rule in incentives.mjs.
+            try:
+                # Run both pays cases: 'new' and 'all', reloading the page
+                # for each and checking the offer text and calculator values.
+                for case in pays_cases:
+                    offers = [case["offer"]]
+                    page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(1500)
+
+                    incentives_text = page.locator("#incentives").inner_text()
+                    text_ok = case["expected"]["text"] in incentives_text
+
+                    y_input = page.locator("#incentives input[type=number]")
+                    if y_input.count() == 0:
+                        calc_ok = False
+                    else:
+                        y_input.first.fill("2000")
+                        page.wait_for_timeout(300)
+                        calc_text_2000 = page.locator("#incentives").inner_text()
+                        y_input.first.fill("20000")
+                        page.wait_for_timeout(300)
+                        calc_text_20000 = page.locator("#incentives").inner_text()
+                        calc_ok = (
+                            case["expected"]["2000"] in calc_text_2000
+                            and case["expected"]["20000"] in calc_text_20000
+                        )
+
+                    rule_checks.append(text_ok and calc_ok)
+
+                # Post-offer body must contain 'Pays:'.
+                offers = DEFAULT_OFFERS
+                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                post_btn = page.locator('#incentives a[href*="issues/new"], #incentives a:has-text("Post an offer")')
+                if post_btn.count() > 0:
+                    href = post_btn.first.get_attribute("href") or ""
+                    parsed = urllib.parse.urlparse(href)
+                    query = urllib.parse.parse_qs(parsed.query)
+                    body = query.get("body", [""])[0]
+                    decoded = urllib.parse.unquote(body)
+                    rule_checks.append("Pays:" in decoded)
+                else:
+                    rule_checks.append(False)
+
+                # Invalid pays value: offer must not be shown.
+                offers = [dict(DEFAULT_OFFERS[0], pays="invalid")]
+                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                invalid_text = page.locator("#incentives").inner_text()
+                rule_checks.append("5 USDC per 1,000 ANTS" not in invalid_text)
+
+                # Missing pays field: offer must not be shown.
+                no_pays_offer = dict(DEFAULT_OFFERS[0])
+                del no_pays_offer["pays"]
+                offers = [no_pays_offer]
+                page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(1500)
+                no_pays_text = page.locator("#incentives").inner_text()
+                rule_checks.append("5 USDC per 1,000 ANTS" not in no_pays_text)
+
+                record("inc_rule", "missing: pays rule output", all(rule_checks))
+            except Exception as exc:
+                record("inc_rule", "inc_rule raised " + type(exc).__name__ + ": " + str(exc), False)
+
+            # 18. Finalize and print all keys.
             finalize_results()
             for key in sorted(results.keys()):
                 print(f"{key}={results[key]}")
@@ -586,6 +679,7 @@ def run_guard() -> int:
         print("inc_clean=0")
         print("inc_mobile=0")
         print("inc_cta=0")
+        print("inc_rule=0")
         print(f"reason={type(exc).__name__}: {exc}")
         return 1
     finally:
