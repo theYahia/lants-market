@@ -1,7 +1,6 @@
 import sys
 import os
 import time
-import json
 from pathlib import Path
 
 # Ensure the directory containing this script is in sys.path
@@ -13,88 +12,79 @@ from e2e_fork_trade import (
     setup_rpc_route,
     add_init_script,
     setup_page_logging,
-    rpc,
     eth_call,
-    eth_send_and_wait,
     get_position_amount,
     OPERATOR,
-    ANVIL_URL,
     stop_all,
 )
 
 from playwright.sync_api import sync_playwright
 
-INDEX_POOL_REWARDS_SELECTOR = "0x4a40d139"
-TIMESTAMP_EPOCH_25 = 1790850600
+import fork_prep
+
 EXPECTED_PENDING_REWARD = 28341831743556013816873
 POSITION_ID = 110
+STAKER_REWARDS = fork_prep.STAKER_REWARDS
+SEL_PENDING_INDEXED = fork_prep.SEL_PENDING_INDEXED
 
-REASON = None
+
+def enc_uint(value: int) -> str:
+    """Encode uint256 as 64 hex chars (no 0x prefix)."""
+    return f"{value:064x}"
 
 
 def get_pending_reward():
     """Fetch pendingIndexedStakerReward(27) via eth_call."""
-    calldata = "0x" + "8693dd3c" + "000000000000000000000000000000000000000000000000000000000000001b"
-    result = eth_call(OPERATOR, calldata)
+    calldata = SEL_PENDING_INDEXED + enc_uint(27)
+    result = eth_call(STAKER_REWARDS, calldata)
     if not result or result == "0x":
         raise RuntimeError("empty eth_call result for pendingIndexedStakerReward(27)")
     return int(result, 16)
 
 
-def run():
-    global REASON
+def get_position_owner(token_id: int) -> str:
+    """Fetch ownerOf(tokenId) via eth_call, returns checksummed-free lowercase address."""
+    calldata = "0x6352211e" + enc_uint(token_id)
+    result = eth_call(fork_prep.NFT, calldata)
+    if not result or result == "0x":
+        raise RuntimeError(f"empty eth_call result for ownerOf({token_id})")
+    raw = result[2:]
+    return "0x" + raw[24:64].lower()
 
-    # Boot anvil and http server
-    anvil_process = None
+
+def run():
     http_process = None
     browser = None
 
     try:
-        anvil_process = start_anvil()
+        start_anvil()
         http_process = start_http_server()
 
-        funded_caller = OPERATOR
+        # Apply the shared fork preparation: timestamp/mine, setBalance, indexPoolRewards.
+        fork_prep.prepare_restake_fork()
 
-        # Recipe in exact order:
-        # 1) evm_setNextBlockTimestamp to 1790850600
-        rpc("evm_setNextBlockTimestamp", [TIMESTAMP_EPOCH_25])
-        # 2) evm_mine
-        rpc("evm_mine", [])
-        # 3) anvil_setBalance to funded caller address
-        rpc("anvil_setBalance", [funded_caller, hex(10**22)])
-        # 4) call indexPoolRewards(52894, 10) via eth_send_and_wait
-        calldata = INDEX_POOL_REWARDS_SELECTOR + (
-            "000000000000000000000000000000000000000000000000000000000000ce9e"  # 52894
-            "000000000000000000000000000000000000000000000000000000000000000a"  # 10
-        )
-        eth_send_and_wait(funded_caller, OPERATOR, calldata)
-
-        # Verify pending reward before UI
+        # Verify pending reward before UI.
         pending = get_pending_reward()
         if pending != EXPECTED_PENDING_REWARD:
-            REASON = f"pending reward mismatch: got {pending}, expected {EXPECTED_PENDING_REWARD}"
-            print(f"reason={REASON}")
+            reason = f"pending reward mismatch: got {pending}, expected {EXPECTED_PENDING_REWARD}"
+            print(f"reason={reason}")
             print("restake_ok=0")
             return
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
-            # Setup RPC route on the context
             setup_rpc_route(context)
             page = context.new_page()
-            # Init script, operator
             add_init_script(page, OPERATOR)
-            # Logging
             setup_page_logging(page)
 
-            # Open local site with #portfolio hash so the portfolio view is revealed
+            # Open local site with #portfolio hash so the portfolio view is revealed.
             page.goto(f"http://127.0.0.1:{http_process}/#portfolio", wait_until="networkidle")
 
-            # Ensure the portfolio panel is visible (the hash should do it, but clicking the link is a safe fallback)
+            # Ensure the portfolio panel is visible (the hash should do it, but clicking the link is a safe fallback).
             portfolio_visible = page.evaluate("() => !document.getElementById('portfolio').hidden")
             if not portfolio_visible:
-                # Click the "My Portfolio" header link to reveal it
                 page.click('a.hdr-link[href="#portfolio"]')
                 page.wait_for_timeout(300)
 
@@ -106,22 +96,22 @@ def run():
             else:
                 page.click("#hdr-connect")
 
-            # Wait for the portfolio body to become visible (onConnect does this after eth_requestAccounts)
-            deadline = time.time() + 20
+            # Wait for the portfolio body to become visible (onConnect does this after eth_requestAccounts).
+            deadline = time.time() + 30
             while time.time() < deadline:
                 pf_body_hidden = page.evaluate("() => document.getElementById('pf-body').hidden")
                 if not pf_body_hidden:
                     break
                 page.wait_for_timeout(500)
             else:
-                REASON = "portfolio body did not become visible after connect"
-                print(f"reason={REASON}")
+                reason = "portfolio body did not become visible after connect"
+                print(f"reason={reason}")
                 print("restake_ok=0")
                 return
 
-            # Wait for .pf-pos-row with dataset.id == 27 inside #pf-positions
+            # Wait for .pf-pos-row with data-id == 27 inside #pf-positions.
             row = None
-            deadline = time.time() + 15
+            deadline = time.time() + 30
             while time.time() < deadline:
                 rows = page.query_selector_all("#pf-positions .pf-pos-row")
                 for r in rows:
@@ -134,39 +124,55 @@ def run():
                 page.wait_for_timeout(500)
 
             if not row:
-                REASON = "position row 27 not found"
-                print(f"reason={REASON}")
+                reason = "position row 27 not found"
+                print(f"reason={reason}")
                 print("restake_ok=0")
                 return
 
-            # Check Restake control shows pending amount
+            # Check Restake control shows pending amount.
             restake_buttons = row.query_selector_all("button.restake")
             if not restake_buttons:
-                REASON = "no Restake button in row #27"
-                print(f"reason={REASON}")
+                reason = "missing: Restake button in row #27"
+                print(f"reason={reason}")
                 print("restake_ok=0")
                 return
-            else:
-                restake_btn = restake_buttons[0]
-                text = restake_btn.inner_text()
-                # Ensure the pending amount is shown before sign
-                if str(EXPECTED_PENDING_REWARD) not in text:
-                    REASON = f"Restake button does not show pending amount, got: {text}"
-                    print(f"reason={REASON}")
-                    print("restake_ok=0")
-                    return
-                else:
-                    # Click restake, wait for tx
-                    restake_btn.click()
-                    page.wait_for_timeout(10000)
 
-                    # Confirm fresh position id 110
+            restake_btn = restake_buttons[0]
+            text = restake_btn.inner_text()
+            # Ensure the pending amount is shown before sign.
+            if str(EXPECTED_PENDING_REWARD) not in text:
+                reason = f"Restake button does not show pending amount, got: {text}"
+                print(f"reason={reason}")
+                print("restake_ok=0")
+                return
+
+            # Click restake, wait for the transaction to be mined.
+            restake_btn.click()
+
+            # Poll for the newly minted position 110 (amount and owner) on-chain.
+            deadline = time.time() + 60
+            amount = None
+            while time.time() < deadline:
+                try:
                     amount = get_position_amount(POSITION_ID)
-                    if amount != EXPECTED_PENDING_REWARD:
-                        REASON = f"position {POSITION_ID} amount mismatch, got: {amount}"
-                        print(f"reason={REASON}")
-                        print("restake_ok=0")
-                        return
+                    if amount == EXPECTED_PENDING_REWARD:
+                        break
+                except Exception:
+                    amount = None
+                page.wait_for_timeout(1000)
+
+            if amount is None or amount != EXPECTED_PENDING_REWARD:
+                reason = f"position {POSITION_ID} amount mismatch, got: {amount}"
+                print(f"reason={reason}")
+                print("restake_ok=0")
+                return
+
+            owner = get_position_owner(POSITION_ID)
+            if owner != OPERATOR.lower():
+                reason = f"position {POSITION_ID} owner mismatch, got: {owner}"
+                print(f"reason={reason}")
+                print("restake_ok=0")
+                return
 
             print("restake_ok=1")
 
@@ -179,7 +185,10 @@ def run():
     finally:
         stop_all()
         if browser:
-            browser.close()
+            try:
+                browser.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
