@@ -277,36 +277,38 @@
       }
       tabs.forEach(function(t){t.addEventListener('click',function(){open(t.dataset.tab);});});
       var brand=document.querySelector('.brand');
-      if(brand)brand.addEventListener('click',function(){if(typeof showPortfolio==='function')showPortfolio(false);open('all');});
       var pfLinks=document.querySelectorAll('.hdr-link');
       var pfPanel=document.getElementById('portfolio');
       var incPanel=document.getElementById('incentives');
       var tabsPanel=document.getElementById('tabs');
-      // My Portfolio and Incentives are their own views: hide the market, show the
-      // selected view at the top (no anchor jump to the page bottom).
-      function showPortfolio(on){
-        document.body.classList.remove('view-incentives');
-        document.body.classList.toggle('view-portfolio',on);
-        if(pfPanel)pfPanel.hidden=!on;
-        if(incPanel)incPanel.hidden=on;
-        if(tabsPanel)tabsPanel.hidden=false;
-        pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);});
+      var viewLinks={};
+      pfLinks.forEach(function(l){viewLinks[l.getAttribute('href')]=l;});
+      // Each view shows exactly one panel; body classes and is-on/aria-current
+      // follow the current view (market for the logo and the #tabs link).
+      function showView(v){
+        var isPortfolio=(v==='portfolio');
+        var isIncentives=(v==='incentives');
+        document.body.classList.toggle('view-portfolio',isPortfolio);
+        document.body.classList.toggle('view-incentives',isIncentives);
+        if(pfPanel)pfPanel.hidden=!isPortfolio;
+        if(incPanel)incPanel.hidden=!isIncentives;
+        if(tabsPanel)tabsPanel.hidden=isPortfolio||isIncentives;
+        pfLinks.forEach(function(l){
+          var on=l.getAttribute('href')==='#'+v;
+          l.classList.toggle('is-on',on);
+          if(on){l.setAttribute('aria-current','page');}
+          else{l.removeAttribute('aria-current');}
+        });
+        open('all');
         window.scrollTo(0,0);
       }
-      function showIncentives(on){
-        document.body.classList.remove('view-portfolio');
-        document.body.classList.toggle('view-incentives',on);
-        if(pfPanel)pfPanel.hidden=on;
-        if(incPanel)incPanel.hidden=!on;
-        if(tabsPanel)tabsPanel.hidden=on;
-        pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#incentives')===on);});
-        window.scrollTo(0,0);
-      }
-      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var href=l.getAttribute('href');if(href==='#portfolio')showPortfolio(true);else if(href==='#incentives')showIncentives(true);else{showPortfolio(false);showIncentives(false);}});});
+      brand.addEventListener('click',function(e){e.preventDefault();showView('market');});
+      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var href=l.getAttribute('href');showView(href.replace('#',''));});});
       var pfConnect=document.getElementById('pf-connect');
       if(pfConnect)pfConnect.addEventListener('click',function(){var c=document.getElementById('hdr-connect');if(c)c.click();});
-      if(location.hash==='#portfolio')showPortfolio(true);
-      if(location.hash==='#incentives')showIncentives(true);
+      if(location.hash==='#portfolio')showView('portfolio');
+      else if(location.hash==='#incentives')showView('incentives');
+      else showView('market');
       open('all');
     })();
     </script>
