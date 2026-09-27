@@ -89,6 +89,9 @@ def run_guard() -> int:
         "listing_label": 0,
         "reward_head": 0,
         "rules_compact": 0,
+        "head_first": 0,
+        "rules_live": 0,
+        "snap_note": 0,
     }
     reasons = []
 
@@ -310,9 +313,136 @@ def run_guard() -> int:
             finally:
                 live_context.close()
 
-            # 13. Print results.
+            # 13. Check snap_note: open a fresh page at index.html WITHOUT any
+            # #portfolio hash; do NOT wait on visibility. Use the .snap-footer
+            # locator with wait_for(state='attached') and read text_content,
+            # and verify it contains 'Auto-refreshed 3x/day (~06:15 / 14:15 / 22:15 UTC)'.
+            try:
+                snap_context = browser.new_context(viewport={"width": 1280, "height": 900})
+
+                def snap_route_handler(route):
+                    url = route.request.url
+                    if not url.startswith("http://127.0.0.1:"):
+                        route.continue_()
+                        return
+                    route.continue_()
+
+                snap_context.route("http://127.0.0.1:**/*", snap_route_handler)
+                snap_context.add_init_script(QA_MOCK_WALLET_JS.replace("__ADDR__", DATA_WALLET))
+                snap_page = snap_context.new_page()
+                snap_page.goto(f"http://127.0.0.1:{site_port}/index.html", wait_until="networkidle")
+                snap_footer = snap_page.locator(".snap-footer")
+                snap_footer.wait_for(state="attached", timeout=20000)
+                snap_footer_text = snap_footer.text_content() or ""
+                if "Auto-refreshed 3x/day (~06:15 / 14:15 / 22:15 UTC)" in snap_footer_text:
+                    results["snap_note"] = 1
+                else:
+                    reasons.append("snapshot refresh note")
+            except Exception as exc:
+                reasons.append(f"{type(exc).__name__}: {exc}")
+            finally:
+                snap_context.close()
+
+            # 14. Check head_first and rules_live on the live page for the
+            # wallet with data. Reuse the open_live_page flow with DATA_WALLET.
+            try:
+                head_live_context, head_live_page = open_live_page(browser, site_port)
+                try:
+                    # Wait a moment for the page to settle.
+                    head_live_page.wait_for_timeout(3000)
+
+                    # Connect the wallet by clicking the header connect button.
+                    head_live_page.click("#hdr-connect")
+                    # Wait for the header to show a connected address.
+                    try:
+                        head_live_page.wait_for_function(
+                            """() => {
+                                const b = document.getElementById('hdr-connect');
+                                return b && b.textContent.trim().startsWith('0x');
+                            }""",
+                            timeout=20000
+                        )
+                    except Exception:
+                        reasons.append("header row first in #pf-positions")
+
+                    # Navigate to the portfolio view.
+                    head_live_page.locator('a.hdr-link[href="#portfolio"]').click()
+                    head_live_page.wait_for_timeout(2000)
+
+                    # Wait for the positions container to render rows.
+                    try:
+                        head_live_page.wait_for_selector(
+                            "#pf-positions .pf-pos-row",
+                            timeout=30000
+                        )
+                    except Exception:
+                        reasons.append("header row first in #pf-positions")
+
+                    # Check head_first: the FIRST element child of #pf-positions
+                    # must be the .pf-pos-head row AND its text must contain
+                    # 'EST. REWARD'.
+                    try:
+                        first_child = head_live_page.evaluate(
+                            """() => {
+                                const container = document.getElementById('pf-positions');
+                                if (!container || !container.firstElementChild) return null;
+                                return {
+                                    className: container.firstElementChild.className,
+                                    text: container.firstElementChild.textContent || ''
+                                };
+                            }"""
+                        )
+                        if (
+                            first_child
+                            and "pf-pos-head" in (first_child.get("className") or "")
+                            and "EST. REWARD" in (first_child.get("text") or "").upper()
+                        ):
+                            results["head_first"] = 1
+                        else:
+                            reasons.append("header row first in #pf-positions")
+                    except Exception:
+                        reasons.append("header row first in #pf-positions")
+
+                    # Check rules_live: verify #market-list always shows the
+                    # visible line 'Unclaimed rewards pass to the buyer with the
+                    # NFT.' AND contains a native <details> whose <summary> text
+                    # is 'Listing rules' holding all three rule lines.
+                    try:
+                        market_list = head_live_page.locator("#market-list")
+                        market_list.wait_for(state="visible", timeout=15000)
+                        market_list_text = market_list.inner_text()
+                        details_present = market_list.locator("details").count() > 0
+                        summary_text = ""
+                        details_content = ""
+                        if details_present:
+                            summary_el = market_list.locator("details summary").first
+                            if summary_el.count() > 0:
+                                summary_text = summary_el.inner_text().strip()
+                            details_content = market_list.locator("details").first.inner_text() or ""
+
+                        visible_line_ok = "Unclaimed rewards pass to the buyer with the NFT." in market_list_text
+                        details_ok = (
+                            details_present
+                            and summary_text == "Listing rules"
+                            and "Only one active listing per NFT." in details_content
+                            and "Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT." in details_content
+                            and "A listing on a closed, split, moved or transferred position is invalid and cannot be bought." in details_content
+                        )
+                        if visible_line_ok and details_ok:
+                            results["rules_live"] = 1
+                        else:
+                            reasons.append("live listing rules")
+                    except Exception:
+                        reasons.append("live listing rules")
+                finally:
+                    head_live_context.close()
+            except Exception as exc:
+                reasons.append(f"{type(exc).__name__}: {exc}")
+
+            # 15. Print results.
             for key in ["empty_head", "listings_empty", "tile_label", "refresh_note",
-                        "listing_label", "reward_head", "rules_compact"]:
+                        "listing_label", "reward_head", "rules_compact",
+                        "head_first", "rules_live", "snap_note"]:
                 print(f"{key}={results[key]}")
 
             for reason in reasons:
@@ -331,6 +461,9 @@ def run_guard() -> int:
         print("listing_label=0")
         print("reward_head=0")
         print("rules_compact=0")
+        print("head_first=0")
+        print("rules_live=0")
+        print("snap_note=0")
         print(f"reason={type(exc).__name__}: {exc}")
         return 1
     finally:
