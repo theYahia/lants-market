@@ -75,8 +75,8 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
-| Seller incentives board v1 — an Incentives tab on lants.eth (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 10.10 | open |
-| List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065), waiting for review) | — | open |
+| Seller incentives board v1 — an Incentives tab on lants.eth (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 27.09 | ✅ v1 live |
+| List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 27.09 | ✅ done |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
 | First trade on our market: stake the epoch-23 buyer reward in Apex, split off 50 ANTS, list and buy it (internal test) | 25.09 | ✅ done |
@@ -193,6 +193,12 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**27.09.2026 (evening)** — Incentives tab: AntSeed sellers can pay stakers for weight in their pool at a fixed USDC
+rate per 1,000 ANTS with a cap, either to every staker pro rata (like Votium / Aerodrome) or to new stakes only. The board
+ranks every pool by what 1,000 ANTS at max lock would earn next epoch after dilution, using the protocol's own split
+(pool share grows with pool weight). First offer is ours: 1 USDC per 1,000 ANTS for new stakes in Open Forge, epoch 25,
+up to 10 USDC. lANTS Market is also listed on antseed.com/ecosystem.
 
 **27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
 transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a
