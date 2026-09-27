@@ -50,7 +50,7 @@ function isValidOffer(offer, displayEpoch) {
 
 function offerLine(offer, displayEpoch) {
   const usdc = offer.capAnts / 1000 * offer.usdcPer1k;
-  let line = `${offer.usdcPer1k} USDC per 1,000 ANTS · Pool ${offer.pool} · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
+  let line = `${offer.usdcPer1k} USDC per 1,000 ANTS at max lock · Pool ${offer.pool} · epoch ${displayEpoch} · up to ${offer.capAnts} ANTS · max ${usdc} USDC`;
   if (offer.note) line += ` · ${offer.note}`;
   return line;
 }
@@ -273,7 +273,7 @@ function buildCalculator(snapshot, mode, offers, displayEpoch) {
       }
     }
 
-    output.textContent = `${estAnts.toFixed(2)} ANTS est. · ${usdc}`;
+    output.textContent = `${estAnts.toFixed(2)} ANTS est. (max lock) · ${usdc}`;
   }
 
   poolSelect.addEventListener('input', update);
@@ -429,7 +429,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch) {
     'Pool',
     'Staked (ANTS, max-lock eq.)',
     'Sales, lifetime (USDC)',
-    'Est. ANTS for 1,000 staked',
+    'Est. ANTS per 1,000 ANTS at max lock',
     'Offer'
   ];
   for (const h of headings) {
@@ -480,7 +480,7 @@ async function init() {
     const note = document.createElement('p');
     note.className = 'inc-note';
     if (mode.mode === 'live') {
-      note.textContent = 'est., if this epoch\'s sales repeat';
+      note.textContent = 'Est. for 1,000 ANTS at max lock (weight 104,000) added to the pool, if this epoch\'s sales repeat.';
     } else {
       note.textContent = 'est. after the first purchases this epoch';
     }
