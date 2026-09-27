@@ -76,6 +76,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
 | Seller incentives board v1 — an Incentives tab on lants.eth (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 27.09 | ✅ v1 live |
+| Pay the first incentive offer: new stakes in Open Forge for epoch 25, 1 USDC per 1,000 ANTS, up to 10 USDC | 09.10 | open |
 | List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 27.09 | ✅ done |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
