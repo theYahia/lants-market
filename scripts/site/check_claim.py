@@ -195,6 +195,29 @@ def run_guard() -> int:
                 return 1
 
             print("claim_ok=1")
+
+            # 15. Final check: the CLAIMABLE REWARDS tile at '#portfolio .pf-value'
+            #     index 2 must refresh to 0.00 after the claim. Poll the live page
+            #     for up to 30 seconds until it shows 0.00.
+            tile_el = page.locator("#portfolio .pf-value").nth(2)
+            deadline_tile = time.time() + 30
+            refreshed = False
+            while time.time() < deadline_tile:
+                try:
+                    tile_text = tile_el.inner_text().strip()
+                except Exception:
+                    tile_text = ""
+                if tile_text == "0.00":
+                    refreshed = True
+                    break
+                page.wait_for_timeout(500)
+
+            if refreshed:
+                print("claim_refresh=1")
+            else:
+                print("reason=missing: claimable tile not refreshed after claim")
+                print("claim_refresh=0")
+
             return 0
 
     except Exception as exc:
