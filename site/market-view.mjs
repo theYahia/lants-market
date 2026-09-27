@@ -1205,7 +1205,7 @@ export async function renderMyPositions(account, ids, snapshot) {
   // Build header row
   const head = document.createElement('div');
   head.className = 'pf-pos-head';
-  ['#', 'AMOUNT', 'LOCK', 'REWARD', 'EXIT', ''].forEach(text => {
+  ['#', 'AMOUNT', 'LOCK', 'EST. REWARD', 'EXIT', ''].forEach(text => {
     const span = document.createElement('span');
     span.textContent = text;
     head.appendChild(span);
@@ -1342,6 +1342,10 @@ export async function renderMyPositions(account, ids, snapshot) {
     row.appendChild(actions);
     container.appendChild(row);
     rows.push(row);
+  }
+
+  if (rows.length > 0) {
+    container.appendChild(head);
   }
 
   if (rows.length === 0) {
