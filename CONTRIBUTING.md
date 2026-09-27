@@ -31,6 +31,12 @@ Site checks (Playwright) are in `scripts/site/check_*.py`.
 - Keep tests green; add one if you fix a bug.
 - Match the surrounding style; no drive-by reformatting.
 
+## Post an incentive offer (sellers)
+
+Use "Post an offer on GitHub" on the [Incentives tab](https://lants.eth.limo/#incentives): it opens an issue
+with the fields pre-filled (pool, epochs, USDC per 1,000 ANTS, cap, payer, `pays: all | new`). Once checked, the
+offer goes into `site/offers.json`. Fields and payout rules: [docs/incentives.md](docs/incentives.md).
+
 ## Issues
 
 Open a GitHub issue for bugs, ideas, or anything about the contract. For the contract, discuss in an

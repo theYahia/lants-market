@@ -2,7 +2,7 @@
   "name": "lants-market",
   "version": "0.0.0",
   "private": true,
-  "description": "Valuation board and market layer for locked ANTS positions (lANTS) on AntSeed",
+  "description": "Valuation board, market layer and seller incentives for locked ANTS positions (lANTS) on AntSeed",
   "scripts": {
     "build": "node scripts/site/build-dist.mjs",
     "test": "node --test site/*.test.mjs",
