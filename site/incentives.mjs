@@ -357,7 +357,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     tr.dataset.paid = String(list.reduce((s, v) => s + v, 0));
     const td = document.createElement('td');
     td.textContent = list.every(v => v === 0) ? '—' : list.map(shortAnts).join(' · ');
-    tr.insertBefore(td, tr.children[3]);
+    tr.appendChild(td);
   };
 
   // Aggregate position data per pool: R, We, WN
@@ -467,25 +467,34 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       tdPool.textContent = pool;
     }
     tagPool(tdPool, pool);
-    const tdStaked = document.createElement('td');
-    tdStaked.textContent = stakedAmount(WN);
-    const tdSales = document.createElement('td');
-    tdSales.textContent = salesText(pool);
+    const stakedLine = document.createElement('span');
+    stakedLine.className = 'inc-staked';
+    const stakedValue = WN / 104;
+    stakedLine.textContent = stakedValue > 0 ? `${shortAnts(stakedValue)} staked` : 'no stake next epoch';
+    tdPool.appendChild(document.createElement('br'));
+    tdPool.appendChild(stakedLine);
     const tdEst = document.createElement('td');
     if (isLive) {
       tdEst.textContent = est.toFixed(2);
     } else {
       tdEst.textContent = 'est. after the first purchases this epoch';
     }
+    const tdPaid = document.createElement('td');
+    if (hasHistory) {
+      const list = paidList(pool);
+      tdPaid.textContent = list.every(v => v === 0) ? '—' : list.map(shortAnts).join(' · ');
+      tr.dataset.paid = String(list.reduce((s, v) => s + v, 0));
+    } else {
+      tdPaid.textContent = '—';
+      tr.dataset.paid = '-1';
+    }
     const tdOffer = document.createElement('td');
     const best = bestOfferByPool.get(pool);
     tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
     tr.appendChild(tdPool);
-    tr.appendChild(tdStaked);
-    tr.appendChild(tdSales);
     tr.appendChild(tdEst);
+    tr.appendChild(tdPaid);
     tr.appendChild(tdOffer);
-    addPaid(tr, pool);
     rows.push(tr);
   }
 
@@ -512,21 +521,29 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       tdPool.textContent = pool;
     }
     tagPool(tdPool, pool);
-    const tdStaked = document.createElement('td');
-    tdStaked.textContent = '0.00';
-    const tdSales = document.createElement('td');
-    tdSales.textContent = salesText(pool);
+    const stakedLine = document.createElement('span');
+    stakedLine.className = 'inc-staked';
+    stakedLine.textContent = 'no stake next epoch';
+    tdPool.appendChild(document.createElement('br'));
+    tdPool.appendChild(stakedLine);
     const tdEst = document.createElement('td');
     tdEst.textContent = isLive ? 'no stake next epoch' : 'est. after the first purchases this epoch';
+    const tdPaid = document.createElement('td');
+    if (hasHistory) {
+      const list = paidList(pool);
+      tdPaid.textContent = list.every(v => v === 0) ? '—' : list.map(shortAnts).join(' · ');
+      tr.dataset.paid = String(list.reduce((s, v) => s + v, 0));
+    } else {
+      tdPaid.textContent = '—';
+      tr.dataset.paid = '-1';
+    }
     const tdOffer = document.createElement('td');
     const best = bestOfferByPool.get(pool);
     tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
     tr.appendChild(tdPool);
-    tr.appendChild(tdStaked);
-    tr.appendChild(tdSales);
     tr.appendChild(tdEst);
+    tr.appendChild(tdPaid);
     tr.appendChild(tdOffer);
-    addPaid(tr, pool);
     rows.push(tr);
   }
 
@@ -534,24 +551,34 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   table.className = 'inc-board-table';
   const thead = document.createElement('thead');
   const headTr = document.createElement('tr');
+  const paidHeading = hasHistory
+    ? `Paid to stakers (ANTS), epoch ${histEpochs.join(' · ')}`
+    : 'Paid to stakers';
   const headings = [
-    'Pool',
-    'Staked (ANTS, max-lock eq.)',
-    'Sales, lifetime (USDC)',
-    'Est. ANTS per 1,000 ANTS at max lock',
+    'Seller',
+    'ANTS per 1,000 ANTS next epoch',
+    paidHeading,
     'Offer'
   ];
-  if (hasHistory) {
-    headings.splice(3, 0, `Paid to stakers (ANTS), epoch ${histEpochs.join(' · ')}`);
-    headings[4] = 'Next epoch est. per 1,000 ANTS (what-if)';
-  }
-  const sortKeys = hasHistory ? ['name', 'staked', 'sales', 'paid', 'est', 'offer'] : ['name', 'staked', 'sales', 'est', 'offer'];
-  for (const h of headings) {
+  const tips = [
+    'The seller of this pool (name or pool id).',
+    'Estimated ANTS reward next epoch for each 1,000 ANTS you stake at max lock in this pool.',
+    'What this pool paid its stakers in the completed epochs shown, newest first.',
+    'Best USDC offer per 1,000 ANTS for this pool in the next epoch.'
+  ];
+  const sortKeys = ['name', 'est', 'paid', 'offer'];
+  for (let i = 0; i < headings.length; i++) {
     const th = document.createElement('th');
     const button = document.createElement('button');
     button.className = 'inc-sort';
-    button.textContent = h;
+    button.textContent = headings[i];
     th.appendChild(button);
+    const info = document.createElement('span');
+    info.className = 'info';
+    info.tabIndex = 0;
+    info.textContent = 'ⓘ';
+    info.dataset.tip = tips[i];
+    th.appendChild(info);
     headTr.appendChild(th);
   }
   thead.appendChild(headTr);
@@ -565,7 +592,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   // Sorting logic: each header button sorts the tbody rows.
   const headerThs = table.querySelectorAll('thead th');
   const headerButtons = table.querySelectorAll('thead th button.inc-sort');
-  let activeColumn = 3; // Paid with history, Est without
+  let activeColumn = 2;
   let activeDirection = 'descending';
   headerThs[activeColumn].setAttribute('aria-sort', activeDirection);
 
@@ -645,17 +672,6 @@ async function init() {
 
     const board = buildBoard(snapshot, mode, offers, N, poolNames);
 
-    const note = document.createElement('p');
-    note.className = 'inc-note';
-    if (mode.mode === 'live') {
-      const budget = nextBudget(snapshot, N);
-      const budgetText = budget ? `, with the contract's staker budget for epoch ${N} (${Math.round(budget).toLocaleString('en-US')} ANTS)` : '';
-      note.textContent = `Est. per epoch for 1,000 ANTS at max lock (weight 104,000) added to the pool${budgetText}, if this epoch's sales shares hold and no one else joins the pool.`;
-      if (snapshot.poolHistoryEpochs?.length) note.textContent = 'Ranked by what each pool paid its stakers in completed epochs; a new stake only counts from the next epoch. Tags: new = nothing paid yet, thin = under 100 ANTS staked. ' + note.textContent;
-    } else {
-      note.textContent = 'est. after the first purchases this epoch';
-    }
-
     const calculator = buildCalculator(snapshot, mode, offers, N, poolNames);
 
     const offerSection = buildOfferSection(offers, N, poolNames);
@@ -663,7 +679,6 @@ async function init() {
     container.innerHTML = '';
     container.appendChild(header);
     container.appendChild(board);
-    container.appendChild(note);
     container.appendChild(calculator);
     container.appendChild(offerSection);
   } catch (err) {

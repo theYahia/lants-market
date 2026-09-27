@@ -410,14 +410,7 @@ td.badge-deal::before {
   .ms-action{border-left:0;border-top:1px solid var(--line);}
 }
 
-@media (max-width:480px) {
-    .inc-board-table .board-row td:nth-child(2),
-    .inc-board-table .board-row td:nth-child(3),
-    .inc-board-table thead th:nth-child(2),
-    .inc-board-table thead th:nth-child(3) {
-        display: none;
-    }
-}
+
 
 /* Header button alignment */
 #hdr-connect {
@@ -927,5 +920,7 @@ th[aria-sort] .inc-sort{color:var(--accent)}
 th[aria-sort="descending"] .inc-sort::after{content:" \2193"}
 th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
 .inc-tag{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--warn);border-radius:999px;color:var(--warn);font-size:.75em;cursor:help}
+.inc-staked{display:block;color:var(--muted);font-size:.85em;margin-top:2px}
+.inc-board-table td:first-child{white-space:normal}
 .inc-board-table th{white-space:normal;vertical-align:bottom}
 @media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}}
