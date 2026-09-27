@@ -880,3 +880,25 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
 #market-list .feed-empty{padding:16px;color:var(--muted);}
 #manage-form button:disabled{opacity:.4;cursor:not-allowed;}
 #manage-form .mf-final{margin:0 0 0 12px;align-self:center;}
+.inc-post-offer{
+  display:inline-flex;
+  align-items:center;
+  min-height:44px;
+  padding:0 16px;
+  border:1px solid var(--accent);
+  border-radius:3px;
+  color:var(--accent);
+  text-decoration:none;
+  font-family:var(--font-sans);
+  font-weight:700;
+  font-size:var(--fs-13);
+  white-space:nowrap;
+}
+.inc-post-offer:hover{
+  background:transparent;
+  color:var(--accent);
+}
+.inc-offers-list{
+  list-style:none;
+  overflow-wrap:anywhere;
+}

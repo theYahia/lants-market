@@ -80,7 +80,7 @@ function buildOfferSection(offers, displayEpoch) {
 
   const postBtn = document.createElement('a');
   postBtn.className = 'inc-post-offer';
-  postBtn.textContent = 'Post an offer';
+  postBtn.textContent = 'Post an offer on GitHub ↗';
   const title = `Incentive offer for pool (epoch ${displayEpoch})`;
   const bodyLines = [
     'Pool: ',
