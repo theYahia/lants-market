@@ -178,6 +178,7 @@ def run_guard() -> int:
         "inc_units": 0,
         "inc_clean": 0,
         "inc_mobile": 0,
+        "inc_mobhead": 0,
         "inc_cta": 0,
         "inc_rule": 0,
         "inc_calcui": 0,
@@ -568,6 +569,75 @@ def run_guard() -> int:
             except Exception as exc:
                 record("inc_mobile", "mobile raised " + type(exc).__name__ + ": " + str(exc), False)
 
+            # 15b. inc_mobhead: on mobile viewport, every visible table header
+            #     must align horizontally with the corresponding column of the
+            #     first row. Uses the same board markup from
+            #     site/incentives.mjs buildBoard() (thead th and rows with
+            #     class 'board-row'). A header is considered visible when its
+            #     computed display is not 'none'; threshold for alignment is
+            #     abs(th.left - td.left) <= 2 px per column, in order.
+            try:
+                mobhead_page = context.new_page()
+                mobhead_page.set_viewport_size({"width": 390, "height": 844})
+                mobhead_page.goto(f"http://127.0.0.1:{site_port}/index.html#incentives")
+                mobhead_page.wait_for_selector("#incentives .board-row", timeout=30000)
+                mobhead_ths = mobhead_page.locator("#incentives .inc-board-table thead th").all()
+                mobhead_tds = mobhead_page.locator("#incentives .board-row").first.locator("td").all()
+
+                visible_ths = []
+                for th in mobhead_ths:
+                    display = th.evaluate("el => getComputedStyle(el).display")
+                    if display != "none":
+                        visible_ths.append(th)
+
+                visible_tds = []
+                for td in mobhead_tds:
+                    display = td.evaluate("el => getComputedStyle(el).display")
+                    if display != "none":
+                        visible_tds.append(td)
+
+                th_count = len(visible_ths)
+                td_count = len(visible_tds)
+                if th_count == 0:
+                    results["inc_mobhead"] = 0
+                    subchecks["inc_mobhead"].append(False)
+                    reasons.append("missing: no visible header columns on mobile")
+                elif th_count != td_count:
+                    results["inc_mobhead"] = 0
+                    subchecks["inc_mobhead"].append(False)
+                    reasons.append(
+                        "missing: header/column count mismatch on mobile — "
+                        f"{th_count} visible th vs {td_count} visible td"
+                    )
+                else:
+                    misaligned = []
+                    for i in range(th_count):
+                        th_box = visible_ths[i].bounding_box()
+                        td_box = visible_tds[i].bounding_box()
+                        if th_box is None or td_box is None:
+                            misaligned.append(f"col {i}: no box (th={th_box is not None}, td={td_box is not None})")
+                            continue
+                        diff = abs(th_box["x"] - td_box["x"])
+                        if diff > 2:
+                            misaligned.append(f"col {i}: {diff:.2f}px")
+                    if misaligned:
+                        results["inc_mobhead"] = 0
+                        subchecks["inc_mobhead"].append(False)
+                        reasons.append("missing: mobile header/column misalignment — " + ", ".join(misaligned))
+                    else:
+                        results["inc_mobhead"] = 1
+                        subchecks["inc_mobhead"].append(True)
+                mobhead_page.close()
+            except Exception as exc:
+                results["inc_mobhead"] = 0
+                subchecks["inc_mobhead"].append(False)
+                reasons.append(
+                    "missing: mobile header alignment check raised "
+                    + type(exc).__name__
+                    + ": "
+                    + str(exc)
+                )
+
             # 16. inc_cta: 'Post an offer' link computed color is not
             #     rgb(0, 0, 238) and height >= 40 px.
             try:
@@ -745,6 +815,7 @@ def run_guard() -> int:
         print("inc_units=0")
         print("inc_clean=0")
         print("inc_mobile=0")
+        print("inc_mobhead=0")
         print("inc_cta=0")
         print("inc_rule=0")
         print(f"reason={type(exc).__name__}: {exc}")
