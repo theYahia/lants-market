@@ -75,7 +75,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Automatic snapshot 3×/day | 23.09 | ✅ done |
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
-| Seller incentives board v1 (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 10.10 | open |
+| Seller incentives board v1 — an Incentives tab on lants.eth (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 10.10 | open |
 | List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065), waiting for review) | — | open |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
@@ -87,7 +87,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Page order that follows the flow (stake → split → list); show "sold" from the receipt right after Buy | — | open |
 | Check the AntSeed contest results | 29.09 | open |
 | Claim and Restake staker rewards with buttons in My Positions (fork e2e covers both) | 27.09 | ✅ done |
-| Portfolio polish: hide the table header when there are no positions, a proper empty state for My Listings, "Staker Rewards" tile label, real refresh times in the snapshot note | 28.09 | open |
+| Portfolio polish: no duplicate rows with pre-connected wallets, hide the table header when there are no positions, a proper empty state for My Listings, "Staker Rewards" tile, "Est. reward" column, labelled listing rows, shorter listing rules, real refresh times in the snapshot note | 28.09 | open |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |
