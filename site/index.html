@@ -17,6 +17,7 @@
             <nav class="hdr-nav">
               <a class="hdr-link is-on" href="#tabs">Market</a>
               <a class="hdr-link" href="#portfolio">My Portfolio</a>
+              <a class="hdr-link" href="#incentives">Incentives</a>
             </nav>
             <button id="hdr-connect" style="padding:9px 18px;border:0;border-radius:10px;background:oklch(0.85 0.19 130);color:oklch(0.20 0.02 250);font-weight:700;font-size:13px;">Connect</button>
             <div class="hdr-clean"></div>
@@ -166,6 +167,10 @@
             </div>
         </div>
 
+        <div id="incentives" hidden>
+          <h2>Incentives</h2>
+        </div>
+
         <div id="portfolio" hidden>
           <div id="pf-placeholder" class="pf-placeholder">
             <h2>My Portfolio</h2>
@@ -275,12 +280,33 @@
       if(brand)brand.addEventListener('click',function(){if(typeof showPortfolio==='function')showPortfolio(false);open('all');});
       var pfLinks=document.querySelectorAll('.hdr-link');
       var pfPanel=document.getElementById('portfolio');
-      // My Portfolio is its own view: hide the market, show the portfolio at the top (no anchor jump to the page bottom).
-      function showPortfolio(on){ document.body.classList.toggle('view-portfolio',on); if(pfPanel)pfPanel.hidden=!on; pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);}); window.scrollTo(0,0); }
-      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();showPortfolio(l.getAttribute('href')==='#portfolio');});});
+      var incPanel=document.getElementById('incentives');
+      var tabsPanel=document.getElementById('tabs');
+      // My Portfolio and Incentives are their own views: hide the market, show the
+      // selected view at the top (no anchor jump to the page bottom).
+      function showPortfolio(on){
+        document.body.classList.remove('view-incentives');
+        document.body.classList.toggle('view-portfolio',on);
+        if(pfPanel)pfPanel.hidden=!on;
+        if(incPanel)incPanel.hidden=on;
+        if(tabsPanel)tabsPanel.hidden=false;
+        pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#portfolio')===on);});
+        window.scrollTo(0,0);
+      }
+      function showIncentives(on){
+        document.body.classList.remove('view-portfolio');
+        document.body.classList.toggle('view-incentives',on);
+        if(pfPanel)pfPanel.hidden=on;
+        if(incPanel)incPanel.hidden=!on;
+        if(tabsPanel)tabsPanel.hidden=on;
+        pfLinks.forEach(function(l){l.classList.toggle('is-on',(l.getAttribute('href')==='#incentives')===on);});
+        window.scrollTo(0,0);
+      }
+      pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var href=l.getAttribute('href');if(href==='#portfolio')showPortfolio(true);else if(href==='#incentives')showIncentives(true);else{showPortfolio(false);showIncentives(false);}});});
       var pfConnect=document.getElementById('pf-connect');
       if(pfConnect)pfConnect.addEventListener('click',function(){var c=document.getElementById('hdr-connect');if(c)c.click();});
       if(location.hash==='#portfolio')showPortfolio(true);
+      if(location.hash==='#incentives')showIncentives(true);
       open('all');
     })();
     </script>
