@@ -12,6 +12,12 @@ Prepares a fork and local site, connects an empty wallet (0 positions,
 4. refresh_note - the snapshot caption rendered by site/render.mjs in the
    market header (visible without a wallet) must read
    'Auto-refreshed 3x/day (~06:15 / 14:15 / 22:15 UTC)'.
+5. listing_label - the My Listings panel for a wallet with data must show
+   the row 'Listing #0 · position #112 · 1.00 USDC · sold'.
+6. reward_head - the .pf-pos-head must contain 'EST. REWARD' as header label.
+7. rules_compact - the listing rules must be collapsed inside a native
+   <details> element with <summary>Listing rules</summary>; the line
+   'Unclaimed rewards pass to the buyer with the NFT.' must always be visible.
 
 Dependencies:
 - scripts/site/e2e_fork_trade.py (start_anvil, start_http_server,
@@ -20,6 +26,7 @@ Dependencies:
   .pf-empty, .pf-pos-wrap, .pf-positions-head, .pf-value, .snap-footer)
 - site/market-view.mjs (renderMyPositions, renderMyListingsPanel)
 - site/render.mjs (renderSnapshot, snap-footer origin line / blurb)
+- scripts/site/qa_sweep.py (MOCK_WALLET_JS for the wallet with data)
 """
 
 import sys
@@ -32,14 +39,41 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 import e2e_fork_trade as e2e
+import qa_sweep
+from qa_sweep import MOCK_WALLET_JS as QA_MOCK_WALLET_JS
 
 from playwright.sync_api import sync_playwright
 
 # The empty wallet that connects (0 positions, 0 listings).
 EMPTY_WALLET = "0x86Bb4278389572D6FFC803D72661552bE096E473"
 
+# The wallet with data: has position #112 and a sold listing #0.
+DATA_WALLET = "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B"
+
 # Site URL: local http server, path #portfolio.
 SITE_URL = "http://127.0.0.1:{port}/#portfolio"
+
+
+def open_live_page(browser, site_port):
+    """Open the site with the QA mock wallet (reads on live RPC).
+
+    The QA mock wallet from scripts/site/qa_sweep.py is injected as an
+    init script. The page is opened at index.html (default market view).
+    """
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def route_handler(route):
+        url = route.request.url
+        if not url.startswith("http://127.0.0.1:"):
+            route.continue_()
+            return
+        route.continue_()
+
+    context.route("http://127.0.0.1:**/*", route_handler)
+    context.add_init_script(QA_MOCK_WALLET_JS.replace("__ADDR__", DATA_WALLET))
+    page = context.new_page()
+    page.goto(f"http://127.0.0.1:{site_port}/index.html", wait_until="networkidle")
+    return context, page
 
 
 def run_guard() -> int:
@@ -52,6 +86,9 @@ def run_guard() -> int:
         "listings_empty": 0,
         "tile_label": 0,
         "refresh_note": 0,
+        "listing_label": 0,
+        "reward_head": 0,
+        "rules_compact": 0,
     }
     reasons = []
 
@@ -168,15 +205,120 @@ def run_guard() -> int:
             # checked before the connect step if they were already set).
             # But we have already stored them in results; print at the end.
 
-            # 11. Print results.
-            for key in ["empty_head", "listings_empty", "tile_label", "refresh_note"]:
+            # 11. Check rules_compact: the listing rules must be inside a
+            # native <details> element with <summary>Listing rules</summary>.
+            # The line 'Unclaimed rewards pass to the buyer with the NFT.'
+            # must always be visible; the other three rules must be inside
+            # the collapsed details.
+            try:
+                details = page.locator("#market-list details")
+                if details.count() == 0:
+                    reasons.append("collapsed listing rules")
+                else:
+                    summary_text = details.locator("summary").first.inner_text().strip()
+                    details_text = details.first.inner_text()
+
+                    always_visible_line = False
+                    collapsed_rule_ok = False
+                    # The 'Unclaimed rewards pass to the buyer with the NFT.'
+                    # line: it must be OUTSIDE the details (always visible).
+                    market_list_text = page.locator("#market-list").inner_text()
+                    if "Unclaimed rewards pass to the buyer with the NFT." in market_list_text:
+                        always_visible_line = True
+
+                    if summary_text == "Listing rules":
+                        collapsed_rule_ok = True
+
+                    if always_visible_line and collapsed_rule_ok:
+                        results["rules_compact"] = 1
+                    else:
+                        reasons.append("collapsed listing rules")
+            except Exception as exc:
+                reasons.append("collapsed listing rules")
+
+            # 12. Open the live page for the wallet with data.
+            # listing_label and reward_head use the QA mock wallet reading
+            # live RPC (the fork has no listing #0). The local http server
+            # serves the files; the QA mock routes API calls to live RPC.
+            live_context, live_page = open_live_page(browser, site_port)
+            try:
+                # Wait a moment for the page to settle.
+                live_page.wait_for_timeout(3000)
+
+                # Connect the wallet by clicking the header connect button.
+                live_page.click("#hdr-connect")
+                # Wait for the header to show a connected address.
+                try:
+                    live_page.wait_for_function(
+                        """() => {
+                            const b = document.getElementById('hdr-connect');
+                            return b && b.textContent.trim().startsWith('0x');
+                        }""",
+                        timeout=20000
+                    )
+                except Exception:
+                    reasons.append("listing label")
+
+                # Navigate to the portfolio view.
+                live_page.locator('a.hdr-link[href="#portfolio"]').click()
+                live_page.wait_for_timeout(2000)
+
+                # Wait for the My Listings panel to load data.
+                try:
+                    live_page.wait_for_selector(
+                        '[data-panel="my-listings"] .market-row, '
+                        '[data-panel="my-listings"] .pf-empty',
+                        timeout=30000
+                    )
+                except Exception:
+                    reasons.append("listing label")
+
+                # Check listing_label: the My Listings panel must contain a
+                # row reading 'Listing #0 · position #112 · 1.00 USDC · sold'.
+                try:
+                    my_rows = live_page.locator('[data-panel="my-listings"] .market-row').all()
+                    found_label = False
+                    for row in my_rows:
+                        row_text = row.inner_text()
+                        # normalize whitespace
+                        normalized = " ".join(row_text.split())
+                        if "Listing #0 · position #112 · 1.00 USDC · sold" in normalized:
+                            found_label = True
+                            break
+                    if found_label:
+                        results["listing_label"] = 1
+                    else:
+                        reasons.append("listing label")
+                except Exception:
+                    reasons.append("listing label")
+
+                # Check reward_head: the .pf-pos-head must contain
+                # 'EST. REWARD' as one of its header labels.
+                try:
+                    head_ok = False
+                    head_count = live_page.locator("#pf-positions .pf-pos-head").count()
+                    if head_count > 0:
+                        head_text = live_page.locator("#pf-positions .pf-pos-head").first.inner_text()
+                        if "EST. REWARD" in head_text.upper():
+                            head_ok = True
+                    if head_ok:
+                        results["reward_head"] = 1
+                    else:
+                        reasons.append("EST. REWARD head")
+                except Exception:
+                    reasons.append("EST. REWARD head")
+            finally:
+                live_context.close()
+
+            # 13. Print results.
+            for key in ["empty_head", "listings_empty", "tile_label", "refresh_note",
+                        "listing_label", "reward_head", "rules_compact"]:
                 print(f"{key}={results[key]}")
 
             for reason in reasons:
                 print(f"reason=missing: {reason}")
 
-            if results["empty_head"] == 1 and results["listings_empty"] == 1 and \
-               results["tile_label"] == 1 and results["refresh_note"] == 1:
+            if all(results.values()):
                 return 0
             return 1
 
@@ -186,6 +328,9 @@ def run_guard() -> int:
         print("listings_empty=0")
         print("tile_label=0")
         print("refresh_note=0")
+        print("listing_label=0")
+        print("reward_head=0")
+        print("rules_compact=0")
         print(f"reason={type(exc).__name__}: {exc}")
         return 1
     finally:
