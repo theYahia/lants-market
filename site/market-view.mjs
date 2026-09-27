@@ -1435,6 +1435,55 @@ export async function renderMyPositions(account, ids, snapshot) {
           target.textContent = humanError(err);
           setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
         }
+      } else if (target.classList.contains('claim')) {
+        const rowEl = target.closest('.pf-pos-row');
+        if (!rowEl) return;
+        const posId = rowEl.dataset.id;
+        if (!posId) return;
+        target.disabled = true;
+        const originalText = target.textContent;
+        target.textContent = 'Claiming...';
+        try {
+          if (!(selectedProvider ?? window.ethereum)) {
+            target.textContent = 'Connect wallet first';
+            setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+            return;
+          }
+          if (!(await ensureChain())) {
+            target.textContent = 'Wrong network';
+            setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+            return;
+          }
+          const accounts = await walletRequest({ method: 'eth_requestAccounts' });
+          const from = accounts && accounts[0];
+          if (!from) {
+            target.textContent = 'No account';
+            setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+            return;
+          }
+          const data = SEL.claimStakerRewards + encUint(BigInt(posId)) + encAddr(from);
+          const txHash = await walletRequest({
+            method: 'eth_sendTransaction',
+            params: [{ from, to: MARKET.stakerRewards, data }]
+          });
+          const receipt = await waitReceipt(txHash);
+          if (receipt && receipt.status === '0x1') {
+            target.textContent = 'Claimed';
+            setTimeout(async () => {
+              target.textContent = originalText;
+              target.disabled = false;
+              if (connectedAccount) {
+                await renderMyPositions(connectedAccount, myIds, await loadSnapshot());
+              }
+            }, 2000);
+          } else {
+            target.textContent = 'Failed';
+            setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+          }
+        } catch (err) {
+          target.textContent = humanError(err);
+          setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+        }
       }
     });
   }
