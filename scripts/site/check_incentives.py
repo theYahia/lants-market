@@ -183,6 +183,7 @@ def run_guard() -> int:
         "inc_rule": 0,
         "inc_calcui": 0,
         "inc_names": 0,
+        "inc_sort": 0,
     }
     subchecks = {key: [] for key in results}
     calcui_failures = []
@@ -848,7 +849,210 @@ def run_guard() -> int:
                 subchecks["inc_calcui"].append(False)
                 reasons.append("missing: dark styles on #incentives .inc-calc fields — " + type(exc).__name__ + ": " + str(exc))
 
-            # 19. Finalize and print all keys with honest aggregation.
+            # 19. inc_sort: before checking, click the Incentives nav link.
+            #     Each of the 5 board headers must contain exactly one
+            #     button.inc-sort. Initially the Est column (4th) has
+            #     aria-sort="descending" and no other th has aria-sort.
+            #     After clicking the Staked header's button (2nd), the first
+            #     data row must have the maximum Staked value across all rows
+            #     (compared numerically by parsing the text with commas
+            #     stripped), th[2] must have aria-sort="descending", and no
+            #     other th may have aria-sort. A second click on Staked must
+            #     sort ascending (first row = minimum, aria-sort="ascending").
+            #     After clicking the Pool header's button (1st), rows must be
+            #     ordered by pool name (or id when no name) ascending using
+            #     localeCompare semantics. Failures print reasons with a
+            #     "missing:" prefix.
+            try:
+                nav_link = page.locator('a.hdr-link[href="#incentives"]')
+                if nav_link.count() == 0 or not nav_link.first.is_visible():
+                    page.goto(f"http://127.0.0.1:{site_port}/index.html?r=incsort#incentives")
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(1500)
+                else:
+                    nav_link.first.click()
+                    page.wait_for_timeout(800)
+
+                sort_failures = []
+
+                def incsort_headers():
+                    return page.locator("#incentives .inc-board-table thead th").all()
+
+                def incsort_th_aria(th):
+                    attr = th.get_attribute("aria-sort")
+                    return attr
+
+                def incsort_rows_data():
+                    rows = page.locator("#incentives .board-row").all()
+                    out = []
+                    for row in rows:
+                        cells = row.locator("td").all()
+                        if len(cells) < 5:
+                            continue
+                        # Pool cell text: name (id) when name exists, else id.
+                        pool_text = cells[0].inner_text().strip()
+                        # Staked text is in the 2nd column and uses the
+                        # format "1,234.56".
+                        staked_text = cells[1].inner_text().strip()
+                        try:
+                            staked_val = float(staked_text.replace(",", ""))
+                        except ValueError:
+                            staked_val = 0.0
+                        out.append({"pool_text": pool_text, "staked": staked_val})
+                    return out
+
+                # 19a. Exactly one button.inc-sort in every header th.
+                headers = incsort_headers()
+                if len(headers) != 5:
+                    sort_failures.append("не 5 заголовков")
+                else:
+                    for idx, th in enumerate(headers, start=1):
+                        btns = th.locator("button.inc-sort")
+                        count = btns.count()
+                        if count != 1:
+                            sort_failures.append(
+                                f"кнопка в th[{idx}]: найдено {count} (ожидалось 1)"
+                            )
+                        else:
+                            # The button must be a child of the th.
+                            parent = btns.first.evaluate("el => el.parentElement.tagName.toLowerCase()")
+                            if parent != "th":
+                                sort_failures.append(f"кнопка в th[{idx}] не в th")
+
+                # 19b. Initial aria-sort state.
+                init_aria = {}
+                for idx, th in enumerate(headers, start=1):
+                    attr = incsort_th_aria(th)
+                    if attr is not None:
+                        init_aria[idx] = attr
+                if init_aria.get(4) != "descending":
+                    sort_failures.append(
+                        "стартовый aria-sort: Est не descending (получено "
+                        + str(init_aria.get(4))
+                        + ")"
+                    )
+                for idx, attr in init_aria.items():
+                    if idx != 4:
+                        sort_failures.append(
+                            f"стартовый aria-sort присутствует на th[{idx}]"
+                        )
+
+                def incsort_all_rows_data():
+                    return incsort_rows_data()
+
+                # 19c. Click Staked header (2nd th) → descending by staked.
+                headers[1].locator("button.inc-sort").click()
+                page.wait_for_timeout(300)
+                rows_after_first = incsort_all_rows_data()
+                if not rows_after_first:
+                    sort_failures.append("нет строк доски после клика по Staked")
+                else:
+                    max_val = max(row["staked"] for row in rows_after_first)
+                    first_val = rows_after_first[0]["staked"]
+                    if abs(first_val - max_val) > 1e-9:
+                        sort_failures.append(
+                            "первая строка после клика по Staked не максимум"
+                        )
+                    # aria-sort state after first Staked click.
+                    headers2 = incsort_headers()
+                    aria2 = {}
+                    for idx, th in enumerate(headers2, start=1):
+                        attr = incsort_th_aria(th)
+                        if attr is not None:
+                            aria2[idx] = attr
+                    if aria2.get(2) != "descending":
+                        sort_failures.append(
+                            "после 1-го клика Staked: th[2] не descending"
+                        )
+                    for idx, attr in aria2.items():
+                        if idx != 2:
+                            sort_failures.append(
+                                f"после 1-го клика Staked: aria-sort на th[{idx}]"
+                            )
+
+                # 19d. Second click on Staked → ascending.
+                headers[1].locator("button.inc-sort").click()
+                page.wait_for_timeout(300)
+                rows_after_second = incsort_all_rows_data()
+                if not rows_after_second:
+                    sort_failures.append("нет строк доски после 2-го клика по Staked")
+                else:
+                    min_val = min(row["staked"] for row in rows_after_second)
+                    first_val = rows_after_second[0]["staked"]
+                    if abs(first_val - min_val) > 1e-9:
+                        sort_failures.append(
+                            "первая строка после 2-го клика Staked не минимум"
+                        )
+                    headers3 = incsort_headers()
+                    aria3 = {}
+                    for idx, th in enumerate(headers3, start=1):
+                        attr = incsort_th_aria(th)
+                        if attr is not None:
+                            aria3[idx] = attr
+                    if aria3.get(2) != "ascending":
+                        sort_failures.append(
+                            "после 2-го клика Staked: th[2] не ascending"
+                        )
+                    for idx, attr in aria3.items():
+                        if idx != 2:
+                            sort_failures.append(
+                                f"после 2-го клика Staked: aria-sort на th[{idx}]"
+                            )
+
+                # 19e. Click Pool header (1st) → ascending by name then id.
+                headers[1].locator("button.inc-sort").click()  # reset staked first
+                page.wait_for_timeout(300)
+                headers = incsort_headers()
+                headers[0].locator("button.inc-sort").click()
+                page.wait_for_timeout(300)
+                rows_pool = incsort_all_rows_data()
+                if not rows_pool:
+                    sort_failures.append("нет строк доски после клика по Pool")
+                else:
+                    # LocaleCompare-like comparison: lowercase for stability.
+                    texts = [row["pool_text"] for row in rows_pool]
+                    expected = sorted(texts, key=lambda s: s.lower())
+                    for i in range(len(texts)):
+                        if texts[i] != expected[i]:
+                            sort_failures.append(
+                                "неверный порядок Pool после клика (на индексе "
+                                + str(i)
+                                + ")"
+                            )
+                            break
+                    headers4 = incsort_headers()
+                    aria4 = {}
+                    for idx, th in enumerate(headers4, start=1):
+                        attr = incsort_th_aria(th)
+                        if attr is not None:
+                            aria4[idx] = attr
+                    if aria4.get(1) != "ascending":
+                        sort_failures.append("после клика Pool: th[1] не ascending")
+                    for idx, attr in aria4.items():
+                        if idx != 1:
+                            sort_failures.append(
+                                f"после клика Pool: aria-sort на th[{idx}]"
+                            )
+
+                if not sort_failures:
+                    results["inc_sort"] = 1
+                    subchecks["inc_sort"].append(True)
+                else:
+                    results["inc_sort"] = 0
+                    subchecks["inc_sort"].append(False)
+                    for fail in sort_failures:
+                        reasons.append("missing: " + fail)
+            except Exception as exc:
+                results["inc_sort"] = 0
+                subchecks["inc_sort"].append(False)
+                reasons.append(
+                    "missing: inc_sort raised "
+                    + type(exc).__name__
+                    + ": "
+                    + str(exc)
+                )
+
+            # 20. Finalize and print all keys with honest aggregation.
             finalize_results()
             for key in sorted(results.keys()):
                 print(f"{key}={results[key]}")
