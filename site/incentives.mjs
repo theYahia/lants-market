@@ -147,6 +147,113 @@ function formatUtc(date) {
   return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
 }
 
+function buildCalculator(snapshot, mode, offers, displayEpoch) {
+  const container = document.createElement('div');
+  container.className = 'inc-calc';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Estimated rewards calculator';
+  container.appendChild(h3);
+
+  const poolLabel = document.createElement('label');
+  poolLabel.textContent = 'Pool: ';
+  const poolSelect = document.createElement('select');
+
+  const e = Number(mode.epoch);
+  const nextEpoch = String(e + 1);
+  const positions = snapshot.positions || [];
+  const poolReward = new Map();
+  const poolOrder = [];
+  for (const pos of positions) {
+    const pool = String(pos.agentId);
+    const reward = BigInt(pos.rewardByEpoch?.[String(e)] || 0);
+    if (!poolReward.has(pool)) {
+      poolReward.set(pool, 0n);
+      poolOrder.push(pool);
+    }
+    poolReward.set(pool, poolReward.get(pool) + reward);
+  }
+
+  const defaultPool = '52894';
+  if (!poolOrder.includes(defaultPool) && defaultPool) {
+    poolOrder.unshift(defaultPool);
+    poolReward.set(defaultPool, poolReward.get(defaultPool) || 0n);
+  }
+
+  for (const pool of poolOrder) {
+    const option = document.createElement('option');
+    option.value = pool;
+    option.textContent = pool;
+    if (pool === defaultPool) option.selected = true;
+    poolSelect.appendChild(option);
+  }
+
+  const yLabel = document.createElement('label');
+  yLabel.textContent = 'Amount of ANTS: ';
+  const yInput = document.createElement('input');
+  yInput.type = 'number';
+  yInput.min = '0';
+  yInput.step = '1';
+  yInput.value = '';
+  yInput.placeholder = '0';
+
+  poolLabel.appendChild(poolSelect);
+  yLabel.appendChild(yInput);
+  container.appendChild(poolLabel);
+  container.appendChild(document.createElement('br'));
+  container.appendChild(yLabel);
+  container.appendChild(document.createElement('br'));
+
+  const output = document.createElement('p');
+  output.className = 'inc-calc-output';
+  container.appendChild(output);
+
+  function update() {
+    const Y = Number(yInput.value);
+    if (!yInput.value || !(Y > 0)) {
+      output.textContent = '';
+      return;
+    }
+    const pool = poolSelect.value;
+    if (!pool) {
+      output.textContent = '';
+      return;
+    }
+    const poolWeights = snapshot.poolWeightByEpoch?.[pool];
+    const wNext = BigInt(poolWeights?.[nextEpoch] || 0);
+    const rE = poolReward.get(pool) || 0n;
+    if (wNext === 0n) {
+      output.textContent = 'This pool is not counted next epoch.';
+      return;
+    }
+    const vWei = BigInt(Y) * 104n * 10n ** 18n;
+    const estWei = rE * vWei / (wNext + vWei);
+    const estAnts = Number(estWei) / 1e18;
+
+    let usdc = '—';
+    if (offers) {
+      let best = null;
+      for (const offer of offers) {
+        if (!isValidOffer(offer, displayEpoch)) continue;
+        if (offer.pool !== pool) continue;
+        if (!best || offer.usdcPer1k > best.usdcPer1k) best = offer;
+      }
+      if (best) {
+        const usdcValue = Math.min(Y, best.capAnts) / 1000 * best.usdcPer1k;
+        usdc = usdcValue.toFixed(2) + ' USDC';
+      }
+    }
+
+    output.textContent = `${estAnts.toFixed(2)} ANTS est. · ${usdc}`;
+  }
+
+  poolSelect.addEventListener('input', update);
+  yInput.addEventListener('input', update);
+  update();
+
+  return container;
+}
+
 function buildBoard(snapshot, mode, offers, displayEpoch) {
   const e = Number(mode.epoch);
   const nextEpoch = String(e + 1);
@@ -328,12 +435,15 @@ async function init() {
       note.textContent = 'est. after the first purchases this epoch';
     }
 
+    const calculator = buildCalculator(snapshot, mode, offers, N);
+
     const offerSection = buildOfferSection(offers, N);
 
     container.innerHTML = '';
     container.appendChild(header);
     container.appendChild(board);
     container.appendChild(note);
+    container.appendChild(calculator);
     container.appendChild(offerSection);
   } catch (err) {
     container.innerHTML = '<p>Failed to load incentive data.</p>';
