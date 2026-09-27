@@ -1,1 +1,13 @@
-[]
+[
+ {
+  "pool": "44694",
+  "epochs": [
+   25
+  ],
+  "usdcPer1k": 1,
+  "capAnts": 10000,
+  "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B",
+  "pays": "new",
+  "note": "Sponsored by lants.eth: new stakes in Open Forge for epoch 25."
+ }
+]
