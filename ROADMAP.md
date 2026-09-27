@@ -100,6 +100,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Portfolio polish, rest: no duplicate rows with pre-connected wallets, shorter listing rules | 28.09 | open |
 | Incentives polish: a "how to stake into a pool" line, collapse the board to 10 rows on phones | 01.10 | open |
 | Before the next offer: pick the best offer per pool by payout, validate offer fields strictly | 01.10 | open |
+| Warn on the Move button that moving between sellers will lower the reward rate, once AntSeed ships it (announced 27.09) | when live | open |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
 | Weekly epoch recaps on X | every Thu | open |

@@ -75,6 +75,9 @@ positions #15 and #9.
 | Early exit | **max(5 %, 50 % × remaining / total)** of principal, burned | right after staking for 104 epochs this is 50 % |
 | Transfer the NFT | gas | nothing in the contract blocks it |
 
+**Announced, not in the contract yet (27.09, AntSeed product owner in the community chat):** moving a position
+between sellers will lower its reward rate. Stake with sellers you trust rather than planning to move later.
+
 ⚠️ For a buyer of a position: between a listing and a sale the seller can still claim the pending
 reward, split the position or switch max-lock. Any serious market has to check the position at fill
 time.
