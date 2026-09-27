@@ -592,7 +592,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   // Sorting logic: each header button sorts the tbody rows.
   const headerThs = table.querySelectorAll('thead th');
   const headerButtons = table.querySelectorAll('thead th button.inc-sort');
-  let activeColumn = 2;
+  let activeColumn = hasHistory ? 2 : 1;
   let activeDirection = 'descending';
   headerThs[activeColumn].setAttribute('aria-sort', activeDirection);
 
@@ -622,7 +622,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
         }
       });
   };
-  if (hasHistory) sortRows(activeColumn);
+  sortRows(activeColumn);
 
   headerButtons.forEach((button, index) => {
     button.addEventListener('click', () => {
