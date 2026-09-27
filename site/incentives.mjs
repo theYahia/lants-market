@@ -475,7 +475,8 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     tdPool.appendChild(stakedLine);
     const tdEst = document.createElement('td');
     if (isLive) {
-      tdEst.textContent = est.toFixed(2);
+      tdEst.textContent = Math.round(est).toLocaleString('en-US');
+      tdEst.className = 'inc-est';
     } else {
       tdEst.textContent = 'est. after the first purchases this epoch';
     }
@@ -561,8 +562,8 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     'Offer'
   ];
   const tips = [
-    'The seller of this pool (name or pool id).',
-    `Estimated ANTS reward per epoch for each 1,000 ANTS staked at max lock (104 epochs), assuming no one else joins the pool. The estimate uses the projected staker budget of ${nextBudget(snapshot, N)?.toFixed(0) ?? 'the current'} ANTS for the next epoch.`,
+    'Seller and the ANTS staked in its pool for next epoch, a sign of trust. Tags: new = paid nothing in completed epochs yet; thin = under 100 ANTS staked, check the seller first.',
+    `Estimated ANTS reward per epoch for each 1,000 ANTS staked at max lock (104 epochs), if this epoch's sales shares hold and no one else joins the pool. Uses the projected staker budget of ${nextBudget(snapshot, N)?.toLocaleString('en-US', { maximumFractionDigits: 0 }) ?? 'the current'} ANTS for the next epoch.`,
     'What this pool paid its stakers in the completed epochs shown, newest first.',
     'Best USDC offer per 1,000 ANTS for this pool in the next epoch.'
   ];

@@ -924,3 +924,4 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
 .inc-board-table td:first-child{white-space:normal}
 .inc-board-table th{white-space:normal;vertical-align:bottom}
 @media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}}
+.inc-est{font-weight:600;color:var(--ink)}
