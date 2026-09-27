@@ -902,3 +902,19 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
   list-style:none;
   overflow-wrap:anywhere;
 }
+.inc-calc{
+  display:grid;
+  gap:8px;
+  max-width:360px;
+}
+.inc-calc input,
+.inc-calc select{
+  background-color:oklch(0.16 0.008 313);
+  border:1px solid var(--line);
+  border-radius:3px;
+  color:var(--ink);
+  min-height:44px;
+  padding:8px 10px;
+  font-size:var(--fs-15);
+  color-scheme:dark;
+}
