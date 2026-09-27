@@ -222,6 +222,8 @@ holds under the live linear weight policy, `poolWeightPolicy() = 0x0`), the esti
 budget straight from the rewards contract (`stakerEpochBudget(25)` = 101,600 ANTS) instead of this epoch's. Second
 point from the same review: ranking by the estimate puts thin pools on top, and if everyone follows it they stop
 being thin. The board is now ranked by what each pool paid its stakers in completed epochs, with `new` and `thin` tags.
+Then the board was reworked the Votium way: four columns (seller with its stake, ANTS per 1,000 ANTS next epoch,
+paid to stakers, offer), one headline number, and every caveat in an ⓘ tip next to its heading.
 
 **27.09.2026** — Claim and Restake for staker rewards in My Positions, one click each; after the
 transaction the portfolio re-reads the wallet, so the new position and the zeroed reward show without a reload. Tested on a
