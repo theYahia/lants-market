@@ -411,8 +411,8 @@ function buildNoPool(snapshot, poolNames) {
       tdName.appendChild(idSpan);
       tr.appendChild(tdName);
       const tdEarned = document.createElement('td');
-      const earnedAnts = Number(s.earned) / 1e18;
-      tdEarned.textContent = `$${Math.round(earnedAnts).toLocaleString('en-US')}`;
+      const earnedUsdc = Number(s.earned) / 1e6;
+      tdEarned.textContent = `$${Math.floor(earnedUsdc).toLocaleString('en-US')}`;
       tr.appendChild(tdEarned);
       const tdBuyers = document.createElement('td');
       tdBuyers.textContent = Number(s.uniqueBuyers || 0).toLocaleString('en-US');
