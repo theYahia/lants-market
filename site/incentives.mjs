@@ -1,5 +1,5 @@
 import { rewardMode } from './metrics.mjs';
-import { validRebate, rebateLine, rebateLabel } from './rebate.mjs';
+import { validRebate, rebateLine, rebateLabel, rebateForSpend } from './rebate.mjs';
 
 async function loadJSON(urls) {
   for (const url of urls) {
@@ -278,6 +278,53 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   output.className = 'inc-calc-output';
   container.appendChild(output);
 
+  const rebateSpendLabel = document.createElement('label');
+  rebateSpendLabel.textContent = 'Spend with this seller (USD): ';
+  const rebateSpendInput = document.createElement('input');
+  rebateSpendInput.type = 'number';
+  rebateSpendInput.id = 'inc-calc-spend';
+  rebateSpendInput.min = '0';
+  rebateSpendInput.step = 'any';
+  rebateSpendInput.value = '';
+  rebateSpendInput.placeholder = '0';
+  rebateSpendLabel.appendChild(rebateSpendInput);
+  const rebateOutput = document.createElement('p');
+  rebateOutput.className = 'inc-calc-rebate';
+  container.appendChild(rebateSpendLabel);
+  container.appendChild(rebateOutput);
+
+  function updateRebate() {
+    const pool = poolSelect.value;
+    let offer = null;
+    if (offers) {
+      for (const o of offers) {
+        if (validRebate(o) && o.pool === pool && o.epochs[0] === displayEpoch) {
+          offer = o;
+          break;
+        }
+      }
+    }
+    if (!offer) {
+      rebateSpendLabel.style.display = 'none';
+      rebateOutput.textContent = '';
+      return;
+    }
+    rebateSpendLabel.style.display = '';
+    const spend = Number(rebateSpendInput.value);
+    if (!rebateSpendInput.value || !(spend > 0)) {
+      rebateOutput.textContent = rebateLabel(offer, displayEpoch);
+      return;
+    }
+    if (offer.minSpendUsdc !== undefined && spend < offer.minSpendUsdc) {
+      rebateOutput.textContent = `${rebateLabel(offer, displayEpoch)} · minimum spend $${offer.minSpendUsdc}`;
+      return;
+    }
+    const microSpend = BigInt(Math.round(spend * 1e6));
+    const rebateBack = rebateForSpend(microSpend, offer);
+    const rebateUsdc = Number(rebateBack) / 1e6;
+    rebateOutput.textContent = `You get $${rebateUsdc.toFixed(2)} back · ${rebateLabel(offer, displayEpoch)}`;
+  }
+
   function update() {
     const Y = Number(yInput.value);
     if (!yInput.value || !(Y > 0)) {
@@ -329,7 +376,10 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
 
   poolSelect.addEventListener('input', update);
   yInput.addEventListener('input', update);
+  poolSelect.addEventListener('input', updateRebate);
+  rebateSpendInput.addEventListener('input', updateRebate);
   update();
+  updateRebate();
 
   return container;
 }
