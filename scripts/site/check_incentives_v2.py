@@ -33,6 +33,7 @@ Keys:
   inc_cashback_detail  the detail row: "<cell> ANTS per $1", "reached at ≈ $D"; at 390 px the column is hidden, no side scroll
   inc_nopool        .inc-nopool under the board: steps, active sellers without a pool, closed list of inactive ones
   inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
+  inc_nopool_earned  the first active row shows all-time earnings as whole dollars with separators
   inc_nopool_phone  at 390 px the seller cell of the first no-pool row is at least 90 px wide
   inc_polish        the estimate cell has the colour of the other cells; the expand button is not a light box;
                     the detail row has " · " before "<n> ANTS per $1"
@@ -167,7 +168,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_phone", "inc_polish"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_earned", "inc_nopool_phone", "inc_polish"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -373,7 +374,7 @@ def run_guard():
                         ft = arows.first.inner_text()
                         record("inc_nopool", f"first row {ft[:80]!r} is not {first['name']!r}", first["name"] in ft)
                         earned = f"${fmt(int(first['earnedUsdc']) // 10**6)}"
-                        record("inc_nopool", f"first row lacks all-time earnings {earned!r}: {ft[:120]!r}", earned in ft)
+                        record("inc_nopool_earned", f"first row lacks all-time earnings {earned!r}: {ft[:120]!r}", earned in ft)
                         # inc_polish: the estimate reads as data, not as an error: same colour as the buyers cell
                         cells = arows.first.locator("td")
                         colors = [cells.nth(i).evaluate("el => getComputedStyle(el).color") for i in range(cells.count())]
@@ -392,6 +393,7 @@ def run_guard():
             except Exception as exc:
                 crash("inc_nopool", exc)
                 crash("inc_nopool_x", exc)
+                crash("inc_nopool_earned", exc)
 
             # inc_cashback fallback: too early in the epoch -> the final previous epoch
             try:
