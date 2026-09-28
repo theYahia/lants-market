@@ -1015,10 +1015,12 @@ def run_guard() -> int:
                 page.wait_for_load_state("networkidle")
                 page.wait_for_timeout(1500)
                 ths = page.locator("#incentives .inc-board-table thead th").all()
-                if len(ths) != 4:
-                    lay.append(f"{len(ths)} headings, want 4")
+                # v2 adds "Buyer ANTS per $1" as the 4th heading, before Offer (Offer stays last: the phone rule hides it)
+                wants = ["seller", "1,000 ants", "paid", "offer"] if len(ths) == 4 else ["seller", "1,000 ants", "paid", "buyer ants per $1", "offer"]
+                if len(ths) not in (4, 5):
+                    lay.append(f"{len(ths)} headings, want 4 or 5")
                 else:
-                    for i, want in enumerate(["seller", "1,000 ants", "paid", "offer"]):
+                    for i, want in enumerate(wants):
                         if want not in ths[i].inner_text().lower():
                             lay.append(f"heading {i + 1} lacks '{want}'")
                     for i, th in enumerate(ths):
