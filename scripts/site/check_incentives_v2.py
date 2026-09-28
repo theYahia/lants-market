@@ -27,7 +27,9 @@ Keys:
   inc_postcta       exactly one visible a.inc-post-offer, above the board table, centred on it
   inc_expand        a button.inc-expand per board row; it opens a tr.inc-detail right under its row
   inc_expand_sort   after a header sort the open detail row still sits right under its board row
-  inc_cashback      column "Buyer ANTS per $1, epoch e so far"; floor(B·W·1e6/T); tip with the cap; early-epoch fallback
+  inc_cashback_head  a 4th heading "Buyer ANTS per $1, epoch e so far" with a tip that names the cap and "0 = no pool"
+  inc_cashback      the cells: floor(B·W·1e6/T) with separators, "<1", "from epoch e+1", "0"
+  inc_cashback_early  when T(e) < 5 % of T(e-1): heading "final, epoch e-1" and cells from epoch e-1
   inc_cashback_detail  the detail row: "<cell> ANTS per $1", "reached at ≈ $D"; at 390 px the column is hidden, no side scroll
   inc_nopool        .inc-nopool under the board: steps, active sellers without a pool, closed list of inactive ones
   inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
@@ -162,7 +164,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -310,20 +312,22 @@ def run_guard():
             try:
                 heads = page.locator("#incentives table.inc-board-table thead th")
                 idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().lower().startswith("buyer ants per $1")), None)
+                record("inc_cashback_head", "no 'Buyer ANTS per $1' column heading", idx is not None)
                 record("inc_cashback", "no 'Buyer ANTS per $1' column heading", idx is not None)
                 if idx is not None:
                     htext = " ".join(heads.nth(idx).inner_text().split()).lower()  # headings are uppercased by CSS
-                    record("inc_cashback", f"heading {htext!r} lacks 'epoch {e} so far'", f"epoch {e} so far" in htext)
+                    record("inc_cashback_head", f"heading {htext!r} lacks 'epoch {e} so far'", f"epoch {e} so far" in htext)
                     tip = heads.nth(idx).locator("span.info").get_attribute("data-tip") or ""
                     cap = int(snap["usageByEpoch"][str(e)]["buyerBudget"]) * int(snap["maxRewardShareBps"]) // 10000 // 10**18
                     for needle in [f"Capped at {fmt(cap)} ANTS per buyer per epoch", "0 = no pool"]:
-                        record("inc_cashback", f"tip lacks {needle!r}", needle in tip)
+                        record("inc_cashback_head", f"tip lacks {needle!r}", needle in tip)
                     for pool in ["44694", "52894", "47140", "53354"]:
                         want, _ = cashback_text(snap, pool)
                         cell = page.locator(f'#incentives tr.board-row[data-pool="{pool}"] td').nth(idx)
                         got = " ".join(cell.inner_text().split())
                         record("inc_cashback", f"pool {pool}: cell {got!r}, want {want!r}", got == want)
             except Exception as exc:
+                crash("inc_cashback_head", exc)
                 crash("inc_cashback", exc)
 
             # inc_cashback_detail (desktop): the detail row names the cap in dollars at this rate
@@ -380,13 +384,13 @@ def run_guard():
                 heads = pg.locator("#incentives table.inc-board-table thead th")
                 idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().lower().startswith("buyer ants per $1")), None)
                 ok = idx is not None and f"final, epoch {e - 1}" in heads.nth(idx).inner_text().lower()
-                record("inc_cashback", f"early in the epoch the heading does not say 'final, epoch {e - 1}'", ok)
+                record("inc_cashback_early", f"early in the epoch the heading does not say 'final, epoch {e - 1}'", ok)
                 if idx is not None:
                     want, _ = cashback_text(early, "44694")
                     got = " ".join(pg.locator('#incentives tr.board-row[data-pool="44694"] td').nth(idx).inner_text().split())
-                    record("inc_cashback", f"fallback 44694 cell {got!r}, want {want!r}", got == want)
+                    record("inc_cashback_early", f"fallback 44694 cell {got!r}, want {want!r}", got == want)
             except Exception as exc:
-                crash("inc_cashback", exc)
+                crash("inc_cashback_early", exc)
             finally:
                 body[0] = json.dumps(snap).encode()
 
