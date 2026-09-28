@@ -781,7 +781,8 @@ def run_guard() -> int:
                     page.wait_for_load_state("networkidle")
                     page.wait_for_timeout(800)
 
-                fields = page.locator('#incentives .inc-calc input, #incentives .inc-calc select').all()
+                # hidden fields (the rebate spend input for a pool without a rebate) have no box to style
+                fields = [f for f in page.locator('#incentives .inc-calc input, #incentives .inc-calc select').all() if f.is_visible()]
                 print(f"inc_calcui_fields={len(fields)}")
 
                 ok = True

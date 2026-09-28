@@ -12,6 +12,7 @@ Keys (one per code stage):
   rebate_label       rebateLabel() / rebateLine() in site/rebate.mjs: the words of a rebate offer, by epoch state
   rebate_board_offers  the Offers section lists the rebate line next to the stake line
   rebate_board       the board and the Offers section show a rebate offer in words, by epoch state
+  rebate_calc_style  the spend input looks like the other calculator fields (dark, >= 16px text, >= 40px tall)
   rebate_calc        the calculator shows "you get $Z back" for a pool with an active rebate offer
 
 Run everything:        python scripts/site/check_rebate.py
@@ -143,7 +144,7 @@ def schema_cases():
 def main():
     offline = "--offline" in sys.argv
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
-    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_scan_pace", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc"]
+    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_scan_pace", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style"]
     checks = {k: [] for k in keys}
     reasons = []
 
@@ -420,7 +421,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- page keys ----
-    page_keys = [k for k in ("rebate_board_offers", "rebate_board", "rebate_calc") if run_key(k)]
+    page_keys = [k for k in ("rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style") if run_key(k)]
     try:
         if not page_keys:
             raise StopIteration
@@ -492,13 +493,22 @@ def main():
                     crash("rebate_board", exc)
 
                 try:
-                    if "rebate_calc" not in page_keys:
+                    if "rebate_calc" not in page_keys and "rebate_calc_style" not in page_keys:
                         raise StopIteration
                     pg = open_page("calc")
                     pg.locator("#incentives .inc-calc select").first.select_option("52894")
                     pg.wait_for_timeout(300)
                     spend = pg.locator("#inc-calc-spend")
                     record("rebate_calc", "no #inc-calc-spend input for a pool with an active rebate", spend.count() == 1 and spend.is_visible())
+                    if "rebate_calc_style" in page_keys:
+                        if spend.count() == 1 and spend.is_visible():
+                            st = spend.evaluate("el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).fontSize]")
+                            h = spend.bounding_box()["height"]
+                            record("rebate_calc_style", f"#inc-calc-spend background {st[0]} is white (the other fields are dark)", st[0].lower() != "rgb(255, 255, 255)")
+                            record("rebate_calc_style", f"#inc-calc-spend font-size {st[1]} < 16px", float(st[1].replace("px", "") or 0) >= 16)
+                            record("rebate_calc_style", f"#inc-calc-spend height {h:.0f}px < 40px", h >= 40)
+                        else:
+                            record("rebate_calc_style", "no visible #inc-calc-spend to style", False)
                     if spend.count() == 1:
                         for val, want in (("50", "$1.50 back"), ("100", "$2.00 back"), ("0.5", "minimum spend $1")):
                             spend.fill(val)
@@ -511,6 +521,7 @@ def main():
                     record("rebate_calc", "the spend input stays for a pool without a rebate", sp.count() == 0 or not sp.is_visible())
                 except Exception as exc:
                     crash("rebate_calc", exc)
+                    crash("rebate_calc_style", exc)
                 b.close()
         finally:
             e2e.stop_all()
