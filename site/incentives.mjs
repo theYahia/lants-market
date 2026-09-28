@@ -1,5 +1,5 @@
 import { rewardMode } from './metrics.mjs';
-import { validRebate, rebateLine } from './rebate.mjs';
+import { validRebate, rebateLine, rebateLabel } from './rebate.mjs';
 
 async function loadJSON(urls) {
   for (const url of urls) {
@@ -627,6 +627,14 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       }
     }
   }
+  // rebate:board-map
+  const rebateByPool = new Map();
+  if (offers) {
+    for (const offer of offers) {
+      if (isValidOffer(offer, displayEpoch) || !validRebate(offer)) continue;
+      if (!rebateByPool.has(offer.pool)) rebateByPool.set(offer.pool, offer);
+    }
+  }
 
   // Compute est for a pool with given v
   const estForPool = (pool, v) => {
@@ -716,7 +724,12 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     }
     const tdOffer = document.createElement('td');
     const best = bestOfferByPool.get(pool);
-    tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
+    const rebateOffer = rebateByPool.get(pool);
+    if (rebateOffer) {
+      tdOffer.textContent = `${rebateLabel(rebateOffer, displayEpoch)}`;
+    } else {
+      tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
+    }
     tr.appendChild(tdPool);
     tr.appendChild(tdEst);
     tr.appendChild(tdPaid);
@@ -766,7 +779,12 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     }
     const tdOffer = document.createElement('td');
     const best = bestOfferByPool.get(pool);
-    tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
+    const rebateOffer = rebateByPool.get(pool);
+    if (rebateOffer) {
+      tdOffer.textContent = `${rebateLabel(rebateOffer, displayEpoch)}`;
+    } else {
+      tdOffer.textContent = best !== undefined ? `${best} USDC per 1,000 ANTS` : '—';
+    }
     tr.appendChild(tdPool);
     tr.appendChild(tdEst);
     tr.appendChild(tdPaid);
