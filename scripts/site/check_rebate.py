@@ -12,6 +12,7 @@ Keys (one per code stage):
   rebate_label       rebateLabel() / rebateLine() in site/rebate.mjs: the words of a rebate offer, by epoch state
   rebate_board_offers  the Offers section lists the rebate line next to the stake line
   rebate_board       the board and the Offers section show a rebate offer in words, by epoch state
+  rebate_issue_form  the 'Post an offer' GitHub issue body has the rebate fields next to the stake ones
   rebate_calc_style  the spend input looks like the other calculator fields (dark, >= 16px text, >= 40px tall)
   rebate_calc        the calculator shows "you get $Z back" for a pool with an active rebate offer
 
@@ -144,7 +145,7 @@ def schema_cases():
 def main():
     offline = "--offline" in sys.argv
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
-    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_scan_pace", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style"]
+    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_scan_pace", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style", "rebate_issue_form"]
     checks = {k: [] for k in keys}
     reasons = []
 
@@ -421,7 +422,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- page keys ----
-    page_keys = [k for k in ("rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style") if run_key(k)]
+    page_keys = [k for k in ("rebate_board_offers", "rebate_board", "rebate_calc", "rebate_calc_style", "rebate_issue_form") if run_key(k)]
     try:
         if not page_keys:
             raise StopIteration
@@ -464,6 +465,17 @@ def main():
                     heads = pg.locator("#incentives table.inc-board-table thead th")
                     idx = next(i for i in range(heads.count()) if heads.nth(i).inner_text().strip().lower().startswith("offer"))
                     return " ".join(pg.locator('#incentives tr.board-row[data-pool="52894"] td').nth(idx).inner_text().split())
+
+                try:
+                    if "rebate_issue_form" not in page_keys:
+                        raise StopIteration
+                    import urllib.parse as _up
+                    href = open_page("form").locator("#incentives a.inc-post-offer").first.get_attribute("href") or ""
+                    body = _up.unquote(_up.parse_qs(_up.urlparse(href).query).get("body", [""])[0])
+                    for needle in ("Type: stake | rebate", "pctBps", "capUsdc", "capPerBuyerUsdc", "minSpendUsdc", "USDC per 1,000 ANTS", "Payer"):
+                        record("rebate_issue_form", f"the 'Post an offer' issue body lacks {needle!r}", needle in body)
+                except Exception as exc:
+                    crash("rebate_issue_form", exc)
 
                 try:
                     if "rebate_board_offers" not in page_keys:
