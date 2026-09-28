@@ -857,8 +857,8 @@ def run_guard() -> int:
 
                 # 19a. Four headings (Seller, per 1,000 ANTS, Paid, Offer), one button.inc-sort in each.
                 headers = incsort_headers()
-                if len(headers) != 4:
-                    sort_failures.append(f"{len(headers)} headings, want 4")
+                if len(headers) not in (4, 5):  # v2 adds "Buyer ANTS per $1" before Offer
+                    sort_failures.append(f"{len(headers)} headings, want 4 or 5")
                 for idx, th in enumerate(headers, start=1):
                     count = th.locator("button.inc-sort").count()
                     if count != 1:
@@ -1080,8 +1080,8 @@ def run_guard() -> int:
                 page.wait_for_timeout(1500)
                 tip_texts = page.eval_on_selector_all(
                     "#incentives .inc-board-table thead th .info", "e => e.map(x => (x.dataset.tip || '').toLowerCase())")
-                if len(tip_texts) != 4:
-                    tips_fail.append(f"{len(tip_texts)} heading tips, want 4")
+                if len(tip_texts) not in (4, 5):  # v2 adds "Buyer ANTS per $1" before Offer
+                    tips_fail.append(f"{len(tip_texts)} heading tips, want 4 or 5")
                 else:
                     for word in ("staked", "new", "thin"):
                         if word not in tip_texts[0]:

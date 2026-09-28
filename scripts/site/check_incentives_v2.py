@@ -33,6 +33,9 @@ Keys:
   inc_cashback_detail  the detail row: "<cell> ANTS per $1", "reached at ≈ $D"; at 390 px the column is hidden, no side scroll
   inc_nopool        .inc-nopool under the board: steps, active sellers without a pool, closed list of inactive ones
   inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
+  inc_nopool_phone  at 390 px the seller cell of the first no-pool row is at least 90 px wide
+  inc_polish        the estimate cell has the colour of the other cells; the expand button is not a light box;
+                    the detail row has " · " before "<n> ANTS per $1"
 
 Run: python scripts/site/check_incentives_v2.py   (prints key=0/1 and reason= lines; exit 0 only if all are 1)
 """
@@ -164,7 +167,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_phone", "inc_polish"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -341,6 +344,11 @@ def run_guard():
                 record("inc_cashback_detail", f"44694 detail lacks 'reached at ≈ ${dollars}': {dt[:200]!r}", f"reached at ≈ ${dollars}" in dt)
                 want, _ = cashback_text(snap, "44694")
                 record("inc_cashback_detail", f"44694 detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
+                record("inc_polish", f"44694 detail lacks the separator before the cashback: ' · {want} ANTS per $1'", f" · {want} ANTS per $1" in dt)
+                bg = page.locator('#incentives tr.board-row[data-pool="44694"] button.inc-expand').evaluate("el => getComputedStyle(el).backgroundColor")
+                rgb = [int(x) for x in bg.replace("rgba(", "").replace("rgb(", "").replace(")", "").split(",")[:3]]
+                alpha = float(bg.split(",")[3].strip(" )")) if bg.startswith("rgba") else 1.0
+                record("inc_polish", f"expand button is a light box ({bg}); style it like the page's small buttons", alpha == 0 or sum(rgb) < 300)
             except Exception as exc:
                 crash("inc_cashback_detail", exc)
 
@@ -364,6 +372,16 @@ def run_guard():
                         first_id, first = active[0]
                         ft = arows.first.inner_text()
                         record("inc_nopool", f"first row {ft[:80]!r} is not {first['name']!r}", first["name"] in ft)
+                        earned = f"${fmt(int(first['earnedUsdc']) // 10**6)}"
+                        record("inc_nopool", f"first row lacks all-time earnings {earned!r}: {ft[:120]!r}", earned in ft)
+                        # inc_polish: the estimate reads as data, not as an error: same colour as the buyers cell
+                        cells = arows.first.locator("td")
+                        colors = [cells.nth(i).evaluate("el => getComputedStyle(el).color") for i in range(cells.count())]
+                        texts = [cells.nth(i).inner_text() for i in range(cells.count())]
+                        xi = next((i for i, t in enumerate(texts) if "ANTS/epoch" in t), None)
+                        bi = next((i for i, t in enumerate(texts) if t.strip() == str(first["uniqueBuyers"])), None)
+                        record("inc_polish", f"estimate cell colour {colors[xi] if xi is not None else None} differs from the buyers cell {colors[bi] if bi is not None else None}",
+                               xi is not None and bi is not None and colors[xi] == colors[bi])
                         want_x = f"{fmt(starter_estimate(snap, first))} ANTS"
                         record("inc_nopool_x", f"first row lacks {want_x!r}: {ft[:160]!r}", want_x in ft)
                     det = sec.locator("details.inc-nopool-inactive")
@@ -407,8 +425,12 @@ def run_guard():
                 want, _ = cashback_text(snap, "44694")
                 dt = ph.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
                 record("inc_cashback_detail", f"390px detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
+                name_cell = ph.locator("#incentives .inc-nopool tr.nopool-row").first.locator("td").first
+                w = name_cell.bounding_box()["width"] if name_cell.count() else 0
+                record("inc_nopool_phone", f"390px: the seller cell of the first no-pool row is {w:.0f}px wide (want >= 90), names break per letter", w >= 90)
             except Exception as exc:
                 crash("inc_cashback_detail", exc)
+                crash("inc_nopool_phone", exc)
 
             browser.close()
     except Exception as exc:
