@@ -6,10 +6,23 @@ import { base } from 'viem/chains'
 
 const POOLS_ADDRESS = '0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652'
 const REWARDS_ADDRESS = '0x83cc5b9aa0c8cb8683f35462c385a5baaa755ee5'
+const USAGE_REWARDS_ADDRESS = '0x78330bF154172F1137219Bb559d4F3A270B3201F'
 const ACCOUNTING_ADDRESS = '0xAdd2D85316153D7bfaF7921EE9Bf1Bb6c7A1cBc9'
 const ACCOUNTING_ABI = parseAbi([
   'function weightedPoolPointsByEpoch(uint256, uint256) view returns (uint256)',
   'function totalWeightedPoolPointsByEpoch(uint256) view returns (uint256)',
+  'function totalWeightedBuyerPointsByEpoch(uint256) view returns (uint256)',
+  'function poolWeightPolicy() view returns (address)',
+])
+const USAGE_ABI = parseAbi([
+  'function buyerEpochBudget(uint256) view returns (uint256)',
+  'function sellerEpochBudget(uint256) view returns (uint256)',
+  'function MAX_REWARD_SHARE_BPS() view returns (uint256)',
+])
+const INIT_ADDRESS = '0xB68AD13b681319fcEB6b0A640c2fd96C0138CBc8'
+const INIT_ABI = parseAbi([
+  'function remainingInits() view returns (uint256)',
+  'function initEndEpoch() view returns (uint256)',
 ])
 const RPC_URLS = (process.env.RPC_URLS && process.env.RPC_URLS.split(',')) || ['https://base-rpc.publicnode.com', 'https://base-mainnet.public.blastapi.io']
 
@@ -49,6 +62,8 @@ const xread = async (address, abi, fn, args = []) => {
 }
 const callPools = (fn, args = []) => xread(POOLS_ADDRESS, POOLS_ABI, fn, args)
 const callRewards = (fn, args = []) => xread(REWARDS_ADDRESS, REWARDS_ABI, fn, args)
+const callUsage = (fn, args = []) => xread(USAGE_REWARDS_ADDRESS, USAGE_ABI, fn, args)
+const callInit = (fn, args = []) => xread(INIT_ADDRESS, INIT_ABI, fn, args)
 // Batched cross-checked multicall: one HTTP request per RPC per batch (multicall3),
 // allowFailure so reverts (e.g. earlyExitSlashBps PositionChangePending) don't kill the batch.
 const xmulticall = async (contracts) => {
@@ -72,11 +87,16 @@ async function main() {
   const LIVE_PATH = resolve('site/fixtures/snapshot-e23.live.json')
   const FULL_PATH = resolve('site/fixtures/snapshot-e23.full.json')
   let salesByPool = {}
+  let sellersById = {}
   try {
-    salesByPool = JSON.parse(readFileSync(LIVE_PATH, 'utf8')).salesByPool || {}
+    const prevLive = JSON.parse(readFileSync(LIVE_PATH, 'utf8'))
+    salesByPool = prevLive.salesByPool || {}
+    sellersById = prevLive.sellersById || {}
   } catch (e) {
     try {
-      salesByPool = JSON.parse(readFileSync(FULL_PATH, 'utf8')).salesByPool || {}
+      const prevFull = JSON.parse(readFileSync(FULL_PATH, 'utf8'))
+      salesByPool = prevFull.salesByPool || {}
+      sellersById = prevFull.sellersById || {}
     } catch (e2) {
       console.warn('no previous snapshot with salesByPool: ' + e2.message)
     }
@@ -184,6 +204,10 @@ async function main() {
   const histEpochs = []
   for (let h = Math.max(22, currentEpoch - 3); h < currentEpoch; h++) histEpochs.push(h)
   const boardPools = [...new Set(positions.map(p => String(p.agentId)))]
+  const poolWeightPolicy = String(await xread(ACCOUNTING_ADDRESS, ACCOUNTING_ABI, 'poolWeightPolicy'))
+  if (poolWeightPolicy.toLowerCase() !== '0x0000000000000000000000000000000000000000') {
+    throw new Error('cashback formula is no longer linear')
+  }
   const headRes = await xmulticall(histEpochs.flatMap(h => [
     { address: REWARDS_ADDRESS, abi: REWARDS_ABI, functionName: 'stakerEpochBudget', args: [BigInt(h)] },
     { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'totalWeightedPoolPointsByEpoch', args: [BigInt(h)] }]))
@@ -202,6 +226,44 @@ async function main() {
   })
   console.log('pool_history_epochs=' + histEpochs.join(',') + ' pools=' + boardPools.length)
 
+  const usageByEpoch = {}
+  const usageEpochs = rewardEpochs.filter(h => h >= 0 && (h === currentEpoch - 1 || h === currentEpoch))
+  for (const h of usageEpochs) {
+    const usageHeadContracts = [
+      { address: USAGE_REWARDS_ADDRESS, abi: USAGE_ABI, functionName: 'buyerEpochBudget', args: [BigInt(h)] },
+      { address: USAGE_REWARDS_ADDRESS, abi: USAGE_ABI, functionName: 'sellerEpochBudget', args: [BigInt(h)] },
+      { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'totalWeightedBuyerPointsByEpoch', args: [BigInt(h)] },
+      ...boardPools.map(a => ({ address: POOLS_ADDRESS, abi: POOLS_ABI, functionName: 'poolWeightAtEpoch', args: [BigInt(a), BigInt(h)] }))
+    ]
+    const usageRes = await xmulticall(usageHeadContracts)
+    const buyerBudget = usageRes[0], sellerBudget = usageRes[1], totalPoints = usageRes[2]
+    if (!buyerBudget.ok || !sellerBudget.ok || !totalPoints.ok) {
+      throw new Error('usage head failed for epoch ' + h)
+    }
+    const poolWeights = {}
+    let poolWeightErrors = 0
+    boardPools.forEach((a, idx) => {
+      const r = usageRes[3 + idx]
+      if (!r.ok) {
+        poolWeightErrors++
+        return
+      }
+      const w = String(r.value)
+      if (w !== '0') poolWeights[a] = w
+    })
+    if (poolWeightErrors > 0) throw new Error('usage poolWeight failed for ' + poolWeightErrors + ' pools at epoch ' + h)
+    usageByEpoch[String(h)] = {
+      buyerBudget: String(buyerBudget.value),
+      sellerBudget: String(sellerBudget.value),
+      totalWeightedBuyerPoints: String(totalPoints.value),
+      poolWeights
+    }
+  }
+
+  const maxRewardShareBps = String(await callUsage('MAX_REWARD_SHARE_BPS'))
+  const starterGrantsLeft = String(await callInit('remainingInits'))
+  const starterInitEndEpoch = String(await callInit('initEndEpoch'))
+
   const output = {
     epoch: String(currentEpoch),
     snapshotBlock: String(blockNumber),
@@ -210,12 +272,17 @@ async function main() {
     positions: enrichedPositions,
     poolWeightByEpoch,
     salesByPool,
+    sellersById,
     stakerBudget,
     stakerBudgetSource,
     stakerBudgetNext,
     stakerBudgetNextEpoch: String(currentEpoch + 1),
     poolHistoryEpochs: histEpochs.map(String),
-    poolRewardByEpoch
+    poolRewardByEpoch,
+    usageByEpoch,
+    maxRewardShareBps,
+    starterGrantsLeft,
+    starterInitEndEpoch
   }
 
   if (rpcMismatches.length > 0) throw new Error('RPC mismatch on ' + rpcMismatches.length + ' reads, first: ' + rpcMismatches.slice(0, 5).join('; '))
