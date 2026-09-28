@@ -1003,4 +1003,13 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
   .inc-post-offer{white-space:normal;max-width:100%;text-align:center}
   .inc-net,
   .inc-board-table tr.inc-detail td{white-space:normal;overflow-wrap:anywhere}
+  .inc-nopool table{
+    width:100%;
+    min-width:0;
+  }
+  .inc-nopool table th,
+  .inc-nopool table td{
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
 }
