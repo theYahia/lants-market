@@ -294,7 +294,7 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <tr><td>payback</td><td>0.131</td><td>floor / reward (epochs for the reward to cover the floor)</td></tr>
 </tbody>
 </table>
-<p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The stake contract is on the <code>transferWhitelist</code>, so you can stake, but you cannot send ANTS to another person. Because of this, the position NFT is the only way to move locked ANTS.</p>
+<p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The token checks the <em>sender</em>: only whitelisted contracts (the stake and reward contracts) can send ANTS. So ANTS in your wallet can be neither sent nor staked; rewards become new positions only through Restake. ANTS you Claim stay in your wallet until transfers are enabled. Because of this, the position NFT is the only way to move locked ANTS.</p>
 <p>---</p>
 </section>
 <section id="incentives">

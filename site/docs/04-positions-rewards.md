@@ -43,6 +43,6 @@ Position #27 metrics at snapshot block 51613321 (epoch 23), for the next epoch:
 | yield | 3.820 | reward / amount |
 | payback | 0.131 | floor / reward (epochs for the reward to cover the floor) |
 
-**Transferability.** ANTS is non-transferable between wallets: `transfersEnabled()` = false, and a direct `transfer` reverts with `TransfersNotEnabled()`. The stake contract is on the `transferWhitelist`, so you can stake, but you cannot send ANTS to another person. Because of this, the position NFT is the only way to move locked ANTS.
+**Transferability.** ANTS is non-transferable between wallets: `transfersEnabled()` = false, and a direct `transfer` reverts with `TransfersNotEnabled()`. The token checks the *sender*: only whitelisted contracts (the stake and reward contracts) can send ANTS. So ANTS in your wallet can be neither sent nor staked; rewards become new positions only through Restake. ANTS you Claim stay in your wallet until transfers are enabled. Because of this, the position NFT is the only way to move locked ANTS.
 
 ---
