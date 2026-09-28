@@ -6,6 +6,7 @@ Keys (one per code stage):
   rebate_math        rebatePayout() and rebateForSpend() equal the Python reference below on real spends
   rebate_scan        ONLINE  node site/rebate-scan.mjs 23 52894 51420000 51730000 -> the 52 buyers of Apex in epoch 23
   rebate_scan_split  offline mock RPC that refuses ranges over 1,000 blocks and fails each window once -> same buyers
+  rebate_scan_pace   offline mock: "over rate limit" 4x on the first window, 1x on the others, and to requests < 200 ms apart
   rebate_view        ONLINE  rebate-payout.mjs --dry -> totalSpend = aggregate = 558971119, 52 buyers
   rebate_files       ONLINE  rebate-payout.mjs --offer --out -> JSON + CSV equal to the reference, no overwrite
   rebate_label       rebateLabel() / rebateLine() in site/rebate.mjs: the words of a rebate offer, by epoch state
@@ -142,7 +143,7 @@ def schema_cases():
 def main():
     offline = "--offline" in sys.argv
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
-    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc"]
+    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_scan_pace", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc"]
     checks = {k: [] for k in keys}
     reasons = []
 
@@ -293,6 +294,66 @@ def main():
             record("rebate_scan_split", f"sellers {out.get('sellers')}, want [{APEX}]", [s.lower() for s in out.get("sellers", [])] == [APEX])
     except Exception as exc:
         crash("rebate_scan_split", exc)
+
+    # ---- rebate_scan_pace (offline mock RPC that rate-limits like mainnet.base.org) ----
+    try:
+        if not run_key("rebate_scan_pace"):
+            raise StopIteration
+        import time as _t
+        win = json.loads((FIX / "logs-e23-window.json").read_text(encoding="utf-8"))
+        limited = {}
+        last = [0.0]
+        stats = {"too_fast": 0, "limited": 0}
+
+        class Pace(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                q = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+                m, p = q.get("method"), q.get("params") or []
+                now = _t.monotonic()
+                gap, last[0] = now - last[0], now
+                if m == "eth_chainId":
+                    res = {"result": "0x2105"}
+                elif m == "eth_blockNumber":
+                    res = {"result": hex(win["toBlock"] + 1000)}
+                elif m == "eth_getLogs":
+                    f = p[0]
+                    fb, tb = int(f["fromBlock"], 16), int(f["toBlock"], 16)
+                    if gap < 0.2:
+                        stats["too_fast"] += 1
+                        res = {"error": {"code": -32016, "message": "over rate limit"}}
+                    elif limited.get(fb, 0) < (4 if fb == win["fromBlock"] else 1):  # a real limit lasts several tries
+                        limited[fb] = limited.get(fb, 0) + 1
+                        stats["limited"] += 1
+                        res = {"error": {"code": -32016, "message": "over rate limit"}}
+                    else:
+                        res = {"result": [x for x in win["logs"] if fb <= int(x["blockNumber"], 16) <= tb and x["topics"][0] == f["topics"][0]]}
+                else:
+                    res = {"error": {"code": -32601, "message": "not in mock"}}
+                data = json.dumps(dict(jsonrpc="2.0", id=q.get("id"), **res)).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        srv = HTTPServer(("127.0.0.1", 0), Pace)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            env = dict(os.environ, RPC_URL=f"http://127.0.0.1:{srv.server_port}")
+            r = subprocess.run(["node", "site/rebate-scan.mjs", "23", "52894", str(win["fromBlock"]), str(win["toBlock"])],
+                               cwd=REPO, capture_output=True, text=True, timeout=300, env=env)
+        finally:
+            srv.shutdown()
+        record("rebate_scan_pace", f"rebate-scan gave up under 'over rate limit' (exit {r.returncode}): {(r.stderr or '')[-160:]}", r.returncode == 0)
+        if r.returncode == 0:
+            out = json.loads(r.stdout)
+            record("rebate_scan_pace", "buyers differ from the window fixture", sorted(b.lower() for b in out.get("buyers", [])) == sorted(b.lower() for b in win["expectedBuyers"]))
+        record("rebate_scan_pace", f"{stats['too_fast']} getLogs requests came less than 200 ms after the previous one", stats["too_fast"] == 0)
+    except Exception as exc:
+        crash("rebate_scan_pace", exc)
 
     # ---- online keys ----
     online = [k for k in ("rebate_scan", "rebate_view", "rebate_files") if not offline and run_key(k)]
