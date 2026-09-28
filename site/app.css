@@ -1023,6 +1023,15 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
     word-break:normal;
     overflow-wrap:normal;
   }
+  .inc-nopool table th.nopool-last,
+  .inc-nopool table td.nopool-last{
+    display:none;
+  }
+  .inc-nopool table td:nth-child(2),
+  .inc-nopool table td:nth-child(3),
+  .inc-nopool table td:nth-child(5){
+    white-space:nowrap;
+  }
   .inc-nopool table th:nth-child(2),
   .inc-nopool table td:nth-child(2),
   .inc-nopool table th:nth-child(3),

@@ -391,7 +391,7 @@ function buildNoPool(snapshot, poolNames) {
     table.className = 'inc-nopool-table';
     const thead = document.createElement('thead');
     const headTr = document.createElement('tr');
-    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'Starter pool estimate (ANTS/epoch)']) {
+    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'With a starter pool + restaked first seller reward, to you']) {
       const th = document.createElement('th');
       th.textContent = h;
       headTr.appendChild(th);
@@ -418,6 +418,7 @@ function buildNoPool(snapshot, poolNames) {
       tdBuyers.textContent = Number(s.uniqueBuyers || 0).toLocaleString('en-US');
       tr.appendChild(tdBuyers);
       const tdLast = document.createElement('td');
+      tdLast.className = 'nopool-last';
       const d = new Date(Number(s.lastSeenAt) * 1000);
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       tdLast.textContent = `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
@@ -430,7 +431,7 @@ function buildNoPool(snapshot, poolNames) {
       } else {
         const estValue = estimateForSeller(s);
         if (estValue !== null) {
-          tdEst.textContent = 'with a starter pool + restaking your first seller reward: \u2248 ' + estValue.toLocaleString('en-US') + ' ANTS/epoch to you';
+          tdEst.textContent = '\u2248 ' + estValue.toLocaleString('en-US') + ' ANTS/epoch';
         }
       }
       tr.appendChild(tdEst);
