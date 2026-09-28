@@ -331,6 +331,23 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   return container;
 }
 
+function cashbackUsage(snapshot) {
+  const se = Number(snapshot.epoch);
+  const byEpoch = snapshot.usageByEpoch;
+  if (!byEpoch || !byEpoch[String(se)]) return null;
+  return { usage: byEpoch[String(se)], epoch: se, heading: `Buyer ANTS per $1, epoch ${se} so far` };
+}
+function cashbackCell(snapshot, pool) {
+  return { wei: 0n, text: '' };
+}
+function cashbackHead(snapshot) {
+  const cb = cashbackUsage(snapshot);
+  if (!cb) return { heading: 'Buyer ANTS per $1', tip: 'ANTS a buyer earns for each $1 spent with this seller this epoch. 0 = no pool: neither the seller nor its buyers earn ANTS.' };
+  const cur = snapshot.usageByEpoch[String(Number(snapshot.epoch))];
+  const cap = BigInt(cur.buyerBudget || '0') * BigInt(snapshot.maxRewardShareBps ?? 0) / 10000n / 10n ** 18n;
+  return { heading: cb.heading, tip: `ANTS a buyer earns for each $1 spent with this seller this epoch. Falls as more sales land before the epoch ends. Capped at ${cap.toLocaleString('en-US')} ANTS per buyer per epoch. 0 = no pool: neither the seller nor its buyers earn ANTS.` };
+}
+
 function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   const e = Number(mode.epoch);
   const N = e + 1;
@@ -593,6 +610,15 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     rows.push(tr);
   }
 
+  for (const tr of rows) {
+    const cb = cashbackCell(snapshot, tr.dataset.pool);
+    const tdCb = document.createElement('td');
+    tdCb.className = 'inc-cb-col';
+    tdCb.textContent = cb.text;
+    tr.dataset.cashback = String(cb.wei);
+    tr.insertBefore(tdCb, tr.lastElementChild);
+  }
+
   const table = document.createElement('table');
   table.className = 'inc-board-table';
   const thead = document.createElement('thead');
@@ -612,7 +638,10 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     'What this pool paid its stakers in the completed epochs shown, newest first.',
     'Best USDC offer per 1,000 ANTS for this pool in the next epoch.'
   ];
-  const sortKeys = ['name', 'est', 'paid', 'offer'];
+  const cbHead = cashbackHead(snapshot);
+  headings.splice(3, 0, cbHead.heading);
+  tips.splice(3, 0, cbHead.tip);
+  const sortKeys = ['name', 'est', 'paid', 'cashback', 'offer'];
   for (let i = 0; i < headings.length; i++) {
     const th = document.createElement('th');
     const button = document.createElement('button');
