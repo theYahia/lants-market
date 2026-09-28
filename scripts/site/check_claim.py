@@ -158,6 +158,11 @@ def run_guard() -> int:
 
             print("claim_btn=1")
             print(f"claim_amount={expected_str}")
+            # claimed ANTS cannot be sent or staked while transfers are off: the button must say so and point to Restake
+            warn_ok = "can't be staked" in btn_title and "Restake" in btn_title
+            print(f"claim_warn={1 if warn_ok else 0}")
+            if not warn_ok:
+                print(f"reason=missing: claim button title warns that claimed ANTS can't be staked and points to Restake (title: {btn_title})")
 
             # 11. Read pending before click and OPERATOR ANTS balance before click.
             pending_before = fork_prep.read_pending_indexed_staker_reward()
