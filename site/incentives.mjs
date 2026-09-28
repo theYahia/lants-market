@@ -168,11 +168,16 @@ function buildPostOfferButton(displayEpoch) {
   const title = `Incentive offer for pool (epoch ${displayEpoch})`;
   const bodyLines = [
     'Pool: ',
+    'Type: stake | rebate',
     'epochs: ' + JSON.stringify([displayEpoch]),
     'USDC per 1,000 ANTS: ',
     'Cap: ',
     'Payer: ',
     'Pays: all | new',
+    'pctBps (rebate, 100 = 1%): ',
+    'capUsdc (rebate, total USDC): ',
+    'capPerBuyerUsdc (rebate, optional): ',
+    'minSpendUsdc (rebate, optional): ',
     'Paid in USDC on Base to the position owner within 7 days after epoch ' + displayEpoch + ' ends, from the last published snapshot of epoch ' + displayEpoch + '.'
   ];
   const body = bodyLines.join('\n');
