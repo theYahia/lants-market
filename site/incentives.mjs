@@ -335,7 +335,12 @@ function cashbackUsage(snapshot) {
   const se = Number(snapshot.epoch);
   const byEpoch = snapshot.usageByEpoch;
   if (!byEpoch || !byEpoch[String(se)]) return null;
-  return { usage: byEpoch[String(se)], epoch: se, heading: `Buyer ANTS per $1, epoch ${se} so far` };
+  const cur = byEpoch[String(se)];
+  const prev = byEpoch[String(se - 1)];
+  if (prev && BigInt(cur.totalWeightedBuyerPoints || '0') * 20n < BigInt(prev.totalWeightedBuyerPoints || '0')) {
+    return { usage: prev, epoch: se - 1, heading: `Buyer ANTS per $1, final, epoch ${se - 1}` };
+  }
+  return { usage: cur, epoch: se, heading: `Buyer ANTS per $1, epoch ${se} so far` };
 }
 function cashbackCell(snapshot, pool) {
   const cb = cashbackUsage(snapshot);
