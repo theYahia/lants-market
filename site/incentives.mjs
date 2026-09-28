@@ -1,4 +1,5 @@
 import { rewardMode } from './metrics.mjs';
+import { validRebate, rebateLine } from './rebate.mjs';
 
 async function loadJSON(urls) {
   for (const url of urls) {
@@ -74,6 +75,8 @@ function buildOfferRows(offers, displayEpoch, poolNames) {
     for (const offer of offers) {
       if (isValidOffer(offer, displayEpoch)) {
         rows.push(offerLine(offer, displayEpoch, poolNames));
+      } else if (validRebate(offer)) { // rebate:rows
+        rows.push(rebateLine(offer, displayEpoch, poolNames));
       }
     }
   }
