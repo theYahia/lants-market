@@ -1006,10 +1006,33 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
   .inc-nopool table{
     width:100%;
     min-width:0;
+    table-layout:auto;
   }
   .inc-nopool table th,
   .inc-nopool table td{
     white-space:normal;
     overflow-wrap:anywhere;
+  }
+  .inc-nopool table th:first-child,
+  .inc-nopool table td:first-child{
+    width:96px;
+    min-width:96px;
+    word-break:normal;
+    overflow-wrap:normal;
+  }
+  .inc-nopool table th:nth-child(2),
+  .inc-nopool table td:nth-child(2),
+  .inc-nopool table th:nth-child(3),
+  .inc-nopool table td:nth-child(3),
+  .inc-nopool table th:nth-child(4),
+  .inc-nopool table td:nth-child(4),
+  .inc-nopool table th:nth-child(5),
+  .inc-nopool table td:nth-child(5),
+  .inc-nopool table th:nth-child(6),
+  .inc-nopool table td:nth-child(6){
+    width:auto;
+  }
+  .inc-nopool{
+    overflow-x:auto;
   }
 }
