@@ -100,3 +100,29 @@ export function rebateForSpend(spendMicro, offer) {
   }
   return v;
 }
+
+export function rebateLabel(offer, epoch) {
+  const pct = offer.pctBps / 100;
+  const cap = offer.capUsdc;
+  let text = `${pct}% back, up to $${cap}`;
+  if (offer.capPerBuyerUsdc !== undefined) {
+    text += ` · max $${offer.capPerBuyerUsdc}/buyer`;
+  }
+  const state = offerState(offer, epoch);
+  if (state === 'upcoming') {
+    text += ` · starts epoch ${offer.epochs[0]}`;
+  } else if (state === 'ended') {
+    text += ` · ended`;
+  }
+  return text;
+}
+
+export function rebateLine(offer, epoch, poolNames) {
+  const name = poolNames[offer.pool];
+  const prefix = name ? `${name} (pool ${offer.pool})` : `Pool ${offer.pool}`;
+  const line = `${prefix} · ${rebateLabel(offer, epoch)} · paid by ${offer.payer}`;
+  const note = offer.note || '';
+  return { line, note };
+}
+
+// rebate:label-end
