@@ -411,8 +411,24 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       const cell = document.createElement('td');
       cell.colSpan = tr.children.length;
       const seller = snapshot.sellersById?.[pool];
+      const cb = cashbackCell(snapshot, pool);
+      let detailText = `${cb.text} ANTS per $1`;
+      const cbUsage = cashbackUsage(snapshot);
+      if (cbUsage && cbUsage.epoch === Number(snapshot.epoch) && cb.wei > 0n) {
+        const cur = snapshot.usageByEpoch[String(Number(snapshot.epoch))];
+        const t = BigInt(cur.totalWeightedBuyerPoints || '0');
+        if (t > 0n) {
+          const w = BigInt((cur.poolWeights || {})[pool] || '0');
+          const wei = BigInt(cur.buyerBudget || '0') * w * 1000000n / t;
+          if (wei > 0n) {
+            const cap = BigInt(cur.buyerBudget || '0') * BigInt(snapshot.maxRewardShareBps ?? 0) / 10000n / 10n ** 18n;
+            const D = (cap * 10n ** 18n + wei - 1n) / wei;
+            detailText += ` · Cap of ${cap.toLocaleString('en-US')} ANTS reached at ≈ $${String(D)}`;
+          }
+        }
+      }
       if (!seller) {
-        cell.textContent = 'No sales data from antscan';
+        cell.textContent = `No sales data from antscan\n${detailText}`;
       } else {
         const earned = Number(BigInt(seller.earnedUsdc || '0')) / 1e6;
         const period = Math.max(604800, Number(seller.lastSeenAt) - Number(seller.firstSeenAt));
@@ -420,7 +436,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
         const lastDate = new Date(Number(seller.lastSeenAt) * 1000);
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const dateText = `${months[lastDate.getUTCMonth()]} ${lastDate.getUTCDate()}, ${lastDate.getUTCFullYear()}`;
-        cell.textContent = `${earned.toLocaleString('en-US', {maximumFractionDigits: 0})} USDC all-time · ${avg.toLocaleString('en-US', {maximumFractionDigits: 1})} avg per active week · ${Number(seller.uniqueBuyers).toLocaleString('en-US')} buyers · ${Number(seller.modelsServed).toLocaleString('en-US')} models · last sale ${dateText}`;
+        cell.textContent = `${earned.toLocaleString('en-US', {maximumFractionDigits: 0})} USDC all-time · ${avg.toLocaleString('en-US', {maximumFractionDigits: 1})} avg per active week · ${Number(seller.uniqueBuyers).toLocaleString('en-US')} buyers · ${Number(seller.modelsServed).toLocaleString('en-US')} models · last sale ${dateText}\n${detailText}`;
       }
       detail.appendChild(cell);
       tr.insertAdjacentElement('afterend', detail);
@@ -661,6 +677,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   const sortKeys = ['name', 'est', 'paid', 'cashback', 'offer'];
   for (let i = 0; i < headings.length; i++) {
     const th = document.createElement('th');
+    if (i === 3) th.className = 'inc-cb-col';
     const button = document.createElement('button');
     button.className = 'inc-sort';
     button.textContent = headings[i];

@@ -937,3 +937,10 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
 .inc-board-table th{white-space:normal;vertical-align:bottom}
 @media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}.inc-board-table tr.inc-detail td{display:table-cell}}
 .inc-est{font-weight:600;color:var(--ink)}
+@media (max-width:480px){
+  .inc-board-table th.inc-cb-col,
+  .inc-board-table td.inc-cb-col{display:none}
+  .inc-post-offer{white-space:normal;max-width:100%;text-align:center}
+  .inc-net,
+  .inc-board-table tr.inc-detail td{white-space:normal;overflow-wrap:anywhere}
+}
