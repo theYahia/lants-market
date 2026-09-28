@@ -341,6 +341,24 @@ function buildNoPool(snapshot, poolNames) {
   const nextEpoch = String(e + 1);
   const genSecs = Math.floor(new Date(snapshot.generatedAt).getTime() / 1000);
 
+  const usage = snapshot.usageByEpoch?.[String(e)] || {};
+  const sb = BigInt(usage.sellerBudget || '0');
+  const t = BigInt(usage.totalWeightedBuyerPoints || '0');
+  const cap = sb * BigInt(snapshot.maxRewardShareBps || 0) / 10000n;
+  const w1 = (BigInt(snapshot.starterInitEndEpoch || 0) - BigInt(e + 1)) * 10n ** 18n;
+  const WEEK = 604800n;
+
+  const estimateForSeller = (s) => {
+    if (t === 0n) return null;
+    const periodRaw = BigInt(s.lastSeenAt) - BigInt(s.firstSeenAt);
+    const period = periodRaw < WEEK ? WEEK : periodRaw;
+    const weekly = s.earned * WEEK / period;
+    const r1 = sb * weekly * w1 / t;
+    const w2 = w1 + r1 * 104n;
+    const v = sb * weekly * w2 / t;
+    return (v < cap ? v : cap) / 10n ** 18n;
+  };
+
   const sellers = [];
   for (const [id, s] of Object.entries(snapshot.sellersById || {})) {
     const earned = BigInt(s.earnedUsdc || '0');
@@ -373,7 +391,7 @@ function buildNoPool(snapshot, poolNames) {
     table.className = 'inc-nopool-table';
     const thead = document.createElement('thead');
     const headTr = document.createElement('tr');
-    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'Estimate']) {
+    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'Starter pool estimate (ANTS/epoch)']) {
       const th = document.createElement('th');
       th.textContent = h;
       headTr.appendChild(th);
@@ -409,6 +427,11 @@ function buildNoPool(snapshot, poolNames) {
       const stakeUsdc = BigInt(s.stakeUsdc || '0');
       if (stakeUsdc < BigInt(MIN_STAKE_USDC)) {
         tdEst.textContent = 'needs a 10 USDC seller stake first';
+      } else {
+        const estValue = estimateForSeller(s);
+        if (estValue !== null) {
+          tdEst.textContent = 'with a starter pool + restaking your first seller reward: \u2248 ' + estValue.toLocaleString('en-US') + ' ANTS/epoch to you';
+        }
       }
       tr.appendChild(tdEst);
       tbody.appendChild(tr);
