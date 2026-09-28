@@ -33,10 +33,70 @@ export function offerState(offer, displayEpoch) {
   return 'ended';
 }
 
+export const REBATE_FORMULA = 'r_i = min(spend_i × pctBps / 10000, capPerBuyer) (floor); buyers with spend_i < minSpend or in exclude dropped; if Σr > cap: p_i = r_i × cap / Σr (multiply, then floor); remainder not distributed';
+
 export function rebatePayout(spends, offer, exclude) {
-  throw new Error('rebatePayout: not implemented');
+  const bps = BigInt(offer.pctBps);
+  const cap = BigInt(Math.round(offer.capUsdc * 1e6));
+  const capPerBuyer = offer.capPerBuyerUsdc !== undefined ? BigInt(Math.round(offer.capPerBuyerUsdc * 1e6)) : undefined;
+  const minSpend = offer.minSpendUsdc !== undefined ? BigInt(Math.round(offer.minSpendUsdc * 1e6)) : 0n;
+  const excl = {};
+  for (const k in exclude) {
+    excl[k.toLowerCase()] = exclude[k];
+  }
+  const r = {};
+  const excluded = {};
+  for (const a in spends) {
+    const addr = a.toLowerCase();
+    const s = BigInt(spends[a]);
+    if (addr in excl) {
+      excluded[addr] = excl[addr];
+      continue;
+    }
+    if (s < minSpend) {
+      excluded[addr] = 'below_min_spend';
+      continue;
+    }
+    let v = s * bps / 10000n;
+    if (capPerBuyer !== undefined && v > capPerBuyer) {
+      v = capPerBuyer;
+    }
+    if (v > 0n) {
+      r[addr] = v;
+    }
+  }
+  let total = 0n;
+  for (const addr in r) {
+    total += r[addr];
+  }
+  let cut = total > cap;
+  let payouts = r;
+  if (cut) {
+    const capped = {};
+    for (const addr in r) {
+      const v = r[addr] * cap / total;
+      if (v > 0n) {
+        capped[addr] = v;
+      }
+    }
+    payouts = capped;
+    total = 0n;
+    for (const addr in payouts) {
+      total += payouts[addr];
+    }
+  }
+  return { payouts, excluded, total, cut };
 }
 
 export function rebateForSpend(spendMicro, offer) {
-  throw new Error('rebateForSpend: not implemented');
+  const s = BigInt(spendMicro);
+  const minSpend = offer.minSpendUsdc !== undefined ? BigInt(Math.round(offer.minSpendUsdc * 1e6)) : 0n;
+  if (s < minSpend) return 0n;
+  const bps = BigInt(offer.pctBps);
+  let v = s * bps / 10000n;
+  const capPerBuyer = offer.capPerBuyerUsdc !== undefined ? BigInt(Math.round(offer.capPerBuyerUsdc * 1e6)) : undefined;
+  if (capPerBuyer !== undefined && v > capPerBuyer) {
+    v = capPerBuyer;
+  }
+  return v;
 }
