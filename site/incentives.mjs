@@ -91,25 +91,6 @@ function buildOfferSection(offers, displayEpoch, poolNames) {
   h3.textContent = 'Offers';
   headingRow.appendChild(h3);
 
-  const postBtn = document.createElement('a');
-  postBtn.className = 'inc-post-offer';
-  postBtn.textContent = 'Post an offer on GitHub ↗';
-  const title = `Incentive offer for pool (epoch ${displayEpoch})`;
-  const bodyLines = [
-    'Pool: ',
-    'epochs: ' + JSON.stringify([displayEpoch]),
-    'USDC per 1,000 ANTS: ',
-    'Cap: ',
-    'Payer: ',
-    'Pays: all | new',
-    'Paid in USDC on Base to the position owner within 7 days after epoch ' + displayEpoch + ' ends, from the last published snapshot of epoch ' + displayEpoch + '.'
-  ];
-  const body = bodyLines.join('\n');
-  postBtn.href = 'https://github.com/theYahia/lants-market/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
-  postBtn.target = '_blank';
-  postBtn.rel = 'noopener noreferrer';
-  headingRow.appendChild(postBtn);
-
   div.appendChild(headingRow);
 
   const ul = document.createElement('ul');
@@ -172,6 +153,32 @@ function formatUtc(date) {
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const pad = (n) => String(n).padStart(2, '0');
   return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
+}
+
+function buildPostOfferButton(displayEpoch) {
+  const wrap = document.createElement('div');
+  wrap.className = 'inc-post-offer-wrap';
+
+  const postBtn = document.createElement('a');
+  postBtn.className = 'inc-post-offer';
+  postBtn.textContent = 'Post an offer on GitHub ↗';
+  const title = `Incentive offer for pool (epoch ${displayEpoch})`;
+  const bodyLines = [
+    'Pool: ',
+    'epochs: ' + JSON.stringify([displayEpoch]),
+    'USDC per 1,000 ANTS: ',
+    'Cap: ',
+    'Payer: ',
+    'Pays: all | new',
+    'Paid in USDC on Base to the position owner within 7 days after epoch ' + displayEpoch + ' ends, from the last published snapshot of epoch ' + displayEpoch + '.'
+  ];
+  const body = bodyLines.join('\n');
+  postBtn.href = 'https://github.com/theYahia/lants-market/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+  postBtn.target = '_blank';
+  postBtn.rel = 'noopener noreferrer';
+  wrap.appendChild(postBtn);
+
+  return wrap;
 }
 
 function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
@@ -697,6 +704,8 @@ async function init() {
 
     container.innerHTML = '';
     container.appendChild(header);
+    const postOfferWrap = buildPostOfferButton(N);
+    container.appendChild(postOfferWrap);
     container.appendChild(board);
     container.appendChild(calculator);
     container.appendChild(offerSection);

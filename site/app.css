@@ -879,9 +879,15 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
   font-size:var(--fs-13);
   line-height:1.4;
 }
+.inc-post-offer-wrap{
+  display:flex;
+  justify-content:center;
+  margin:12px 0 4px;
+}
 .inc-post-offer{
   display:inline-flex;
   align-items:center;
+  justify-content:center;
   min-height:44px;
   padding:0 16px;
   border:1px solid var(--accent);
