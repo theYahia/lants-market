@@ -331,6 +331,107 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   return container;
 }
 
+function buildNoPool(snapshot, poolNames) {
+  const ACTIVE_SECS = 14 * 86400;
+  const MIN_EARNED = 1000000000n;
+  const GRANT_ADDR = "0xB68AD13b681319fcEB6b0A640c2fd96C0138CBc8";
+  const MIN_STAKE_USDC = 10000000; // 10 USDC in micro-USDC
+
+  const e = Number(snapshot.epoch);
+  const nextEpoch = String(e + 1);
+  const genSecs = Math.floor(new Date(snapshot.generatedAt).getTime() / 1000);
+
+  const sellers = [];
+  for (const [id, s] of Object.entries(snapshot.sellersById || {})) {
+    const earned = BigInt(s.earnedUsdc || '0');
+    if (earned < MIN_EARNED) continue;
+    const w = BigInt(String(snapshot.poolWeightByEpoch?.[id]?.[nextEpoch] || '0'));
+    if (w !== 0n) continue;
+    sellers.push({ id, ...s, earned });
+  }
+  sellers.sort((a, b) => (a.earned < b.earned ? 1 : -1));
+
+  const active = sellers.filter(s => genSecs - Number(s.lastSeenAt) <= ACTIVE_SECS);
+  const inactive = sellers.filter(s => genSecs - Number(s.lastSeenAt) > ACTIVE_SECS);
+
+  if (active.length === 0) return null;
+
+  const div = document.createElement('div');
+  div.className = 'inc-nopool';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Selling, but no pool';
+  div.appendChild(h3);
+
+  const steps = document.createElement('p');
+  steps.className = 'inc-nopool-steps';
+  steps.textContent = `Steps: call initPosition() on ${GRANT_ADDR} (1 ANTS starter pool, ${snapshot.starterGrantsLeft} left, needs a legacy seller stake of at least 10 USDC); then stakeAgentReward your first seller reward into your own pool.`;
+  div.appendChild(steps);
+
+  const makeTable = (list) => {
+    const table = document.createElement('table');
+    table.className = 'inc-nopool-table';
+    const thead = document.createElement('thead');
+    const headTr = document.createElement('tr');
+    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'Estimate']) {
+      const th = document.createElement('th');
+      th.textContent = h;
+      headTr.appendChild(th);
+    }
+    thead.appendChild(headTr);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    for (const s of list) {
+      const tr = document.createElement('tr');
+      tr.className = 'nopool-row';
+      const tdName = document.createElement('td');
+      const name = s.name || poolNames[s.id] || `#${s.id}`;
+      tdName.textContent = name;
+      const idSpan = document.createElement('span');
+      idSpan.className = 'inc-pool-id';
+      idSpan.textContent = s.id;
+      tdName.appendChild(idSpan);
+      tr.appendChild(tdName);
+      const tdEarned = document.createElement('td');
+      const earnedAnts = Number(s.earned) / 1e18;
+      tdEarned.textContent = `$${Math.round(earnedAnts).toLocaleString('en-US')}`;
+      tr.appendChild(tdEarned);
+      const tdBuyers = document.createElement('td');
+      tdBuyers.textContent = Number(s.uniqueBuyers || 0).toLocaleString('en-US');
+      tr.appendChild(tdBuyers);
+      const tdLast = document.createElement('td');
+      const d = new Date(Number(s.lastSeenAt) * 1000);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      tdLast.textContent = `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+      tr.appendChild(tdLast);
+      const tdEst = document.createElement('td');
+      tdEst.className = 'nopool-x';
+      const stakeUsdc = BigInt(s.stakeUsdc || '0');
+      if (stakeUsdc < BigInt(MIN_STAKE_USDC)) {
+        tdEst.textContent = 'needs a 10 USDC seller stake first';
+      }
+      tr.appendChild(tdEst);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    return table;
+  };
+
+  div.appendChild(makeTable(active));
+
+  if (inactive.length > 0) {
+    const details = document.createElement('details');
+    details.className = 'inc-nopool-inactive';
+    const summary = document.createElement('summary');
+    summary.textContent = `${inactive.length} inactive seller${inactive.length === 1 ? '' : 's'} without a pool`;
+    details.appendChild(summary);
+    details.appendChild(makeTable(inactive));
+    div.appendChild(details);
+  }
+
+  return div;
+}
+
 function cashbackUsage(snapshot) {
   const se = Number(snapshot.epoch);
   const byEpoch = snapshot.usageByEpoch;
@@ -805,6 +906,8 @@ async function init() {
 
     const board = buildBoard(snapshot, mode, offers, N, poolNames);
 
+    const nopoolDiv = buildNoPool(snapshot, poolNames);
+
     const calculator = buildCalculator(snapshot, mode, offers, N, poolNames);
 
     const offerSection = buildOfferSection(offers, N, poolNames);
@@ -814,6 +917,9 @@ async function init() {
     const postOfferWrap = buildPostOfferButton(N);
     container.appendChild(postOfferWrap);
     container.appendChild(board);
+    if (nopoolDiv) {
+      container.appendChild(nopoolDiv);
+    }
     container.appendChild(calculator);
     container.appendChild(offerSection);
   } catch (err) {

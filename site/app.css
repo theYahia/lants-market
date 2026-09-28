@@ -879,6 +879,66 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
   font-size:var(--fs-13);
   line-height:1.4;
 }
+.inc-nopool{
+  margin:16px 0 4px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:16px;
+}
+.inc-nopool h3{
+  color:var(--accent);
+  font-family:var(--font-mono);
+  font-size:var(--fs-16);
+  font-weight:900;
+  margin-bottom:8px;
+}
+.inc-nopool-steps{
+  color:var(--muted);
+  font-size:var(--fs-13);
+  line-height:1.5;
+  margin-bottom:12px;
+  overflow-wrap:anywhere;
+}
+.inc-nopool-table{
+  width:100%;
+  min-width:0;
+  border-collapse:collapse;
+  margin-top:8px;
+}
+.inc-nopool-table th{
+  font-size:var(--fs-10);
+  padding:6px 8px;
+  text-align:left;
+  white-space:nowrap;
+}
+.inc-nopool-table td{
+  font-size:var(--fs-13);
+  padding:6px 8px;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.inc-nopool-table td:last-child{
+  color:var(--muted);
+  min-width:140px;
+}
+.inc-nopool-table td.nopool-x{
+  color:var(--warn);
+  font-size:var(--fs-12);
+}
+.inc-nopool details{
+  margin-top:12px;
+}
+.inc-nopool summary{
+  cursor:pointer;
+  color:var(--muted);
+  font-weight:600;
+  font-size:var(--fs-13);
+  padding:6px 0;
+}
+.inc-nopool summary:hover{
+  color:var(--ink);
+}
 .inc-post-offer-wrap{
   display:flex;
   justify-content:center;
