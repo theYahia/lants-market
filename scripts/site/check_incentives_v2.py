@@ -26,6 +26,7 @@ Keys:
   inc_net           one line under the countdown: Network, epoch N: B ANTS to stakers · S ANTS staked · A per 1,000 on average
   inc_postcta       exactly one visible a.inc-post-offer, above the board table, centred on it
   inc_expand        a button.inc-expand per board row; it opens a tr.inc-detail right under its row
+  inc_expand_sort   after a header sort the open detail row still sits right under its board row
   inc_cashback      column "Buyer ANTS per $1, epoch e so far"; floor(B·W·1e6/T); tip with the cap; early-epoch fallback
   inc_cashback_detail  the detail row: "<cell> ANTS per $1", "reached at ≈ $D"; at 390 px the column is hidden, no side scroll
   inc_nopool        .inc-nopool under the board: steps, active sellers without a pool, closed list of inactive ones
@@ -161,7 +162,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_cashback", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -295,10 +296,11 @@ def run_guard():
                 page.wait_for_timeout(200)
                 btn.click()
                 page.wait_for_timeout(200)
-                record("inc_expand", "after sorting, the 52894 detail is not right under its row", detail_of("52894").count() == 1 and detail_of("52894").is_visible())
+                record("inc_expand_sort", "after sorting, the 52894 detail is not right under its row", detail_of("52894").count() == 1 and detail_of("52894").is_visible())
                 btn.click()
             except Exception as exc:
                 crash("inc_expand", exc)
+                crash("inc_expand_sort", exc)
 
             # inc_cashback (desktop)
             try:
