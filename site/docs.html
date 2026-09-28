@@ -116,7 +116,6 @@
             <a href="#how-it-works">How it works</a>
             <a href="#listings">Listings</a>
             <a href="#positions-rewards">Positions & Rewards</a>
-            <a href="#incentives">Incentives</a>
             <a href="#snapshot-data">Snapshot & Data</a>
             <a href="#faq">FAQ</a>
             <a href="#contact">Contact</a>
@@ -150,14 +149,16 @@
 <li>Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.</li>
 <li>See your positions and your listings in My Portfolio.</li>
 <li>Claim a position's staker reward to your wallet, or restake it as a new position, with one click.</li>
-<li>On the Incentives tab: see what each pool paid its stakers in completed epochs, what 1,000 ANTS would earn next epoch as a what-if, and sellers' USDC offers for weight in their pool.</li>
+<li>On the Incentives tab: see what each pool paid its stakers in completed epochs, a next-epoch what-if, and sellers' USDC</li>
 </ul>
+<p>offers for weight in their pool.</p>
 <p>A 1% fee is taken from each sale and sent to the fee recipient.</p>
 <h2>What does not exist yet</h2>
 <ul>
 <li><strong>Bids on positions.</strong> The market contract stores listings only; you cannot bid on a position yet.</li>
-<li><strong>Escrow for incentive offers.</strong> No contract holds offer money. The payer named on each offer pays after the epoch.</li>
+<li><strong>Escrow for incentive offers.</strong> No contract holds offer money. The payer named on each offer pays</li>
 </ul>
+<p>after the epoch.</p>
 <h2>How this site reads the chain</h2>
 <p>The positions table works from a snapshot taken at a fixed block, refreshed three times a day; the line under the table shows its block, epoch and time. Listings, sales, My Portfolio and the MC / FDV figures are read live from Base in your browser.</p>
 <h2>Origin</h2>
@@ -256,7 +257,7 @@ FDV = price per ANTS * MAX_SUPPLY()    // 1,040,000,000 ANTS</code></pre>
 <p>Example: 10 ANTS for 0.10 USDC is $0.01 per ANTS, an MC of about $1.19M and an FDV of about $10.4M. Trades between our own wallets are labelled *internal* and are not counted in volume or in the Implied FDV tile.</p>
 </section>
 <section id="positions-rewards">
-<h1>Positions & Rewards</h1>
+<h1>Positions & Rewards</h1>
 <p>A staking position is an ERC-721 token minted when you stake ANTS into a seller's pool. One stake produces one token. The collection is <code>0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652</code>.</p>
 <p><code>positions(uint256)</code> returns: <code>owner</code>, <code>agentId</code>, <code>amount</code>, <code>weightAmount</code>, <code>stakeStartEpoch</code>, <code>stakeEndEpoch</code>, <code>closedAtEpoch</code>, <code>withdrawn</code>.</p>
 <p>Example — position #27, read on-chain:</p>
@@ -281,7 +282,7 @@ FDV = price per ANTS * MAX_SUPPLY()    // 1,040,000,000 ANTS</code></pre>
 <p><strong>Early exit.</strong> Exiting before the end epoch is slashed by <code>earlyExitSlashBps</code>. For #27 this is 50%. The floor you recover on early exit is <code>amount * (1 - slash)</code> = 5,037.96 ANTS.</p>
 <p><strong>Rewards.</strong> A staker's reward for an epoch is driven by pool *sales*, not by stake size:</p>
 <pre><code>poolReward     = stakerBudget * (poolSales * poolWeight) / sum(poolSales * poolWeight over all pools)
-positionReward = poolReward * positionWeight / poolWeight</code></pre>
+positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <p><code>stakerBudget</code> = 100,000 ANTS per epoch, read via raw selector <code>0x56ab55c5</code> on the <code>emissionsGate</code> contract <code>0xE60a31E6CD2F8455503cA0B3f6545Dd3DDF543BD</code> at block 51613321. This selector has no name in any signature database and the contract ABI is not verified. The value is constant across epochs 21, 22 and 23 and equals 2% of the weekly emission of 5,000,000 ANTS derived from <code>currentEmissionRate()</code>.</p>
 <p>Position #27 metrics at snapshot block 51613321 (epoch 23), for the next epoch:</p>
 <table>
@@ -294,17 +295,7 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <tr><td>payback</td><td>0.131</td><td>floor / reward (epochs for the reward to cover the floor)</td></tr>
 </tbody>
 </table>
-<p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The token checks the <em>sender</em>: only whitelisted contracts (the stake and reward contracts) can send ANTS. So ANTS in your wallet can be neither sent nor staked; rewards become new positions only through Restake. ANTS you Claim stay in your wallet until transfers are enabled. Because of this, the position NFT is the only way to move locked ANTS.</p>
-<p>---</p>
-</section>
-<section id="incentives">
-<h1>Incentives</h1>
-<p>Stake in a seller pool works like a vote: it multiplies rewards for that seller's buyers. The Incentives tab lets sellers pay stakers for that weight, the way protocols pay voters on Votium and Aerodrome.</p>
-<p><strong>The board.</strong> Every pool, ranked by what it paid its stakers in completed epochs: a new stake only counts from the next epoch, so history says more than this week's volume. Tags: <code>new</code> — paid nothing yet; <code>thin</code> — under 100 ANTS staked. Next to it, a what-if: what 1,000 ANTS at max lock (weight 104,000) would earn next epoch, after its own dilution. It takes this epoch's staker budget and each pool's share of it, and assumes both hold and that no one else joins the pool. Nearly empty pools with sales show very large numbers; the next staker there cuts them sharply. Click any column header to sort. Seller names come from <code>antseedstats.com/sellers</code>.</p>
-<p><strong>Offers.</strong> An offer pays a fixed USDC amount per 1,000 ANTS at max lock (weight ÷ 104) in one pool for one epoch, up to a cap. <code>pays: all</code> — every position in the pool, pro rata when over the cap. <code>pays: new</code> — only positions staked for that epoch, in the order they were created, until the cap is used.</p>
-<p><strong>Payout.</strong> USDC on Base to the position owner within 7 days after the epoch ends, from the last published snapshot of that epoch. No contract holds the money: the payer is named on the offer.</p>
-<p><strong>Post an offer.</strong> The "Post an offer on GitHub" button opens an issue with the fields pre-filled; once checked, the offer is added to <code>site/offers.json</code> and appears on the tab.</p>
-<p>Full model and field list: <code>docs/incentives.md</code> in the repository.</p>
+<p><strong>Transferability.</strong> ANTS is non-transferable between wallets: <code>transfersEnabled()</code> = false, and a direct <code>transfer</code> reverts with <code>TransfersNotEnabled()</code>. The token checks the *sender*: only whitelisted contracts (the stake and reward contracts) can send ANTS. So ANTS in your wallet can be neither sent nor staked; rewards become new positions only through Restake. ANTS you Claim stay in your wallet until transfers are enabled. Because of this, the position NFT is the only way to move locked ANTS.</p>
 <p>---</p>
 </section>
 <section id="snapshot-data">

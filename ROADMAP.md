@@ -100,7 +100,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Portfolio polish, rest: no duplicate rows with pre-connected wallets, shorter listing rules | 28.09 | open |
 | Incentives polish: a "how to stake into a pool" line, collapse the board to 10 rows on phones | 01.10 | open |
 | Before the next offer: pick the best offer per pool by payout, validate offer fields strictly | 01.10 | open |
-| Incentives v2: network line above the board, "Post an offer" on top, expandable rows with seller stats from antscan, a "buyer ANTS per $1" column, and a "Selling, but no pool" list with the steps to get a pool | 01.10 | open |
+| Incentives v2: network line above the board, "Post an offer" on top, expandable rows with seller stats from antscan, a "buyer ANTS per $1" column, and a "Selling, but no pool" list with the steps to get a pool | 01.10 | ✅ done 28.09 |
 | Tell the active sellers without a pool, one by one, what a starter pool plus a restaked first seller reward would earn them | 02.10 | open |
 | Post the "Selling, but no pool" list in the AntSeed chat and on X | 04.10 | open |
 | Warn on the Move button that moving between sellers will lower the reward rate, once AntSeed ships it (announced 27.09) | when live | open |
@@ -213,6 +213,15 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**28.09.2026** — Incentives tab, v2. On antscan, sellers with $168,492 of lifetime sales (58 % of all seller revenue there, $290,282) have no pool for epoch 25. Four of them are selling now. Without a pool, their sales earn no points for them or their buyers. The tab now shows:
+
+- a network line above the board: next epoch's staker budget, total stake, and the average per 1,000 ANTS;
+- a ▾ panel per seller with revenue, weekly average, buyers, models and last sale from antscan, plus the pool's cashback and where a buyer reaches the 5 % cap;
+- a "Buyer ANTS per $1" column, computed as the usage accounting contract does. Our epoch 23 buyer reward (3,487.06 ANTS) matched it;
+- a "Selling, but no pool" block with the two transactions that open a pool and an estimate of what it would pay the seller.
+
+Details: [docs/incentives.md](docs/incentives.md).
 
 **27.09.2026 (evening)** — Incentives tab: AntSeed sellers can pay stakers for weight in their pool at a fixed USDC
 rate per 1,000 ANTS with a cap, either to every staker pro rata (like Votium / Aerodrome) or to new stakes only. The board

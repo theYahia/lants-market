@@ -34,6 +34,76 @@ total active stake; one more stake barely changes it. Nearly empty pools with sa
 "Staked" is shown in ANTS at max lock (`weight / 104`). Pool names come from
 [antseedstats.com/sellers](https://antseedstats.com/sellers) (`site/pool-names.json`).
 
+## Network line
+
+Above the board, one line for the whole network:
+`Network, epoch N: B ANTS to stakers · S ANTS staked · A per 1,000 on average`.
+
+| Symbol | Meaning |
+|---|---|
+| `B` | `stakerEpochBudget(N)` |
+| `S` | `Σ pool weight at N / 1e18 / 104`, the ANTS at max lock staked in all pools next epoch |
+| `A` | `B / S × 1000`, what 1,000 ANTS at max lock earns next epoch in an average pool |
+
+A pool above `A` pays more than the network average per unit of stake. A pool below `A` pays less.
+
+## Seller details
+
+The ▾ button in a row opens the seller's history from [antscan.co/api/sellers](https://antscan.co/api/sellers). It covers sellers with at least $100 earned in total.
+
+- earned, all time
+- average per week of activity: `earned / (lastSeen − firstSeen) × 604800`
+- buyers, models, last sale
+
+The same panel shows the pool's buyer cashback. It also shows the purchase amount at which one buyer reaches the cap for the epoch: `0.05 × buyerEpochBudget(e) / (ANTS per $1)`.
+
+## Buyer ANTS per $1
+
+The column "Buyer ANTS per $1, epoch e so far" is:
+`floor(buyerEpochBudget(e) × poolWeightAtEpoch(pool, e) × 1e6 / totalWeightedBuyerPointsByEpoch(e))`.
+
+This is how the protocol pays buyers:
+
+- `AntseedUsageAccounting._recordUsage` multiplies both buyer and seller points by the pool's weight.
+- If the pool weight is below `minimumAccountedPoolPower` (= 1), the purchase gives no points to either side.
+- A buyer's reward is `buyerEpochBudget × buyer's weighted points / total weighted buyer points`.
+- One account can get at most `MAX_REWARD_SHARE_BPS` = 500, or 5 % of the budget. For epoch 24 that was 12,530 ANTS.
+
+The number falls during the epoch as sales add to the total. At the start of an epoch, while `T(e) < 5 % × T(e−1)`, the column shows the final value for `e − 1`.
+
+- `<1`: the pool exists but its weight is very small.
+- `0`: there is no pool.
+
+Check: our buyer reward for epoch 23 was 3,487.06 ANTS, the same as this formula gives.
+
+## Selling, but no pool
+
+This block lists sellers with at least $1,000 earned who have no pool weight for the next epoch. Their sales earn no points for them or for their buyers.
+
+Sellers with a sale in the last 14 days are listed first. The rest are in a collapsed list.
+
+To get a pool:
+
+1. Call `initPosition()` on AntseedPositionInit `0xB68AD13b681319fcEB6b0A640c2fd96C0138CBc8`.
+   - It gives 1 ANTS, locked until epoch 126.
+   - It requires a legacy seller stake of at least 10 USDC.
+   - 63 grants were left as of 28.09.2026.
+2. Stake the first seller reward into your own pool with `stakeAgentReward`.
+
+The column shows an estimate of the seller reward per epoch once the pool is running:
+
+```
+weekly = earned × 604800 / max(active seconds, 604800)
+w1     = (126 − N) × 1e18
+r1     = sellerBudget × weekly × w1 / T
+w2     = w1 + r1 × 104
+X      = min(cap, sellerBudget × weekly × w2 / T)
+```
+
+Here `T` is the network's total weighted seller points and `cap` is 5 % of the seller budget.
+
+**What it assumes:** sales stay at the seller's weekly average, `T` does not change, and the first reward is restaked at max lock. Example: CatGPT ≈ 12,037 ANTS per epoch.
+
 ## Offers
 
 An offer is one entry in [`site/offers.json`](../site/offers.json):
