@@ -9,6 +9,7 @@ const TOPIC0 = '0xd8469404b4fcea354e3da6ebb8adc96ef1235e56d085663fdaedbe092ca381
 const RPC_DEFAULT = 'https://mainnet.base.org';
 const WINDOW = 2000;
 const MAX_TRIES = 8;
+let lastRequestTime = 0;
 
 function hexToNumber(hex) {
   return parseInt(hex, 16);
@@ -57,6 +58,12 @@ async function rpcCall(method, params, rpcUrl) {
   let lastErr;
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
     try {
+      const now = Date.now();
+      const elapsed = now - lastRequestTime;
+      if (lastRequestTime > 0 && elapsed < 300) {
+        await sleep(300 - elapsed);
+      }
+      lastRequestTime = Date.now();
       const res = await fetch(rpcUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -64,7 +71,7 @@ async function rpcCall(method, params, rpcUrl) {
       });
       if (res.status === 429 || res.status >= 500) {
         lastErr = new Error('HTTP ' + res.status);
-        await sleep(1000 + Math.random() * 1000);
+        await sleep(2000 * attempt + Math.random() * 1000);
         continue;
       }
       const j = await res.json();
@@ -72,7 +79,7 @@ async function rpcCall(method, params, rpcUrl) {
         const msg = String(j.error.message || j.error.code || '');
         if (/rate limit/i.test(msg)) {
           lastErr = new Error(msg);
-          await sleep(1000 + Math.random() * 1000);
+          await sleep(2000 * attempt + Math.random() * 1000);
           continue;
         }
         // SPLIT: range-error handling (stage 3b)
