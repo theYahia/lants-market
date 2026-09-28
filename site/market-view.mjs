@@ -1333,7 +1333,7 @@ export async function renderMyPositions(account, ids, snapshot) {
     claimBtn.dataset.id = id.toString();
     const claimText = restakeAnts.toFixed(2);
     claimBtn.textContent = 'Claim ' + claimText;
-    claimBtn.title = 'Claim ' + claimText + ' ANTS pending';
+    claimBtn.title = 'Claim ' + claimText + ' ANTS to your wallet. While ANTS transfers are off, claimed ANTS can\'t be staked again or sent. To keep earning, use Restake.';
     if (restakeAnts === 0) {
       claimBtn.disabled = true;
     }
