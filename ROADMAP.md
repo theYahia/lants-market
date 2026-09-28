@@ -100,6 +100,9 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Portfolio polish, rest: no duplicate rows with pre-connected wallets, shorter listing rules | 28.09 | open |
 | Incentives polish: a "how to stake into a pool" line, collapse the board to 10 rows on phones | 01.10 | open |
 | Before the next offer: pick the best offer per pool by payout, validate offer fields strictly | 01.10 | open |
+| Incentives v2: network line above the board, "Post an offer" on top, expandable rows with seller stats from antscan, a "buyer ANTS per $1" column, and a "Selling, but no pool" list with the steps to get a pool | 01.10 | open |
+| Tell the active sellers without a pool, one by one, what a starter pool plus a restaked first seller reward would earn them | 02.10 | open |
+| Post the "Selling, but no pool" list in the AntSeed chat and on X | 04.10 | open |
 | Warn on the Move button that moving between sellers will lower the reward rate, once AntSeed ships it (announced 27.09) | when live | open |
 | Restake #27's epoch-24 staker reward in Apex; stake the epoch-24 buyer reward straight into Open Forge (pool 44694, where the free models that built lants.eth run) — a max-locked position can't be moved | 01.10 | open |
 | Launch announcement on X and in the AntSeed chat | 02.10 | open |
