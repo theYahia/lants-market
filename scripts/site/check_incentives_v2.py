@@ -35,6 +35,7 @@ Keys:
   inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
   inc_nopool_earned  the first active row shows all-time earnings as whole dollars with separators
   inc_nopool_phone  at 390 px the seller cell of the first no-pool row is at least 90 px wide
+  inc_nopool_cells  at 390 px no visible cell of the first no-pool row is under 44 px; the estimate cell is <= 32 chars
   inc_polish        the estimate cell has the colour of the other cells; the expand button is not a light box;
                     the detail row has " · " before "<n> ANTS per $1"
 
@@ -168,7 +169,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_earned", "inc_nopool_phone", "inc_polish"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_earned", "inc_nopool_phone", "inc_nopool_cells", "inc_polish"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -430,9 +431,17 @@ def run_guard():
                 name_cell = ph.locator("#incentives .inc-nopool tr.nopool-row").first.locator("td").first
                 w = name_cell.bounding_box()["width"] if name_cell.count() else 0
                 record("inc_nopool_phone", f"390px: the seller cell of the first no-pool row is {w:.0f}px wide (want >= 90), names break per letter", w >= 90)
+                # inc_nopool_cells: no visible cell of that row is squeezed to a letter-wide column, the estimate is short
+                row = ph.locator("#incentives .inc-nopool tr.nopool-row").first
+                tds = [row.locator("td").nth(i) for i in range(row.locator("td").count())]
+                narrow = [f"{t.inner_text()[:12]!r}={t.bounding_box()['width']:.0f}px" for t in tds if t.is_visible() and t.bounding_box()["width"] < 44]
+                record("inc_nopool_cells", f"390px: cells narrower than 44px in the first no-pool row: {narrow}", not narrow)
+                xt = next((t.inner_text().strip() for t in tds if "ANTS/epoch" in t.inner_text()), "")
+                record("inc_nopool_cells", f"estimate cell {xt!r} is longer than 32 characters; put the explanation in the column heading", 0 < len(xt) <= 32)
             except Exception as exc:
                 crash("inc_cashback_detail", exc)
                 crash("inc_nopool_phone", exc)
+                crash("inc_nopool_cells", exc)
 
             browser.close()
     except Exception as exc:
