@@ -36,6 +36,8 @@ Keys:
   inc_nopool_earned  the first active row shows all-time earnings as whole dollars with separators
   inc_nopool_phone  at 390 px the seller cell of the first no-pool row is at least 90 px wide
   inc_nopool_cells  at 390 px no word in the first no-pool row breaks across lines; the estimate cell is <= 32 chars
+  inc_nopool_layout  1280 and 390 px: visible headings sit over their columns, no heading or cell overflows, the heading row
+                    is at most 60 / 90 px tall, the table stays inside .inc-nopool
   inc_polish        the estimate cell has the colour of the other cells; the expand button is not a light box;
                     the detail row has " · " before "<n> ANTS per $1"
 
@@ -168,8 +170,30 @@ def net_line(snap):
     return f"Network, epoch {n}: {fmt(budget)} ANTS to stakers · {fmt(round(staked))} ANTS staked · {avg} per 1,000 on average"
 
 
+NOPOOL_LAYOUT_JS = """() => {
+  const sec = document.querySelector('#incentives .inc-nopool');
+  const table = sec && sec.querySelector('table');
+  if (!table) return ['no table in .inc-nopool'];
+  const vis = el => el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+  const ths = [...table.querySelectorAll('thead th')].filter(vis);
+  const row = table.querySelector('tbody tr.nopool-row');
+  const tds = row ? [...row.querySelectorAll('td')].filter(vis) : [];
+  const bad = [];
+  if (ths.length !== tds.length) bad.push(`${ths.length} visible headings for ${tds.length} visible cells`);
+  ths.forEach((th, i) => { const td = tds[i]; if (td && Math.abs(th.getBoundingClientRect().left - td.getBoundingClientRect().left) > 4)
+    bad.push(`heading ${i + 1} '${th.innerText.trim().slice(0, 20)}' is not over its column`); });
+  ths.forEach(th => { if (th.scrollWidth > th.clientWidth + 1) bad.push(`heading '${th.innerText.trim().slice(0, 20)}' overflows its cell`); });
+  const head = table.querySelector('thead').getBoundingClientRect().height;
+  if (head > HEADMAX) bad.push(`heading row is ${Math.round(head)}px tall (max HEADMAX)`);
+  if (table.getBoundingClientRect().right > sec.getBoundingClientRect().right + 1) bad.push('table sticks out of .inc-nopool');
+  [...table.querySelectorAll('tbody tr.nopool-row td')].filter(vis).forEach(td => {
+    if (td.scrollWidth > td.clientWidth + 1) bad.push(`cell '${td.innerText.trim().slice(0, 16)}' is clipped`); });
+  return [...new Set(bad)].slice(0, 6);
+}"""
+
+
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_earned", "inc_nopool_phone", "inc_nopool_cells", "inc_polish"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_expand_sort", "inc_cashback_head", "inc_cashback", "inc_cashback_early", "inc_cashback_detail", "inc_nopool", "inc_nopool_x", "inc_nopool_earned", "inc_nopool_phone", "inc_nopool_cells", "inc_nopool_layout", "inc_polish"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -391,6 +415,8 @@ def run_guard():
                     if det.count() == 1:
                         record("inc_nopool", f"inactive summary lacks '{len(inactive)}'", str(len(inactive)) in det.locator("summary").inner_text())
                         record("inc_nopool", f"inactive rows {det.locator('tr.nopool-row').count()}, want {len(inactive)}", det.locator("tr.nopool-row").count() == len(inactive))
+                    lay = page.evaluate(NOPOOL_LAYOUT_JS.replace("HEADMAX", "60"))
+                    record("inc_nopool_layout", f"1280px no-pool table: {lay}", not lay)
             except Exception as exc:
                 crash("inc_nopool", exc)
                 crash("inc_nopool_x", exc)
@@ -448,12 +474,15 @@ def run_guard():
                     }
                     return false; }""")]
                 record("inc_nopool_cells", f"390px: words broken across lines in the first no-pool row: {broken}", not broken)
+                lay = ph.evaluate(NOPOOL_LAYOUT_JS.replace("HEADMAX", "90"))
+                record("inc_nopool_layout", f"390px no-pool table: {lay}", not lay)
                 xt = next((t.inner_text().strip() for t in tds if "ANTS/epoch" in t.inner_text()), "")
                 record("inc_nopool_cells", f"estimate cell {xt!r} is longer than 32 characters; put the explanation in the column heading", 0 < len(xt) <= 32)
             except Exception as exc:
                 crash("inc_cashback_detail", exc)
                 crash("inc_nopool_phone", exc)
                 crash("inc_nopool_cells", exc)
+                crash("inc_nopool_layout", exc)
 
             browser.close()
     except Exception as exc:
