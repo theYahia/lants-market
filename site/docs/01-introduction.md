@@ -28,16 +28,22 @@ ENS name: `lants.eth`.
 - Manage a position: stake a finished epoch's buyer reward, split, move to another pool, or enable max-lock.
 - See your positions and your listings in My Portfolio.
 - Claim a position's staker reward to your wallet, or restake it as a new position, with one click.
-- On the Incentives tab: see what each pool paid its stakers in completed epochs, a next-epoch what-if, and sellers' USDC
-  offers for weight in their pool.
+- On the Incentives tab: a network row above the board, and a ▾ details view per seller (revenue, buyers,
+  models from antscan).
+- A "Buyer ANTS per $1" column: how many ANTS the network returns to a buyer for each $1 spent with that seller
+  in the current epoch. 0 means the seller has no pool. A "Selling, but no pool" list shows those sellers and
+  the steps to create a pool.
+- Two offer types. Stake: a seller pays USDC to stakers for weight in their pool. Rebate: the seller or a sponsor
+  returns a % of buyers' spend in USDC, calculated from chain data. A "spend $Y → get $Z back" calculator shows
+  what a buyer gets back. Details: [docs/incentives.md](https://github.com/theYahia/lants-market/blob/main/docs/incentives.md).
 
 A 1% fee is taken from each sale and sent to the fee recipient.
 
 ## What does not exist yet
 
 - **Bids on positions.** The market contract stores listings only; you cannot bid on a position yet.
-- **Escrow for incentive offers.** No contract holds offer money. The payer named on each offer pays
-  after the epoch.
+- **Escrow for incentive offers.** No contract holds money for stake or rebate offers. The payer named on each
+  offer (seller or sponsor) pays stakers or buyers directly after the epoch.
 
 ## How this site reads the chain
 
