@@ -15,12 +15,14 @@ Run: python scripts/site/check_usage_live.py   (prints inc_cashback_data=0/1 and
 import json
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 TRACKED = REPO / "site" / "fixtures" / "snapshot-e23.live.json"
-RPC = "https://base-rpc.publicnode.com"
+RPCS = ["https://base-rpc.publicnode.com", "https://mainnet.base.org"]
 
 USAGE_REWARDS = "0x78330bF154172F1137219Bb559d4F3A270B3201F"
 ACCOUNTING = "0xAdd2D85316153D7bfaF7921EE9Bf1Bb6c7A1cBc9"
@@ -39,11 +41,24 @@ SEL = {
 
 
 def call(to, sel, args, block):
+    """eth_call at the pinned block; public RPCs rate-limit (403/429), so retry with a pause and a second RPC."""
     data = SEL[sel] + "".join(f"{int(a):064x}" for a in args)
     req = {"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": to, "data": data}, hex(int(block))]}
-    r = urllib.request.Request(RPC, json.dumps(req).encode(), {"content-type": "application/json", "user-agent": "lants-guard/1.0"})
-    with urllib.request.urlopen(r, timeout=30) as resp:
-        return str(int(json.load(resp)["result"], 16))
+    last = None
+    for attempt in range(6):
+        url = RPCS[attempt % len(RPCS)]
+        try:
+            r = urllib.request.Request(url, json.dumps(req).encode(), {"content-type": "application/json", "user-agent": "lants-guard/1.0"})
+            with urllib.request.urlopen(r, timeout=30) as resp:
+                out = json.load(resp)
+            if "result" in out:
+                time.sleep(0.1)
+                return str(int(out["result"], 16))
+            last = RuntimeError(str(out.get("error"))[:200])
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last = exc
+        time.sleep(1.5 * (attempt + 1))
+    raise last
 
 
 def main():
