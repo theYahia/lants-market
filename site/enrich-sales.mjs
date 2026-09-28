@@ -47,20 +47,37 @@ try {
   } else {
     const salesByPool = {};
     let nonzeroPools = 0;
-    for (const { agentId, sellerPoints } of sellers) {
+    const sellersById = {};
+    let sellersCount = 0;
+    for (const s of sellers) {
+      const { agentId, sellerPoints, earnedUsdc, sellerName, uniqueBuyers, firstSeenAt, lastSeenAt, stakeUsdc, modelsServed, address } = s;
       const val = Number(sellerPoints);
       if (!Number.isNaN(val) && val !== 0) {
         salesByPool[agentId] = val;
         nonzeroPools++;
+      }
+      if (typeof earnedUsdc === 'string' && BigInt(earnedUsdc) >= BigInt(100000000)) {
+        const key = agentId && String(agentId) !== '0' ? String(agentId) : 'addr:' + address;
+        sellersById[key] = {
+          name: sellerName || '',
+          earnedUsdc: String(earnedUsdc),
+          uniqueBuyers: Number(uniqueBuyers),
+          firstSeenAt: Number(firstSeenAt),
+          lastSeenAt: Number(lastSeenAt),
+          stakeUsdc: String(stakeUsdc),
+          modelsServed: Number(modelsServed)
+        };
+        sellersCount++;
       }
     }
 
     result = {
       ...snapshot,
       salesByPool,
+      sellersById,
     };
     writeFileSync(PATH, JSON.stringify(result, null, 2));
-    console.log('sales_ok pools=' + nonzeroPools);
+    console.log('sales_ok pools=' + nonzeroPools + ' sellers=' + sellersCount);
   }
 } catch (e) {
   console.error(e);
