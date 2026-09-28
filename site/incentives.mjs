@@ -383,7 +383,7 @@ function buildNoPool(snapshot, poolNames) {
 
   const steps = document.createElement('p');
   steps.className = 'inc-nopool-steps';
-  steps.textContent = `Steps: call initPosition() on ${GRANT_ADDR} (1 ANTS starter pool, ${snapshot.starterGrantsLeft} left, needs a legacy seller stake of at least 10 USDC); then stakeAgentReward your first seller reward into your own pool.`;
+  steps.textContent = `Steps: call initPosition() on ${GRANT_ADDR} (1 ANTS starter pool, ${snapshot.starterGrantsLeft} left, needs a legacy seller stake of at least 10 USDC); then stakeAgentReward your first seller reward into your own pool. The last column is what that would pay you per epoch: a starter pool plus your first seller reward restaked at max lock, at this epoch's rates.`;
   div.appendChild(steps);
 
   const makeTable = (list) => {
@@ -391,8 +391,9 @@ function buildNoPool(snapshot, poolNames) {
     table.className = 'inc-nopool-table';
     const thead = document.createElement('thead');
     const headTr = document.createElement('tr');
-    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'With a starter pool + restaked first seller reward, to you']) {
+    for (const h of ['Seller', 'All-time', 'Buyers', 'Last sale', 'With a starter pool']) {
       const th = document.createElement('th');
+      if (h === 'Last sale') th.className = 'nopool-last';
       th.textContent = h;
       headTr.appendChild(th);
     }
