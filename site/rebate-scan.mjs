@@ -25,6 +25,14 @@ function padTopic(value) {
   return '0x' + value.padStart(64, '0');
 }
 
+function isRangeError(err) {
+  if (!err) return false;
+  const code = err.code;
+  if (code === -32614 || code === -32005) return true;
+  const msg = String(err.message || '');
+  return /range|block range|too many blocks|limited to/i.test(msg);
+}
+
 function topicToAddress(topic) {
   return '0x' + topic.slice(26).toLowerCase();
 }
@@ -68,6 +76,9 @@ async function rpcCall(method, params, rpcUrl) {
           continue;
         }
         // SPLIT: range-error handling (stage 3b)
+        if (isRangeError(j.error)) {
+          throw new RangeError('SPLIT');
+        }
         throw new Error(msg);
       }
       return j.result;
@@ -77,7 +88,7 @@ async function rpcCall(method, params, rpcUrl) {
         await sleep(1000 + Math.random() * 1000);
         continue;
       }
-      if (e.message && e.message.includes('SPLIT')) {
+      if (e instanceof RangeError) {
         throw e;
       }
       // network error retry
@@ -106,9 +117,24 @@ async function scanWindows(epoch, pool, fromBlock, toBlock, rpcUrl) {
   const epochTopic = padTopic(epoch);
   const buyers = new Set();
   const sellers = new Set();
-  for (let start = fromBlock; start <= toBlock; start += WINDOW) {
-    const end = Math.min(start + WINDOW - 1, toBlock);
-    const logs = await getLogs(start, end, epochTopic, rpcUrl);
+
+  async function fetchWindow(start, end) {
+    if (end < start) return;
+    let logs;
+    try {
+      logs = await getLogs(start, end, epochTopic, rpcUrl);
+    } catch (e) {
+      if (e instanceof RangeError) {
+        if (start === end) {
+          throw new Error('window still fails at a single block ' + start);
+        }
+        const mid = Math.floor((start + end) / 2);
+        await fetchWindow(start, mid);
+        await fetchWindow(mid + 1, end);
+        return;
+      }
+      throw e;
+    }
     if (logs) {
       for (const log of logs) {
         const data = log.data || '0x';
@@ -123,6 +149,11 @@ async function scanWindows(epoch, pool, fromBlock, toBlock, rpcUrl) {
         }
       }
     }
+  }
+
+  for (let start = fromBlock; start <= toBlock; start += WINDOW) {
+    const end = Math.min(start + WINDOW - 1, toBlock);
+    await fetchWindow(start, end);
   }
   return { buyers: [...buyers].sort(), sellers: [...sellers].sort() };
 }
