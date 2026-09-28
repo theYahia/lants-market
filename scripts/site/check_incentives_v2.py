@@ -26,8 +26,10 @@ Keys:
   inc_net           one line under the countdown: Network, epoch N: B ANTS to stakers · S ANTS staked · A per 1,000 on average
   inc_postcta       exactly one visible a.inc-post-offer, above the board table, centred on it
   inc_expand        a button.inc-expand per board row; it opens a tr.inc-detail right under its row
-  inc_cashback      column "Buyer ANTS per $1, epoch e so far"; floor(B·W·1e6/T); fallback; phone
-  inc_nopool        .inc-nopool under the board: active sellers without a pool, what a starter pool earns them
+  inc_cashback      column "Buyer ANTS per $1, epoch e so far"; floor(B·W·1e6/T); tip with the cap; early-epoch fallback
+  inc_cashback_detail  the detail row: "<cell> ANTS per $1", "reached at ≈ $D"; at 390 px the column is hidden, no side scroll
+  inc_nopool        .inc-nopool under the board: steps, active sellers without a pool, closed list of inactive ones
+  inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
 
 Run: python scripts/site/check_incentives_v2.py   (prints key=0/1 and reason= lines; exit 0 only if all are 1)
 """
@@ -159,7 +161,7 @@ def net_line(snap):
 
 
 def run_guard():
-    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_cashback", "inc_nopool"]}
+    results = {k: 0 for k in ["inc_sellers_data", "inc_net", "inc_postcta", "inc_expand", "inc_cashback", "inc_cashback_detail", "inc_nopool", "inc_nopool_x"]}
     checks = {k: [] for k in results}
     reasons = []
 
@@ -315,20 +317,29 @@ def run_guard():
                         cell = page.locator(f'#incentives tr.board-row[data-pool="{pool}"] td').nth(idx)
                         got = " ".join(cell.inner_text().split())
                         record("inc_cashback", f"pool {pool}: cell {got!r}, want {want!r}", got == want)
-                    # the detail row names the cap in dollars at this rate
-                    rate = cashback_wei(snap["usageByEpoch"][str(e)], "44694") / 1e18
-                    dollars = math.ceil(cap / rate)
-                    page.locator('#incentives tr.board-row[data-pool="44694"] button.inc-expand').click()
-                    page.wait_for_timeout(200)
-                    dt = page.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
-                    record("inc_cashback", f"44694 detail lacks 'reached at ≈ ${dollars}': {dt[:200]!r}", f"reached at ≈ ${dollars}" in dt)
             except Exception as exc:
                 crash("inc_cashback", exc)
+
+            # inc_cashback_detail (desktop): the detail row names the cap in dollars at this rate
+            try:
+                cap = int(snap["usageByEpoch"][str(e)]["buyerBudget"]) * int(snap["maxRewardShareBps"]) // 10000 // 10**18
+                rate = cashback_wei(snap["usageByEpoch"][str(e)], "44694") / 1e18
+                dollars = math.ceil(cap / rate)
+                page.locator('#incentives tr.board-row[data-pool="44694"] button.inc-expand').click()
+                page.wait_for_timeout(200)
+                dt = page.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
+                record("inc_cashback_detail", f"44694 detail lacks 'reached at ≈ ${dollars}': {dt[:200]!r}", f"reached at ≈ ${dollars}" in dt)
+                want, _ = cashback_text(snap, "44694")
+                record("inc_cashback_detail", f"44694 detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
+            except Exception as exc:
+                crash("inc_cashback_detail", exc)
 
             # inc_nopool
             try:
                 sec = page.locator("#incentives .inc-nopool")
                 record("inc_nopool", f"want one .inc-nopool, got {sec.count()}", sec.count() == 1)
+                if sec.count() != 1 or sec.locator("tr.nopool-row").count() == 0:
+                    record("inc_nopool_x", "no .inc-nopool rows to hold the starter-pool estimate", False)
                 if sec.count() == 1:
                     sb = sec.bounding_box()
                     record("inc_nopool", "block is not under the board", sb["y"] >= tbox["y"] + tbox["height"] - 1)
@@ -344,7 +355,7 @@ def run_guard():
                         ft = arows.first.inner_text()
                         record("inc_nopool", f"first row {ft[:80]!r} is not {first['name']!r}", first["name"] in ft)
                         want_x = f"{fmt(starter_estimate(snap, first))} ANTS"
-                        record("inc_nopool", f"first row lacks {want_x!r}", want_x in ft)
+                        record("inc_nopool_x", f"first row lacks {want_x!r}: {ft[:160]!r}", want_x in ft)
                     det = sec.locator("details.inc-nopool-inactive")
                     record("inc_nopool", "want one closed details.inc-nopool-inactive", det.count() == 1 and det.get_attribute("open") is None)
                     if det.count() == 1:
@@ -352,6 +363,7 @@ def run_guard():
                         record("inc_nopool", f"inactive rows {det.locator('tr.nopool-row').count()}, want {len(inactive)}", det.locator("tr.nopool-row").count() == len(inactive))
             except Exception as exc:
                 crash("inc_nopool", exc)
+                crash("inc_nopool_x", exc)
 
             # inc_cashback fallback: too early in the epoch -> the final previous epoch
             try:
@@ -376,17 +388,17 @@ def run_guard():
             try:
                 ph = open_page(390, "phone")
                 sw = ph.evaluate("() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]")
-                record("inc_cashback", f"390px scrolls sideways: {sw}", sw[0] <= sw[1])
+                record("inc_cashback_detail", f"390px scrolls sideways: {sw}", sw[0] <= sw[1])
                 heads = ph.locator("#incentives table.inc-board-table thead th")
                 vis = [heads.nth(i) for i in range(heads.count()) if heads.nth(i).is_visible() and heads.nth(i).inner_text().strip().startswith("Buyer ANTS per $1")]
-                record("inc_cashback", "cashback heading is visible at 390px", not vis)
+                record("inc_cashback_detail", "cashback heading is visible at 390px", not vis)
                 ph.locator('#incentives tr.board-row[data-pool="44694"] button.inc-expand').click()
                 ph.wait_for_timeout(200)
                 want, _ = cashback_text(snap, "44694")
                 dt = ph.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
-                record("inc_cashback", f"390px detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
+                record("inc_cashback_detail", f"390px detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
             except Exception as exc:
-                crash("inc_cashback", exc)
+                crash("inc_cashback_detail", exc)
 
             browser.close()
     except Exception as exc:
