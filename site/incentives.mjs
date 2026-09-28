@@ -659,7 +659,13 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
         return activeDirection === 'ascending' ? cmp : -cmp;
       });
 
-      rows.forEach(row => tbody.appendChild(row));
+      rows.forEach(row => {
+        const detail = row.nextElementSibling;
+        tbody.appendChild(row);
+        if (detail && detail.classList.contains('inc-detail')) {
+          tbody.appendChild(detail);
+        }
+      });
       headerThs.forEach((th, i) => {
         if (i === activeColumn) {
           th.setAttribute('aria-sort', activeDirection);
