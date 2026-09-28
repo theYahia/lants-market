@@ -100,6 +100,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Portfolio polish, rest: no duplicate rows with pre-connected wallets, shorter listing rules | 28.09 | open |
 | Incentives polish: a "how to stake into a pool" line, collapse the board to 10 rows on phones | 01.10 | open |
 | Before the next offer: pick the best offer per pool by payout, validate offer fields strictly | 01.10 | open |
+| Rebate offers: a seller (or a sponsor) returns a share of what buyers spend with it in an epoch, in USDC, computed from the chain; first sponsored rebate on Apex for epoch 25 after the owner's go | 01.10 | code ✅ 28.09 · offer pending |
 | Incentives v2: network line above the board, "Post an offer" on top, expandable rows with seller stats from antscan, a "buyer ANTS per $1" column, and a "Selling, but no pool" list with the steps to get a pool | 01.10 | ✅ done 28.09 |
 | Tell the active sellers without a pool, one by one, what a starter pool plus a restaked first seller reward would earn them | 02.10 | open |
 | Post the "Selling, but no pool" list in the AntSeed chat and on X | 04.10 | open |
@@ -213,6 +214,12 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**28.09.2026 (evening).** Rebate offers: the second offer type. A seller or sponsor gives the pool's buyers a discount in
+USDC on what they spent with that seller in an epoch; every payout is computed from on-chain usage and can be checked
+against the chain to the micro-USDC (Apex, epoch 23: 52 buyers, 558,971,119 micro-USDC, equal to the pool aggregate).
+Why: sellers needed a way to offer a discount, and cashback in ANTS can't be sold while transfers are off; USDC can be
+spent the same day.
 
 **28.09.2026** — Incentives tab, v2. On antscan, sellers with $168,492 of lifetime sales (58 % of all seller revenue there, $290,282) have no pool for epoch 25. Four of them are selling now. Without a pool, their sales earn no points for them or their buyers. The tab now shows:
 

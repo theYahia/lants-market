@@ -131,6 +131,64 @@ offer goes into `site/offers.json` and appears on the site.
 **Trust model (v1):** no escrow — the payer is named on every offer and pays themselves. We publish the payout
 transaction for our own offer. v2: an escrow contract with an audit.
 
+## Rebate offers
+
+A rebate offer is a second type of entry in [`site/offers.json`](../site/offers.json). The seller (or a sponsor) promises
+the pool's buyers `pctBps / 100` % back in USDC on what they spend with that seller in epoch N, up to `capUsdc` in total,
+optionally capped per buyer and with a minimum spend. The named payer pays. No escrow, same trust model as stake offers v1.
+
+```json
+{"type": "rebate", "pool": "44694", "epochs": [25], "pctBps": 300, "capUsdc": 10,
+ "capPerBuyerUsdc": 2, "minSpendUsdc": 1,
+ "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B", "note": "..."}
+```
+
+| Field | Meaning |
+|---|---|
+| `type` | `rebate`; entries without `type` are stake offers |
+| `pool` | seller pool (agent id) |
+| `epochs` | one epoch, `[N]` |
+| `pctBps` | rebate in basis points, integer 1…5000 (`300` = 3%) |
+| `capUsdc` | total budget of the offer, USDC |
+| `capPerBuyerUsdc` | optional: the most one buyer can get, USDC |
+| `minSpendUsdc` | optional: buyers who spent less get nothing, USDC |
+| `payer` | the address that pays, shown on the offer |
+| `note` | up to 140 characters |
+
+**Formula.** All amounts in micro-USDC, rounded down:
+
+```
+r_i = min(spend_i × pctBps / 10000, capPerBuyer)
+```
+
+If `Σr > cap`: `p_i = r_i × cap / Σr`. The remainder is not distributed.
+
+Excluded: the seller, the payer, addresses in [`site/own-addresses.json`](../site/own-addresses.json), and buyers with
+spend below `minSpend`. Any other exclusion only through a committed `rebates/<N>-<pool>.exclude.json`, one reason per
+address.
+
+**Where the numbers come from.** Buyers: `UsagePointsAccrued` events, read with `eth_getLogs` in windows of 2,000 blocks.
+Each buyer's spend: the view `buyerAgentEpochUsage(epoch, buyer, agentId)` at block "first block of epoch N+1 + 100".
+Check: `Σ spend = poolPointsByEpoch(N, seller)`; if the sum does not match, the calculation is not published. Verified on
+Apex, epoch 23: 52 buyers, 558,971,119 micro-USDC, sum equal to the pool aggregate.
+
+**Pools with weight only.** Purchases from a seller without a pool are not recorded on chain, so there is nothing to
+rebate against.
+
+**Payout:**
+
+```
+node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B --offer file --out dir
+```
+
+writes JSON and CSV; an existing file is not overwritten. The draft is published, then 48 hours for objections, then the
+payout. USDC goes to the buyer's address on Base. After payout, `paidTx` is added to the JSON. One payout per
+(offer, epoch).
+
+**On the site:** the Offer column shows the terms, e.g. "3% back, up to $10 · max $2/buyer". The calculator takes
+"Spend with this seller (USD)" and shows "You get $Z back". Before the epoch starts: "starts epoch N"; after it ends:
+"ended".
+
 ## First offer
 
 lants.eth pays 1 USDC per 1,000 ANTS staked in Open Forge (pool 44694) for epoch 25, new stakes only, up to 10 USDC.
