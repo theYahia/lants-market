@@ -52,7 +52,7 @@ def main():
     def record(why, ok):
         checks.append(bool(ok))
         if not ok:
-            reasons.append(why)
+            reasons.append("missing: " + why)
 
     backup = TRACKED.read_bytes()
     try:
@@ -86,7 +86,8 @@ def main():
             record(f"{field} = {out.get(field)!r}, chain {want}", out.get(field) == want)
         record("salesByPool lost", bool(out.get("salesByPool")))
     except Exception as exc:
-        record(f"raised {type(exc).__name__}: {exc}", False)
+        checks.append(False)
+        reasons.append(f"{type(exc).__name__}: {str(exc).splitlines()[0][:200]}")
     finally:
         TRACKED.write_bytes(backup)
 

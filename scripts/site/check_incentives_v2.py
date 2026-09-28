@@ -166,7 +166,12 @@ def run_guard():
     def record(key, why, ok):
         checks[key].append(bool(ok))
         if not ok:
-            reasons.append(f"{key}: {why}")
+            reasons.append(f"missing: {key}: {why}")
+
+    def crash(key, exc):
+        # an exception is printed with its class (KONTRAKT): Playwright TimeoutError = element not there
+        checks[key].append(False)
+        reasons.append(f"{type(exc).__name__}: {key}: {str(exc).splitlines()[0][:200]}")
 
     # ---- inc_sellers_data: the CI enrich step, run on the antscan fixture ----
     backup = TRACKED.read_bytes()
@@ -183,7 +188,7 @@ def run_guard():
             record("inc_sellers_data", f"{len(bad)} records differ from the contract, first {bad[:3]}: got {got.get(bad[0]) if bad else ''} want {want[bad[0]] if bad else ''}", not bad)
         record("inc_sellers_data", "salesByPool lost", bool(out.get("salesByPool")))
     except Exception as exc:
-        record("inc_sellers_data", f"raised {type(exc).__name__}: {exc}", False)
+        crash("inc_sellers_data", exc)
     finally:
         TRACKED.write_bytes(backup)
 
@@ -236,7 +241,7 @@ def run_guard():
                     nb = net.bounding_box()
                     record("inc_net", "not between the countdown and the board", title and nb and title["y"] <= nb["y"] and nb["y"] + nb["height"] <= tbox["y"] + 1)
             except Exception as exc:
-                record("inc_net", f"raised {type(exc).__name__}: {exc}", False)
+                crash("inc_net", exc)
 
             # inc_postcta
             try:
@@ -251,7 +256,7 @@ def run_guard():
                     record("inc_postcta", "text does not start with 'Post an offer'", vis[0].inner_text().strip().startswith("Post an offer"))
                     record("inc_postcta", "href is not the GitHub issue form", post_offer_href_ok(vis[0].get_attribute("href") or ""))
             except Exception as exc:
-                record("inc_postcta", f"raised {type(exc).__name__}: {exc}", False)
+                crash("inc_postcta", exc)
 
             # inc_expand
             try:
@@ -291,7 +296,7 @@ def run_guard():
                 record("inc_expand", "after sorting, the 52894 detail is not right under its row", detail_of("52894").count() == 1 and detail_of("52894").is_visible())
                 btn.click()
             except Exception as exc:
-                record("inc_expand", f"raised {type(exc).__name__}: {exc}", False)
+                crash("inc_expand", exc)
 
             # inc_cashback (desktop)
             try:
@@ -318,7 +323,7 @@ def run_guard():
                     dt = page.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
                     record("inc_cashback", f"44694 detail lacks 'reached at ≈ ${dollars}': {dt[:200]!r}", f"reached at ≈ ${dollars}" in dt)
             except Exception as exc:
-                record("inc_cashback", f"raised {type(exc).__name__}: {exc}", False)
+                crash("inc_cashback", exc)
 
             # inc_nopool
             try:
@@ -346,7 +351,7 @@ def run_guard():
                         record("inc_nopool", f"inactive summary lacks '{len(inactive)}'", str(len(inactive)) in det.locator("summary").inner_text())
                         record("inc_nopool", f"inactive rows {det.locator('tr.nopool-row').count()}, want {len(inactive)}", det.locator("tr.nopool-row").count() == len(inactive))
             except Exception as exc:
-                record("inc_nopool", f"raised {type(exc).__name__}: {exc}", False)
+                crash("inc_nopool", exc)
 
             # inc_cashback fallback: too early in the epoch -> the final previous epoch
             try:
@@ -363,7 +368,7 @@ def run_guard():
                     got = " ".join(pg.locator('#incentives tr.board-row[data-pool="44694"] td').nth(idx).inner_text().split())
                     record("inc_cashback", f"fallback 44694 cell {got!r}, want {want!r}", got == want)
             except Exception as exc:
-                record("inc_cashback", f"fallback raised {type(exc).__name__}: {exc}", False)
+                crash("inc_cashback", exc)
             finally:
                 body[0] = json.dumps(snap).encode()
 
@@ -381,11 +386,11 @@ def run_guard():
                 dt = ph.locator('#incentives tr.board-row[data-pool="44694"] + tr.inc-detail').inner_text()
                 record("inc_cashback", f"390px detail lacks '{want} ANTS per $1'", f"{want} ANTS per $1" in dt)
             except Exception as exc:
-                record("inc_cashback", f"phone raised {type(exc).__name__}: {exc}", False)
+                crash("inc_cashback", exc)
 
             browser.close()
     except Exception as exc:
-        reasons.append(f"guard raised {type(exc).__name__}: {exc}")
+        reasons.append(f"{type(exc).__name__}: guard: {str(exc).splitlines()[0][:200]}")
     finally:
         e2e.stop_all()
 
