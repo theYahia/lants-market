@@ -8,6 +8,8 @@ Keys (one per code stage):
   rebate_scan_split  offline mock RPC that refuses ranges over 1,000 blocks and fails each window once -> same buyers
   rebate_view        ONLINE  rebate-payout.mjs --dry -> totalSpend = aggregate = 558971119, 52 buyers
   rebate_files       ONLINE  rebate-payout.mjs --offer --out -> JSON + CSV equal to the reference, no overwrite
+  rebate_label       rebateLabel() / rebateLine() in site/rebate.mjs: the words of a rebate offer, by epoch state
+  rebate_board_offers  the Offers section lists the rebate line next to the stake line
   rebate_board       the board and the Offers section show a rebate offer in words, by epoch state
   rebate_calc        the calculator shows "you get $Z back" for a pool with an active rebate offer
 
@@ -105,6 +107,8 @@ for (const c of job) {
     else if (c.fn === 'offerState') r = m.offerState(c.offer, c.display);
     else if (c.fn === 'rebatePayout') r = m.rebatePayout(c.spends, c.offer, c.exclude);
     else if (c.fn === 'rebateForSpend') r = m.rebateForSpend(BigInt(c.spend), c.offer);
+    else if (c.fn === 'rebateLabel') r = m.rebateLabel(c.offer, c.epoch);
+    else if (c.fn === 'rebateLine') r = m.rebateLine(c.offer, c.epoch, c.names);
     out.push({ ok: true, r: JSON.parse(JSON.stringify(r, ser)), bigint: typeof r === 'bigint' });
   } catch (e) { out.push({ ok: false, err: String(e && e.message || e).slice(0, 160) }); }
 }
@@ -138,7 +142,7 @@ def schema_cases():
 def main():
     offline = "--offline" in sys.argv
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
-    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_view", "rebate_files", "rebate_board", "rebate_calc"]
+    keys = ["rebate_schema", "rebate_math", "rebate_scan", "rebate_scan_split", "rebate_view", "rebate_files", "rebate_label", "rebate_board_offers", "rebate_board", "rebate_calc"]
     checks = {k: [] for k in keys}
     reasons = []
 
@@ -204,6 +208,25 @@ def main():
             record("rebate_math", f"rebatePayout job {i}: {diff} differ; total {norm['total']} vs {w['total']}", not diff)
     except Exception as exc:
         crash("rebate_math", exc)
+
+    # ---- rebate_label (text of a rebate offer, pure functions) ----
+    try:
+        if not run_key("rebate_label"):
+            raise StopIteration
+        no_pb = {k: v for k, v in OFFER.items() if k != "capPerBuyerUsdc"}
+        jobs = [{"fn": "rebateLabel", "offer": OFFER, "epoch": 25}, {"fn": "rebateLabel", "offer": OFFER, "epoch": 24},
+                {"fn": "rebateLabel", "offer": OFFER, "epoch": 26}, {"fn": "rebateLine", "offer": OFFER, "epoch": 25, "names": {"52894": "Apex"}},
+                {"fn": "rebateLabel", "offer": no_pb, "epoch": 25}]
+        got = run_js(jobs)
+        txt = [str(g.get("r") if g["ok"] else "THREW " + g["err"]) for g in got]
+        line = (got[3].get("r") or {}).get("line", "") if got[3]["ok"] and isinstance(got[3].get("r"), dict) else ""
+        for i, needle in ((0, "3% back, up to $10"), (0, "max $2/buyer"), (1, "starts"), (2, "ended")):
+            record("rebate_label", f"rebateLabel case {i} {txt[i]!r} lacks {needle!r}", needle in txt[i])
+        for needle in ("Apex (pool 52894)", "3% back", OFFER["payer"]):
+            record("rebate_label", f"rebateLine {line!r} lacks {needle!r}", needle in line)
+        record("rebate_label", f"label without a per-buyer cap {txt[4]!r} mentions 'max' or 'undefined'", "undefined" not in txt[4] and "max $" not in txt[4] and "3% back" in txt[4])
+    except Exception as exc:
+        crash("rebate_label", exc)
 
     # ---- rebate_scan_split (offline mock RPC) ----
     try:
@@ -336,7 +359,7 @@ def main():
             shutil.rmtree(tmp, ignore_errors=True)
 
     # ---- page keys ----
-    page_keys = [k for k in ("rebate_board", "rebate_calc") if run_key(k)]
+    page_keys = [k for k in ("rebate_board_offers", "rebate_board", "rebate_calc") if run_key(k)]
     try:
         if not page_keys:
             raise StopIteration
@@ -381,6 +404,15 @@ def main():
                     return " ".join(pg.locator('#incentives tr.board-row[data-pool="52894"] td').nth(idx).inner_text().split())
 
                 try:
+                    if "rebate_board_offers" not in page_keys:
+                        raise StopIteration
+                    sect = open_page("offers").locator("#incentives .inc-offers").inner_text()
+                    record("rebate_board_offers", "Offers section lacks a '3% back' line", "3% back" in sect)
+                    record("rebate_board_offers", "the stake offer line disappeared", "USDC per 1,000 ANTS" in sect)
+                except Exception as exc:
+                    crash("rebate_board_offers", exc)
+
+                try:
                     if "rebate_board" not in page_keys:
                         raise StopIteration
                     pg = open_page("active")
@@ -422,6 +454,7 @@ def main():
         finally:
             e2e.stop_all()
     except Exception as exc:
+        crash("rebate_board_offers", exc)
         crash("rebate_board", exc)
         crash("rebate_calc", exc)
 
