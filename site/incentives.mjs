@@ -338,7 +338,19 @@ function cashbackUsage(snapshot) {
   return { usage: byEpoch[String(se)], epoch: se, heading: `Buyer ANTS per $1, epoch ${se} so far` };
 }
 function cashbackCell(snapshot, pool) {
-  return { wei: 0n, text: '' };
+  const cb = cashbackUsage(snapshot);
+  if (!cb) return { wei: 0n, text: '—' };
+  const u = cb.usage;
+  const t = BigInt(u.totalWeightedBuyerPoints || '0');
+  const w = BigInt((u.poolWeights || {})[pool] || '0');
+  const wei = t === 0n ? 0n : BigInt(u.buyerBudget || '0') * w * 1000000n / t;
+  if (wei === 0n) {
+    const next = String(Number(snapshot.epoch) + 1);
+    const wn = BigInt(String(snapshot.poolWeightByEpoch?.[pool]?.[next] || '0'));
+    return { wei, text: wn > 0n ? `from epoch ${next}` : '0' };
+  }
+  if (wei < 10n ** 18n) return { wei, text: '<1' };
+  return { wei, text: (wei / 10n ** 18n).toLocaleString('en-US') };
 }
 function cashbackHead(snapshot) {
   const cb = cashbackUsage(snapshot);
