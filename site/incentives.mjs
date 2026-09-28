@@ -671,6 +671,24 @@ async function init() {
     setInterval(setTitle, 60000);
     header.appendChild(title);
 
+    const netLine = document.createElement('div');
+    netLine.className = 'inc-net';
+    const stakerBudgetBig = snapshot.stakerBudgetNext ? BigInt(snapshot.stakerBudgetNext) : 0n;
+    const B = Number(stakerBudgetBig / 1000000000000000000n);
+    const nextEpochStr = String(N);
+    let totalWeight = 0n;
+    for (const poolId of Object.keys(snapshot.poolWeightByEpoch || {})) {
+      const poolWeights = snapshot.poolWeightByEpoch[poolId];
+      if (poolWeights && poolWeights[nextEpochStr]) {
+        totalWeight += BigInt(poolWeights[nextEpochStr]);
+      }
+    }
+    const stakedFloat = Number(totalWeight) / 1e18 / 104;
+    const S = Math.round(stakedFloat);
+    const A = S > 0 ? Math.round(B / S * 1000) : 0;
+    netLine.textContent = `Network, epoch ${N}: ${B.toLocaleString('en-US')} ANTS to stakers \u00B7 ${S.toLocaleString('en-US')} ANTS staked \u00B7 ${A} per 1,000 on average`;
+    header.appendChild(netLine);
+
     const board = buildBoard(snapshot, mode, offers, N, poolNames);
 
     const calculator = buildCalculator(snapshot, mode, offers, N, poolNames);

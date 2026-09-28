@@ -873,6 +873,12 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
 #market-list .feed-empty{padding:16px;color:var(--muted);}
 #manage-form button:disabled{opacity:.4;cursor:not-allowed;}
 #manage-form .mf-final{margin:0 0 0 12px;align-self:center;}
+.inc-net{
+  margin:12px 0 4px;
+  color:var(--muted);
+  font-size:var(--fs-13);
+  line-height:1.4;
+}
 .inc-post-offer{
   display:inline-flex;
   align-items:center;
