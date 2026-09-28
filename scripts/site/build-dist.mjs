@@ -11,6 +11,7 @@ const FILES = [
   ['site/app.css', 'dist/app.css'],
   ['site/render.mjs', 'dist/render.mjs'],
   ['site/incentives.mjs', 'dist/incentives.mjs'],
+  ['site/rebate.mjs', 'dist/rebate.mjs'],
   ['site/offers.json', 'dist/offers.json'],
   ['site/pool-names.json', 'dist/pool-names.json'],
   ['site/metrics.mjs', 'dist/metrics.mjs'],
