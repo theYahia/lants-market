@@ -935,5 +935,5 @@ th[aria-sort="ascending"] .inc-sort::after{content:" \2191"}
 .inc-staked{display:block;color:var(--muted);font-size:.85em;margin-top:2px}
 .inc-board-table td:first-child{white-space:normal}
 .inc-board-table th{white-space:normal;vertical-align:bottom}
-@media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}}
+@media (max-width:480px){.inc-board-table th:last-child,.inc-board-table td:last-child{display:none}.inc-board-table tr.inc-detail td{display:table-cell}}
 .inc-est{font-weight:600;color:var(--ink)}

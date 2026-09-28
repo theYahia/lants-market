@@ -358,6 +358,42 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       td.appendChild(tag);
     }
   };
+  const addExpand = (td, tr, pool) => {
+    const btn = document.createElement('button');
+    btn.className = 'inc-expand';
+    btn.type = 'button';
+    btn.textContent = '▾';
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Show seller details');
+    btn.addEventListener('click', () => {
+      const next = tr.nextElementSibling;
+      if (next && next.classList.contains('inc-detail')) {
+        next.remove();
+        btn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      const detail = document.createElement('tr');
+      detail.className = 'inc-detail';
+      const cell = document.createElement('td');
+      cell.colSpan = tr.children.length;
+      const seller = snapshot.sellersById?.[pool];
+      if (!seller) {
+        cell.textContent = 'No sales data from antscan';
+      } else {
+        const earned = Number(BigInt(seller.earnedUsdc || '0')) / 1e6;
+        const period = Math.max(604800, Number(seller.lastSeenAt) - Number(seller.firstSeenAt));
+        const avg = earned * 604800 / period;
+        const lastDate = new Date(Number(seller.lastSeenAt) * 1000);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const dateText = `${months[lastDate.getUTCMonth()]} ${lastDate.getUTCDate()}, ${lastDate.getUTCFullYear()}`;
+        cell.textContent = `${earned.toLocaleString('en-US', {maximumFractionDigits: 0})} USDC all-time · ${avg.toLocaleString('en-US', {maximumFractionDigits: 1})} avg per active week · ${Number(seller.uniqueBuyers).toLocaleString('en-US')} buyers · ${Number(seller.modelsServed).toLocaleString('en-US')} models · last sale ${dateText}`;
+      }
+      detail.appendChild(cell);
+      tr.insertAdjacentElement('afterend', detail);
+      btn.setAttribute('aria-expanded', 'true');
+    });
+    td.appendChild(btn);
+  };
   const addPaid = (tr, pool) => {
     if (!hasHistory) return;
     const list = paidList(pool);
@@ -474,6 +510,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       tdPool.textContent = pool;
     }
     tagPool(tdPool, pool);
+    addExpand(tdPool, tr, pool);
     const stakedLine = document.createElement('span');
     stakedLine.className = 'inc-staked';
     const stakedValue = WN / 104;
@@ -529,6 +566,7 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
       tdPool.textContent = pool;
     }
     tagPool(tdPool, pool);
+    addExpand(tdPool, tr, pool);
     const stakedLine = document.createElement('span');
     stakedLine.className = 'inc-staked';
     stakedLine.textContent = 'no stake next epoch';
