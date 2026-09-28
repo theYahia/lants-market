@@ -552,7 +552,8 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
         }
       }
       if (!seller) {
-        cell.textContent = `No sales data from antscan\n${detailText}`;
+        const detailSuffix = detailText ? ` · ${detailText}` : '';
+        cell.textContent = `No sales data from antscan${detailSuffix}`;
       } else {
         const earned = Number(BigInt(seller.earnedUsdc || '0')) / 1e6;
         const period = Math.max(604800, Number(seller.lastSeenAt) - Number(seller.firstSeenAt));
@@ -560,7 +561,8 @@ function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
         const lastDate = new Date(Number(seller.lastSeenAt) * 1000);
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const dateText = `${months[lastDate.getUTCMonth()]} ${lastDate.getUTCDate()}, ${lastDate.getUTCFullYear()}`;
-        cell.textContent = `${earned.toLocaleString('en-US', {maximumFractionDigits: 0})} USDC all-time · ${avg.toLocaleString('en-US', {maximumFractionDigits: 1})} avg per active week · ${Number(seller.uniqueBuyers).toLocaleString('en-US')} buyers · ${Number(seller.modelsServed).toLocaleString('en-US')} models · last sale ${dateText}\n${detailText}`;
+        const detailSuffix = detailText ? ` · ${detailText}` : '';
+        cell.textContent = `${earned.toLocaleString('en-US', {maximumFractionDigits: 0})} USDC all-time · ${avg.toLocaleString('en-US', {maximumFractionDigits: 1})} avg per active week · ${Number(seller.uniqueBuyers).toLocaleString('en-US')} buyers · ${Number(seller.modelsServed).toLocaleString('en-US')} models · last sale ${dateText}${detailSuffix}`;
       }
       detail.appendChild(cell);
       tr.insertAdjacentElement('afterend', detail);
