@@ -35,7 +35,7 @@ Keys:
   inc_nopool_x      the first active row shows what a starter pool plus a restaked first seller reward earns it
   inc_nopool_earned  the first active row shows all-time earnings as whole dollars with separators
   inc_nopool_phone  at 390 px the seller cell of the first no-pool row is at least 90 px wide
-  inc_nopool_cells  at 390 px no visible cell of the first no-pool row is under 44 px; the estimate cell is <= 32 chars
+  inc_nopool_cells  at 390 px no word in the first no-pool row breaks across lines; the estimate cell is <= 32 chars
   inc_polish        the estimate cell has the colour of the other cells; the expand button is not a light box;
                     the detail row has " · " before "<n> ANTS per $1"
 
@@ -434,8 +434,20 @@ def run_guard():
                 # inc_nopool_cells: no visible cell of that row is squeezed to a letter-wide column, the estimate is short
                 row = ph.locator("#incentives .inc-nopool tr.nopool-row").first
                 tds = [row.locator("td").nth(i) for i in range(row.locator("td").count())]
-                narrow = [f"{t.inner_text()[:12]!r}={t.bounding_box()['width']:.0f}px" for t in tds if t.is_visible() and t.bounding_box()["width"] < 44]
-                record("inc_nopool_cells", f"390px: cells narrower than 44px in the first no-pool row: {narrow}", not narrow)
+                # a value without spaces ('$50,761', '68', a date part) must not break across lines: one line box per word
+                broken = [t.inner_text()[:14] for t in tds if t.is_visible() and t.evaluate("""el => {
+                    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n;
+                    while ((n = tw.nextNode())) {
+                        let i = 0;
+                        for (const w of n.textContent.split(' ')) {
+                            if (w.trim()) { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + w.length);
+                                            const tops = new Set([...r.getClientRects()].map(b => Math.round(b.top)));
+                                            if (tops.size > 1) return true; }
+                            i += w.length + 1;
+                        }
+                    }
+                    return false; }""")]
+                record("inc_nopool_cells", f"390px: words broken across lines in the first no-pool row: {broken}", not broken)
                 xt = next((t.inner_text().strip() for t in tds if "ANTS/epoch" in t.inner_text()), "")
                 record("inc_nopool_cells", f"estimate cell {xt!r} is longer than 32 characters; put the explanation in the column heading", 0 < len(xt) <= 32)
             except Exception as exc:
