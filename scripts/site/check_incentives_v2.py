@@ -291,12 +291,16 @@ def run_guard():
                 page.wait_for_timeout(200)
                 record("inc_expand", f"pool {missing} without antscan data does not say 'No sales data from antscan'", "No sales data from antscan" in detail_of(missing).inner_text())
                 page.locator(f'#incentives tr.board-row[data-pool="{missing}"] button.inc-expand').click()
-                # sorting must carry the detail row with its board row
-                page.locator("#incentives thead th button.inc-sort").first.click()
-                page.wait_for_timeout(200)
+                # sorting must carry an OPEN detail row with its board row: open, sort, then look
                 btn.click()
                 page.wait_for_timeout(200)
-                record("inc_expand_sort", "after sorting, the 52894 detail is not right under its row", detail_of("52894").count() == 1 and detail_of("52894").is_visible())
+                before = page.evaluate("() => [...document.querySelectorAll('#incentives tbody tr.board-row')].map(r => r.dataset.pool).join()")
+                page.locator("#incentives thead th button.inc-sort").first.click()
+                page.wait_for_timeout(300)
+                after = page.evaluate("() => [...document.querySelectorAll('#incentives tbody tr.board-row')].map(r => r.dataset.pool).join()")
+                record("inc_expand_sort", "the sort did not reorder the rows, nothing proven", before != after)
+                record("inc_expand_sort", "after sorting, the open 52894 detail is not right under its row", detail_of("52894").count() == 1 and detail_of("52894").is_visible())
+                record("inc_expand_sort", "after sorting there are stray tr.inc-detail rows", page.locator("#incentives tr.inc-detail").count() == 1)
                 btn.click()
             except Exception as exc:
                 crash("inc_expand", exc)
@@ -305,10 +309,10 @@ def run_guard():
             # inc_cashback (desktop)
             try:
                 heads = page.locator("#incentives table.inc-board-table thead th")
-                idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().startswith("Buyer ANTS per $1")), None)
+                idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().lower().startswith("buyer ants per $1")), None)
                 record("inc_cashback", "no 'Buyer ANTS per $1' column heading", idx is not None)
                 if idx is not None:
-                    htext = " ".join(heads.nth(idx).inner_text().split())
+                    htext = " ".join(heads.nth(idx).inner_text().split()).lower()  # headings are uppercased by CSS
                     record("inc_cashback", f"heading {htext!r} lacks 'epoch {e} so far'", f"epoch {e} so far" in htext)
                     tip = heads.nth(idx).locator("span.info").get_attribute("data-tip") or ""
                     cap = int(snap["usageByEpoch"][str(e)]["buyerBudget"]) * int(snap["maxRewardShareBps"]) // 10000 // 10**18
@@ -346,7 +350,7 @@ def run_guard():
                     sb = sec.bounding_box()
                     record("inc_nopool", "block is not under the board", sb["y"] >= tbox["y"] + tbox["height"] - 1)
                     st = sec.inner_text()
-                    record("inc_nopool", "heading lacks 'Selling, but no pool'", "Selling, but no pool" in st)
+                    record("inc_nopool", "heading lacks 'Selling, but no pool'", "selling, but no pool" in st.lower())  # headings may be uppercased by CSS
                     for needle in ["initPosition()", GRANT_ADDR, "stakeAgentReward", f"{snap['starterGrantsLeft']} left"]:
                         record("inc_nopool", f"steps lack {needle!r}", needle in st)
                     active, inactive = nopool_lists(snap)
@@ -374,8 +378,8 @@ def run_guard():
                 body[0] = json.dumps(early).encode()
                 pg = open_page(1280, "early")
                 heads = pg.locator("#incentives table.inc-board-table thead th")
-                idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().startswith("Buyer ANTS per $1")), None)
-                ok = idx is not None and f"final, epoch {e - 1}" in heads.nth(idx).inner_text()
+                idx = next((i for i in range(heads.count()) if heads.nth(i).inner_text().strip().lower().startswith("buyer ants per $1")), None)
+                ok = idx is not None and f"final, epoch {e - 1}" in heads.nth(idx).inner_text().lower()
                 record("inc_cashback", f"early in the epoch the heading does not say 'final, epoch {e - 1}'", ok)
                 if idx is not None:
                     want, _ = cashback_text(early, "44694")
@@ -392,7 +396,7 @@ def run_guard():
                 sw = ph.evaluate("() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]")
                 record("inc_cashback_detail", f"390px scrolls sideways: {sw}", sw[0] <= sw[1])
                 heads = ph.locator("#incentives table.inc-board-table thead th")
-                vis = [heads.nth(i) for i in range(heads.count()) if heads.nth(i).is_visible() and heads.nth(i).inner_text().strip().startswith("Buyer ANTS per $1")]
+                vis = [heads.nth(i) for i in range(heads.count()) if heads.nth(i).is_visible() and heads.nth(i).inner_text().strip().lower().startswith("buyer ants per $1")]
                 record("inc_cashback_detail", "cashback heading is visible at 390px", not vis)
                 ph.locator('#incentives tr.board-row[data-pool="44694"] button.inc-expand').click()
                 ph.wait_for_timeout(200)
