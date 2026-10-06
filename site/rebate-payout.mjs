@@ -1,23 +1,18 @@
 // Rebate payout for one offer and epoch: buyers from logs, spends from buyerAgentEpochUsage at a pinned block,
 // the formula from site/rebate.mjs. Node only. Spec: scripts/site/check_rebate.py (rebate_view, rebate_files).
-// Usage: node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B [--dry] [--offer file] [--out dir]
+// Usage: node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B [--dry] [--offer file] [--out dir] [--snapshot file|url]
 
-import { createPublicClient, http, parseAbi, decodeFunctionResult } from 'viem';
+import { createPublicClient, http, parseAbi } from 'viem';
 import { base } from 'viem/chains';
 import { scanPool } from './rebate-scan.mjs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { validRebate, rebatePayout } from './rebate.mjs';
+import { writeRebateFiles } from './rebate-files.mjs';
 
 const CONTRACT = '0xAdd2D85316153D7bfaF7921EE9Bf1Bb6c7A1cBc9';
-const SELECTOR_BUYER = '0x72d72952';
-const SELECTOR_POOL = '0xca2b5f5e';
 const RPC_PRIMARY = 'https://mainnet.base.org';
 const RPC_FALLBACK = 'https://base-mainnet.public.blastapi.io';
 const BATCH = 20;
-const REBATE_FORMULA = 'min(spend_i * pctBps / 10000, capPerBuyerUsdc), adjusted by the total cap'; 
 
 const buyerAbi = parseAbi([
   'function buyerAgentEpochUsage(uint256 epoch, address buyer, uint256 agentId) view returns ((uint256 points, uint256 weightedPoints))'
@@ -38,6 +33,7 @@ function parseArgs(args) {
     else if (a === '--dry') opts.dry = true;
     else if (a === '--offer') opts.offer = args[++i];
     else if (a === '--out') opts.out = args[++i];
+    else if (a === '--snapshot') opts.snapshot = args[++i];
     else {
       console.error('rebate-payout: unknown argument ' + a);
       process.exit(2);
@@ -91,32 +87,6 @@ async function callWithFallback(fn) {
   }
 }
 
-async function getBuyerSpend(client, epoch, buyer, agentId, blockNumber) {
-  const enc = {
-    abi: buyerAbi,
-    functionName: 'buyerAgentEpochUsage',
-    args: [BigInt(epoch), buyer, agentId],
-    address: CONTRACT
-  };
-  let data;
-  try {
-    data = await client.readContract(enc);
-  } catch (e) {
-    throw e;
-  }
-  let points;
-  if (Array.isArray(data)) {
-    points = data[0];
-  } else if (data && typeof data === 'object') {
-    points = data.points;
-  }
-  if (points === undefined || points === null) {
-    console.error(`rebate-payout: buyerAgentEpochUsage returned no points field for buyer ${buyer}`);
-    process.exit(1);
-  }
-  return BigInt(points);
-}
-
 const isEntry = import.meta.url === new URL(import.meta.url).pathname.endsWith('/rebate-payout.mjs') ? true : false;
 
 async function main() {
@@ -124,7 +94,7 @@ async function main() {
   const opts = parseArgs(args);
 
   if (opts.epoch === undefined || opts.pool === undefined || opts.from === undefined || opts.to === undefined || opts.pin === undefined) {
-    console.error('usage: node site/rebate-payout.mjs --epoch N --pool P --from B --to B --pin B [--dry] [--offer file --out dir]');
+    console.error('usage: node site/rebate-payout.mjs --epoch N --pool P --from B --to B --pin B [--dry] [--offer file --out dir --snapshot file|url]');
     process.exit(2);
   }
   if (!Number.isInteger(opts.epoch) || !Number.isInteger(opts.from) || !Number.isInteger(opts.to) || !Number.isInteger(opts.pin)) {
@@ -210,103 +180,10 @@ async function main() {
   if (opts.offer) {
     const moduleDir = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-
     if (!opts.out) {
       opts.out = 'rebates';
     }
-
-    // Resolve --out (absolute stays absolute, relative is relative to cwd)
-    const outDir = path.resolve(opts.out);
-    const offerRaw = fs.readFileSync(opts.offer, 'utf-8');
-    const offer = JSON.parse(offerRaw);
-
-    if (!validRebate(offer)) {
-      console.error('rebate-payout: offer is not a valid rebate offer');
-      process.exit(1);
-    }
-    if (offer.epochs[0] !== opts.epoch) {
-      console.error('rebate-payout: offer epoch does not match --epoch');
-      process.exit(1);
-    }
-    if (String(offer.pool) !== String(opts.pool)) {
-      console.error('rebate-payout: offer pool does not match --pool');
-      process.exit(1);
-    }
-
-    const jsonPath = path.join(outDir, `${opts.epoch}-${opts.pool}.json`);
-    const csvPath = path.join(outDir, `${opts.epoch}-${opts.pool}.csv`);
-
-    if (fs.existsSync(jsonPath) || fs.existsSync(csvPath)) {
-      console.error(`rebate-payout: payout file already exists: ${jsonPath} or ${csvPath}`);
-      process.exit(1);
-    }
-
-    // Build the exclude map
-    const ownAddresses = JSON.parse(fs.readFileSync(path.join(moduleDir, 'own-addresses.json'), 'utf-8'));
-    const exclude = {};
-    for (const addr of ownAddresses.addresses) {
-      exclude[addr.toLowerCase()] = 'own';
-    }
-    exclude[seller.toLowerCase()] = 'seller';
-    exclude[offer.payer.toLowerCase()] = 'payer';
-
-    // Add rebates/<epoch>-<pool>.exclude.json if it exists
-    const excludeFile = path.join(repoRoot, 'rebates', `${opts.epoch}-${opts.pool}.exclude.json`);
-    if (fs.existsSync(excludeFile)) {
-      const extraExclude = JSON.parse(fs.readFileSync(excludeFile, 'utf-8'));
-      for (const [addr, reason] of Object.entries(extraExclude)) {
-        exclude[addr.toLowerCase()] = reason;
-      }
-    }
-
-    const result = rebatePayout(spends, offer, exclude);
-    const payouts = result.payouts;
-    const excluded = result.excluded;
-    const totalPayout = result.total;
-    const cut = result.cut;
-
-    let commit = '';
-    try {
-      commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf-8' }).trim();
-    } catch (e) {
-      // Not a git repo — leave empty
-    }
-    if (!commit) {
-      console.error('rebate-payout: could not get git commit');
-      process.exit(1);
-    }
-    if (!REBATE_FORMULA.includes('pctBps / 10000')) {
-      console.error('rebate-payout: REBATE_FORMULA must contain "pctBps / 10000"');
-      process.exit(1);
-    }
-
-    const jsonOut = {
-      epoch: opts.epoch,
-      pool: String(opts.pool),
-      pinBlock: String(opts.pin),
-      commit,
-      formula: REBATE_FORMULA,
-      note: REBATE_FORMULA,
-      offer,
-      seller,
-      aggregate: String(aggregate),
-      spends: Object.fromEntries(Object.entries(spends).map(([a, v]) => [a, String(v)])),
-      payouts: Object.fromEntries(Object.entries(payouts).map(([a, v]) => [a, String(v)])),
-      excluded,
-      total: String(totalPayout),
-      cut,
-      paidTx: null
-    };
-
-    // Write both files with 'wx' AFTER checking both
-    if (!fs.existsSync(jsonPath) && !fs.existsSync(csvPath)) {
-      fs.writeFileSync(jsonPath, JSON.stringify(jsonOut, null, 2) + '\n', { flag: 'wx' });
-      const csvLines = ['address,amount'];
-      for (const [addr, amt] of Object.entries(payouts)) {
-        csvLines.push(`${addr},${amt}`);
-      }
-      fs.writeFileSync(csvPath, csvLines.join('\n') + '\n', { flag: 'wx' });
-    }
+    await writeRebateFiles({ opts, spends, seller, aggregate, moduleDir, repoRoot });
   }
 
   // --dry prints one JSON

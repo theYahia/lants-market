@@ -178,6 +178,7 @@ function buildPostOfferButton(displayEpoch) {
     'capUsdc (rebate, total USDC): ',
     'capPerBuyerUsdc (rebate, optional): ',
     'minSpendUsdc (rebate, optional): ',
+    'stakeGate.minStakeAnts (rebate, optional, ANTS): ',
     'Paid in USDC on Base to the position owner within 7 days after epoch ' + displayEpoch + ' ends, from the last published snapshot of epoch ' + displayEpoch + '.'
   ];
   const body = bodyLines.join('\n');

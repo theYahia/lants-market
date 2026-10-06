@@ -152,6 +152,7 @@ optionally capped per buyer and with a minimum spend. The named payer pays. No e
 | `capUsdc` | total budget of the offer, USDC |
 | `capPerBuyerUsdc` | optional: the most one buyer can get, USDC |
 | `minSpendUsdc` | optional: buyers who spent less get nothing, USDC |
+| `stakeGate` | optional `{minStakeAnts}`: only buyers who own ≥ N ANTS (at max lock, `weight / 104`) in this pool during epoch N get the rebate |
 | `payer` | the address that pays, shown on the offer |
 | `note` | up to 140 characters |
 
@@ -178,16 +179,27 @@ rebate against.
 **Payout:**
 
 ```
-node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B --offer file --out dir
+node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B --offer file --out dir [--snapshot file|url]
 ```
 
 writes JSON and CSV; an existing file is not overwritten. The draft is published, then 48 hours for objections, then the
 payout. USDC goes to the buyer's address on Base. After payout, `paidTx` is added to the JSON. One payout per
-(offer, epoch).
+(offer, epoch). A stake-gated offer needs `--snapshot` (the last published snapshot of epoch N): the script resolves each
+position's owner with `ownerOf` at the snapshot block, and a buyer is paid only if the ANTS at max lock staked in this
+pool by that owner reach `minStakeAnts`.
 
 **On the site:** the Offer column shows the terms, e.g. "3% back, up to $10 · max $2/buyer". The calculator takes
 "Spend with this seller (USD)" and shows "You get $Z back". Before the epoch starts: "starts epoch N"; after it ends:
 "ended".
+
+### Stake-gated discount
+
+A rebate offer can add `"stakeGate": {"minStakeAnts": N}`. Then only buyers who own at least N ANTS at max lock staked
+in that seller's pool get the discount. A buyer's stake is the ANTS at max lock (`weight / 104`) over every position the
+buyer's address owns in the pool during the offer's epoch. ANTS cannot be bought or transferred, and a position is the
+only way to hold them, so a fresh address cannot claim the discount: it has to stake in the pool first. This is the
+condition Apex Ant asked about — a discount that cannot be farmed with an empty wallet. On the site the offer reads
+"stake-gated discount, ≥N ANTS staked", and buyers below the gate are listed as `stake_gate` in the payout JSON.
 
 ## First offer
 

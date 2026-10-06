@@ -1,5 +1,7 @@
 // Rebate offers: schema, epoch state and the payout formula. Pure module (no DOM, no network):
 // the page and the node payout script import the same code. Spec: scripts/site/check_rebate.py.
+// An optional `stakeGate: {minStakeAnts}` pays only buyers who own >= N ANTS (at max lock,
+// weight / 104) in the seller's pool during the offer's epoch. Positions carry a resolved `owner`.
 
 export function validRebate(offer) {
   if (!offer || typeof offer !== 'object') return false;
@@ -16,6 +18,13 @@ export function validRebate(offer) {
   }
   if (offer.minSpendUsdc !== undefined) {
     if (typeof offer.minSpendUsdc !== 'number' || !Number.isFinite(offer.minSpendUsdc) || !(offer.minSpendUsdc >= 0)) return false;
+  }
+  if (offer.stakeGate !== undefined) {
+    if (typeof offer.stakeGate !== 'object' || offer.stakeGate === null) return false;
+    if (offer.stakeGate.minStakeAnts !== undefined) {
+      if (!Number.isInteger(offer.stakeGate.minStakeAnts) || !(offer.stakeGate.minStakeAnts > 0)) return false;
+    }
+    if (Object.keys(offer.stakeGate).some(k => k !== 'minStakeAnts')) return false;
   }
   if (typeof offer.payer !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(offer.payer)) return false;
   if (offer.note !== undefined && offer.note !== null && typeof offer.note !== 'string') return false;
@@ -35,15 +44,35 @@ export function offerState(offer, displayEpoch) {
 
 export const REBATE_FORMULA = 'r_i = min(spend_i × pctBps / 10000, capPerBuyer) (floor); buyers with spend_i < minSpend or in exclude dropped; if Σr > cap: p_i = r_i × cap / Σr (multiply, then floor); remainder not distributed';
 
-export function rebatePayout(spends, offer, exclude) {
+export function rebatePayout(spends, offer, exclude, stakePositions) {
   const bps = BigInt(offer.pctBps);
   const cap = BigInt(Math.round(offer.capUsdc * 1e6));
   const capPerBuyer = offer.capPerBuyerUsdc !== undefined ? BigInt(Math.round(offer.capPerBuyerUsdc * 1e6)) : undefined;
   const minSpend = offer.minSpendUsdc !== undefined ? BigInt(Math.round(offer.minSpendUsdc * 1e6)) : 0n;
+  const stakeGate = offer.stakeGate || {};
+  const minStakeAnts = stakeGate.minStakeAnts !== undefined ? BigInt(stakeGate.minStakeAnts) * 10n ** 18n : 0n;
+  const poolId = String(offer.pool);
+
   const excl = {};
   for (const k in exclude) {
     excl[k.toLowerCase()] = exclude[k];
   }
+
+  const stakeByBuyer = new Map();
+  if (stakePositions && minStakeAnts > 0n) {
+    for (const pos of stakePositions) {
+      if (String(pos.agentId) === poolId) {
+        const owner = String(pos.owner || '').toLowerCase();
+        const weight = BigInt(pos.weightsByEpoch?.[String(offer.epochs[0])] || '0');
+        const ants = weight / 104n;
+        if (ants > 0n) {
+          const existing = stakeByBuyer.get(owner) || 0n;
+          stakeByBuyer.set(owner, existing + ants);
+        }
+      }
+    }
+  }
+
   const r = {};
   const excluded = {};
   for (const a in spends) {
@@ -56,6 +85,13 @@ export function rebatePayout(spends, offer, exclude) {
     if (s < minSpend) {
       excluded[addr] = 'below_min_spend';
       continue;
+    }
+    if (minStakeAnts > 0n) {
+      const staked = stakeByBuyer.get(addr) || 0n;
+      if (staked < minStakeAnts) {
+        excluded[addr] = 'stake_gate';
+        continue;
+      }
     }
     let v = s * bps / 10000n;
     if (capPerBuyer !== undefined && v > capPerBuyer) {
@@ -107,6 +143,9 @@ export function rebateLabel(offer, epoch) {
   let text = `${pct}% back, up to $${cap}`;
   if (offer.capPerBuyerUsdc !== undefined) {
     text += ` · max $${offer.capPerBuyerUsdc}/buyer`;
+  }
+  if (offer.stakeGate?.minStakeAnts) {
+    text += ` · stake-gated discount, ≥${offer.stakeGate.minStakeAnts} ANTS staked`;
   }
   const state = offerState(offer, epoch);
   if (state === 'upcoming') {
