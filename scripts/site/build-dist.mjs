@@ -28,6 +28,8 @@ const FILES = [
 // Claim UI modules (Stage 8): the rebate claim panel and its pure helpers.
 FILES.push(
   ['site/rebate-claim.mjs', 'dist/rebate-claim.mjs'],
+  ['site/rebate-claim-actions.mjs', 'dist/rebate-claim-actions.mjs'],
+  ['site/rebate-claim-data.mjs', 'dist/rebate-claim-data.mjs'],
   ['site/rebate-claim-chain.mjs', 'dist/rebate-claim-chain.mjs'],
   ['site/rebate-claim-state.mjs', 'dist/rebate-claim-state.mjs'],
   ['site/rebate-claims-abi.mjs', 'dist/rebate-claims-abi.mjs'],
