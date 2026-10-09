@@ -3,8 +3,9 @@
 Live at [lants.eth.limo/#incentives](https://lants.eth.limo/#incentives) since 27.09.2026.
 
 Stake in a seller pool works like a vote: it multiplies rewards for that seller's buyers. The Incentives tab lets
-sellers pay stakers for that weight, the way protocols pay veCRV / veAERO voters on Votium and Aerodrome. There is no
-contract in v1: offers are public JSON, payouts are computed from on-chain weight, and the payer pays.
+sellers pay stakers for that weight, the way protocols pay veCRV / veAERO voters on Votium and Aerodrome. Stake
+offers are still plain JSON with the payer paying themselves; rebate offers (below) run through the platform's
+shared claims contract.
 
 ## The board
 
@@ -128,19 +129,21 @@ that epoch. The site's calculator shows the same numbers before you stake.
 **Post an offer:** the "Post an offer on GitHub" button opens an issue with the fields pre-filled; once checked, the
 offer goes into `site/offers.json` and appears on the site.
 
-**Trust model (v1):** no escrow — the payer is named on every offer and pays themselves. We publish the payout
-transaction for our own offer. v2: an escrow contract with an audit.
+**Trust model (stake offers, v1):** no escrow — the payer is named on every offer and pays themselves. We publish the payout
+transaction for our own offer. Rebate offers no longer work this way: they are funded before the epoch and claimed by
+buyers from the shared claims contract (below).
 
 ## Rebate offers
 
-A rebate offer is a second type of entry in [`site/offers.json`](../site/offers.json). The seller (or a sponsor) promises
-the pool's buyers `pctBps / 100` % back in USDC on what they spend with that seller in epoch N, up to `capUsdc` in total,
-optionally capped per buyer and with a minimum spend. The named payer pays. No escrow, same trust model as stake offers v1.
+A rebate offer is a second type of entry in [`site/offers.json`](../site/offers.json). The seller (or a sponsor)
+returns `pctBps / 100` % of buyers' spend in USDC, up to `capUsdc` in total, optionally capped per buyer and with a
+minimum spend. Nobody sends money by hand: the campaign is funded before the epoch and buyers claim their share
+from the platform's shared `RebateClaims` contract.
 
 ```json
-{"type": "rebate", "pool": "44694", "epochs": [25], "pctBps": 300, "capUsdc": 10,
- "capPerBuyerUsdc": 2, "minSpendUsdc": 1,
- "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B", "note": "..."}
+{"type": "rebate", "pool": "52894", "epochs": [27], "pctBps": 300, "capUsdc": 10,
+ "capPerBuyerUsdc": 2, "minSpendUsdc": 1, "stakeGate": {"minStakeAnts": 100},
+ "payer": "0x...", "note": "..."}
 ```
 
 | Field | Meaning |
@@ -149,12 +152,34 @@ optionally capped per buyer and with a minimum spend. The named payer pays. No e
 | `pool` | seller pool (agent id) |
 | `epochs` | one epoch, `[N]` |
 | `pctBps` | rebate in basis points, integer 1…5000 (`300` = 3%) |
-| `capUsdc` | total budget of the offer, USDC |
+| `capUsdc` | total budget of the offer, USDC — deposited into the campaign before the epoch |
 | `capPerBuyerUsdc` | optional: the most one buyer can get, USDC |
 | `minSpendUsdc` | optional: buyers who spent less get nothing, USDC |
-| `stakeGate` | optional `{minStakeAnts}`: only buyers who own ≥ N ANTS (at max lock, `weight / 104`) in this pool during epoch N get the rebate |
-| `payer` | the address that pays, shown on the offer |
+| `stakeGate` | optional `{minStakeAnts}`: only buyers who held ≥ N ANTS (at max lock, `weight / 104`) in this pool for the whole epoch get the rebate (see below) |
+| `payer` | the address that funds the campaign, shown on the offer |
 | `note` | up to 140 characters |
+
+**The cycle, end to end:**
+
+1. **Before the epoch** the seller launches a campaign in the shared `RebateClaims` contract and funds it with the
+   cap in USDC. The contract has no owner. Only the campaign owner (the seller's campaign wallet) can top the
+   campaign up, finalize it, cancel it before the epoch, or withdraw the unclaimed part — the operator who
+   deployed the contract has no power over the money.
+2. The epoch runs.
+3. **After the epoch** the payout is computed from chain data and published:
+   `rebates/<epoch>-<pool>.json/.csv` with the reasoning, plus the merkle tree
+   `rebates/<epoch>-<pool>.tree.json` and a version. 48 hours for objections; a correction is a new tree version,
+   never an overwrite.
+4. **The seller presses Finalize:** `setMerkleRoot` puts the published root on chain — their on-chain agreement
+   with the list. The claim window opens (14 days). The contract reverts a finalize when the campaign is not
+   funded for the whole tree.
+5. **Buyers claim themselves:** "Claim $X" from the site, "Claim for address" for any wallet (gas paid by the
+   sender, USDC always to the buyer), or the CLI for node keys. A second claim of the same index is impossible.
+6. **After the claim window** the seller withdraws whatever is left (`Withdraw unclaimed`).
+
+**Refusing to finalize:** a campaign that is not finalized in time can be fully withdrawn by the seller after the
+finalize deadline. Before the epoch the seller can cancel and take the cap back. If the seller finalized a wrong
+root, the site shows `root mismatch` and hides the claim — only the seller's own money is at stake.
 
 **Formula.** All amounts in micro-USDC, rounded down:
 
@@ -164,42 +189,69 @@ r_i = min(spend_i × pctBps / 10000, capPerBuyer)
 
 If `Σr > cap`: `p_i = r_i × cap / Σr`. The remainder is not distributed.
 
-Excluded: the seller, the payer, addresses in [`site/own-addresses.json`](../site/own-addresses.json), and buyers with
-spend below `minSpend`. Any other exclusion only through a committed `rebates/<N>-<pool>.exclude.json`, one reason per
-address.
+**Excluded, one reason per address:** the seller, the payer and the operators of both (read from
+`AntseedDeposits.getOperator` on the epoch start block and the payout block); [`site/own-addresses.json`](../site/own-addresses.json)
+— only when we are the payer; any other exclusion comes from the committed `rebates/<N>-<pool>.exclude.json`.
 
-**Where the numbers come from.** Buyers: `UsagePointsAccrued` events, read with `eth_getLogs` in windows of 2,000 blocks.
-Each buyer's spend: the view `buyerAgentEpochUsage(epoch, buyer, agentId)` at block "first block of epoch N+1 + 100".
-Check: `Σ spend = poolPointsByEpoch(N, seller)`; if the sum does not match, the calculation is not published. Verified on
-Apex, epoch 23: 52 buyers, 558,971,119 micro-USDC, sum equal to the pool aggregate.
+**Where the numbers come from.** Buyers: `UsagePointsAccrued` events, read with `eth_getLogs` in windows of 2,000
+blocks. Each buyer's spend: the view `buyerAgentEpochUsage(epoch, buyer, agentId)` at block "first block of
+epoch N+1 + 100". Check: `Σ spend = poolPointsByEpoch(N, seller)`; if the sum does not match, the calculation is
+not published. Verified on Apex, epoch 23: 52 buyers, 558,971,119 micro-USDC, sum equal to the pool aggregate.
 
 **Pools with weight only.** Purchases from a seller without a pool are not recorded on chain, so there is nothing to
 rebate against.
 
-**Payout:**
+**Claim tree and verification.** The tree follows the canonical Uniswap merkle-distributor convention: leaves are
+sorted by address, `leaf = keccak256(abi.encodePacked(uint256 index, address account, uint256 amount))`, interior
+nodes hash sorted pairs, an odd node is lifted unhashed. The claim core of the contract is byte-for-byte the
+canonical Uniswap code. Anyone can rebuild the tree from the published CSV and compare the root with the on-chain
+campaign root; the claim UI re-verifies every published proof locally (keccak) and refuses to show claims when the
+on-chain root differs from the published tree.
+
+**Payout command:**
 
 ```
-node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B --offer file --out dir [--snapshot file|url]
+node site/rebate-payout.mjs --epoch N --pool ID [--from B] [--to B] [--pin B] --offer file --out dir [--snapshot file|url]
 ```
 
-writes JSON and CSV; an existing file is not overwritten. The draft is published, then 48 hours for objections, then the
-payout. USDC goes to the buyer's address on Base. After payout, `paidTx` is added to the JSON. One payout per
-(offer, epoch). A stake-gated offer needs `--snapshot` (the last published snapshot of epoch N): the script resolves each
-position's owner with `ownerOf` at the snapshot block, and a buyer is paid only if the ANTS at max lock staked in this
-pool by that owner reach `minStakeAnts`.
+writes JSON, CSV and the versioned tree; an existing file is not overwritten. Without `--from/--to/--pin` the epoch
+blocks are derived from the epoch boundaries. A stake-gated offer needs `--snapshot` (the last published snapshot of
+epoch N): positions are resolved with `ownerOf` at the epoch start block and at the payout block, a position moved
+inside the epoch is disqualified, and the stake of an identity opens the gate for `k = floor(stake / minStakeAnts)`
+buyers (the biggest spenders first). Payouts always go to the buyer's address on Base.
 
 **On the site:** the Offer column shows the terms, e.g. "3% back, up to $10 · max $2/buyer". The calculator takes
-"Spend with this seller (USD)" and shows "You get $Z back". Before the epoch starts: "starts epoch N"; after it ends:
-"ended".
+"Spend with this seller (USD)" and shows "You get $Z back". The claim panel shows the campaign status
+(`awaiting launch` → `funded $X of $Y` → `awaiting finalize` → `claims open · claim by <date>` → `sweepable`)
+and the buttons.
 
-### Stake-gated discount
+### Stake-gated discount, honest terms
 
-A rebate offer can add `"stakeGate": {"minStakeAnts": N}`. Then only buyers who own at least N ANTS at max lock staked
-in that seller's pool get the discount. A buyer's stake is the ANTS at max lock (`weight / 104`) over every position the
-buyer's address owns in the pool during the offer's epoch. ANTS cannot be bought or transferred, and a position is the
-only way to hold them, so a fresh address cannot claim the discount: it has to stake in the pool first. This is the
-condition Apex Ant asked about — a discount that cannot be farmed with an empty wallet. On the site the offer reads
-"stake-gated discount, ≥N ANTS staked", and buyers below the gate are listed as `stake_gate` in the payout JSON.
+With `stakeGate: {minStakeAnts: N}` the rebate goes only to buyers whose stake "identity" held at least N ANTS at
+max lock (`weight / 104`) in that seller's pool for the **whole epoch**:
+
+- a position counts only if its owner on the first block of the epoch and on the payout block is the same, and no
+  `Transfer` moved it inside the epoch. A position bought, sold or moved mid-epoch does not count; a position
+  staked during the epoch counts from the next one;
+- the identity is the operator of the buyer's deposit (`Deposits.getOperator`) when it is the same address on both
+  blocks, otherwise the buyer itself — renting a shared operator mid-epoch does not carry its stake over;
+- one identity can cover several buyers: `k = floor(stake / N)`. Buyers are ranked by spend (ties by lower
+  address); the identity's stake opens the gate for the first `k` of them.
+
+ANTS cannot be bought directly, but a lANTS position can be bought on this market — the gate is not "an empty
+wallet gets nothing", it is "you must hold the stake for the whole epoch, and buying it mid-epoch does not work".
+Payouts always go to the buyer's address, never to the operator.
+
+### Wallets & keys (for sellers)
+
+The seller's main wallet never has to sign a transaction of this site. A campaign runs from a dedicated **campaign
+wallet**: a fresh embedded Privy wallet, a burner address, or a Safe. The only action of the `payer` address is
+**one EIP-712 signature** authorizing the campaign wallet — not a transaction, no funds move. Before every
+signature the site shows the contract address (re-checked against the pinned runtime code hash), the function, the
+amount and the deadlines. Approvals are for the exact cap only and only to the pinned contract address, never
+unlimited. The campaign owner can be transferred 2-step to a Safe before Finalize. Losing the campaign wallet key
+does not block claims — claiming is permissionless — but unclaimed funds cannot be swept without the owner.
+A buyer needs no wallet to receive: "Claim for address" lets anyone pay the gas.
 
 ## First offer
 

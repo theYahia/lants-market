@@ -123,10 +123,10 @@
         </nav>
         <main class="doc-main">
             <section id="introduction">
-<h1>Introduction</h1>
+<h1>Introduction</h1>
 <p>The lANTS marketplace is a contract for listing and selling lANTS positions on Base (chainId 8453). Positions are ERC-721 tokens issued by the AntseedSellerPools collection. Payment is settled in USDC.</p>
 <p>This site documents the deployed contracts as they are, including their current limits. It does not describe planned features as if they existed.</p>
-<h2>Contracts</h2>
+<h2>Contracts</h2>
 <table>
 <thead>
 <tr><th>Component</th><th>Address</th></tr>
@@ -141,7 +141,7 @@
 </tbody>
 </table>
 <p>ENS name: <code>lants.eth</code>.</p>
-<h2>What you can do today</h2>
+<h2>What you can do today</h2>
 <ul>
 <li>List an lANTS position you own for a USDC price.</li>
 <li>Buy a listed position; the token transfers directly from seller to buyer.</li>
@@ -159,29 +159,29 @@
 <ul>
 <li>Two offer types. Stake: a seller pays USDC to stakers for weight in their pool. Rebate: the seller or a sponsor</li>
 </ul>
-<p>returns a % of buyers' spend in USDC, calculated from chain data. A "spend $Y → get $Z back" calculator shows what a buyer gets back. Details: <a href="https://github.com/theYahia/lants-market/blob/main/docs/incentives.md" target="_blank" rel="noopener">docs/incentives.md</a>.</p>
+<p>returns a % of buyers' spend in USDC, calculated from chain data. Rebate campaigns are funded before the epoch in the shared <code>RebateClaims</code> contract and buyers claim their share themselves (14-day window). A "spend $Y → get $Z back" calculator shows what a buyer gets back. Details: <a href="https://github.com/theYahia/lants-market/blob/main/docs/incentives.md" target="_blank" rel="noopener">docs/incentives.md</a>.</p>
 <p>A 1% fee is taken from each sale and sent to the fee recipient.</p>
-<h2>What does not exist yet</h2>
+<h2>What does not exist yet</h2>
 <ul>
 <li><strong>Bids on positions.</strong> The market contract stores listings only; you cannot bid on a position yet.</li>
-<li><strong>Escrow for incentive offers.</strong> No contract holds money for stake or rebate offers. The payer named on each</li>
+<li><strong>Escrow for stake offers.</strong> Stake offers are still paid directly by the payer named on the offer after the</li>
 </ul>
-<p>offer (seller or sponsor) pays stakers or buyers directly after the epoch.</p>
-<h2>How this site reads the chain</h2>
+<p>epoch. Rebate offers use the shared claims contract: nothing is sent by hand, buyers claim with a merkle proof and the unclaimed part returns to the seller.</p>
+<h2>How this site reads the chain</h2>
 <p>The positions table works from a snapshot taken at a fixed block, refreshed three times a day; the line under the table shows its block, epoch and time. Listings, sales, My Portfolio and the MC / FDV figures are read live from Base in your browser.</p>
-<h2>Origin</h2>
+<h2>Origin</h2>
 <p>The marketplace contract is adapted from Vexy by @0xValde. The source is marked <code>UNLICENSED</code>. The credit is stated here and in Privacy & Terms, openly and without hiding it.</p>
-<h2>Who runs this</h2>
+<h2>Who runs this</h2>
 <p>The project is built by one person with help from AntSeed network models. There is no company and no team page.</p>
 </section>
 <section id="how-it-works">
-<h1>How it works</h1>
+<h1>How it works</h1>
 <p>The marketplace lets an NFT owner list a token for sale in USDC without transferring the token into escrow. The NFT stays in the seller's wallet until a purchase completes.</p>
-<h2>Roles and custody</h2>
+<h2>Roles and custody</h2>
 <p>The seller keeps ownership of the NFT for the entire life of a listing. To make a sale possible, the seller must approve the marketplace to move the token:</p>
-<pre><code>setApprovalForAll(market, true)   // selector 0xa22cb465</code></pre>
+<pre><code>setApprovalForAll(market, true)   // selector 0xa22cb465</code></pre>
 <p>Without this approval a buyer's transaction reaches the payment stage and then reverts on the ERC-721 transfer. No funds change hands in a reverted transaction.</p>
-<h2>Currency and price format</h2>
+<h2>Currency and price format</h2>
 <p>All listings are priced in USDC. USDC uses 6 decimals, so a price is an integer count of micro-dollars:</p>
 <table>
 <thead>
@@ -194,25 +194,25 @@
 </tbody>
 </table>
 <p>The contract rejects any currency other than USDC.</p>
-<h2>Fee</h2>
+<h2>Fee</h2>
 <p>A fixed 1% fee applies to every sale:</p>
 <pre><code>FEE = 0.01 ether
-fee = price * FEE / 1e18   // exactly 1% of price</code></pre>
+fee = price * FEE / 1e18   // exactly 1% of price</code></pre>
 <p>On purchase the buyer pays <code>price</code>. The seller receives <code>price - fee</code>, and the fee recipient receives <code>fee</code>. Both transfers happen in the same transaction.</p>
-<h2>Lifetime</h2>
+<h2>Lifetime</h2>
 <p>Every listing has an end time set at creation:</p>
-<pre><code>endTime = block.timestamp + fixedDuration + slopeDuration</code></pre>
+<pre><code>endTime = block.timestamp + fixedDuration + slopeDuration</code></pre>
 <p>The combined duration cannot exceed 60 days. After <code>endTime</code> the listing can no longer be bought; a purchase attempt reverts.</p>
-<h2>Cancellation</h2>
+<h2>Cancellation</h2>
 <p>A seller cancels by calling:</p>
-<pre><code>cancelNftListings(nftCollection, nftId)</code></pre>
+<pre><code>cancelNftListings(nftCollection, nftId)</code></pre>
 <p>This increments the seller's nonce for that NFT. Every prior listing on that token no longer matches the current nonce and becomes invalid. Cancellation costs only gas.</p>
 <p>It does not delete anything. The listing record stays in the <code>listings</code> array, and the transaction history remains on-chain permanently. "Invalid" means unbuyable, not removed.</p>
 </section>
 <section id="listings">
-<h1>Listings</h1>
+<h1>Listings</h1>
 <p>A listing records who is selling which NFT, at what price, in USDC, and until when.</p>
-<h2>Creating a listing</h2>
+<h2>Creating a listing</h2>
 <p>Listings are created with:</p>
 <pre><code>createListing(
   address nftCollection,
@@ -222,7 +222,7 @@ fee = price * FEE / 1e18   // exactly 1% of price</code></pre>
   uint96  slopeMax,
   uint32  slopeDuration,
   uint32  fixedDuration
-)</code></pre>
+)</code></pre>
 <p>Requirements enforced by the contract:</p>
 <table>
 <thead>
@@ -236,15 +236,15 @@ fee = price * FEE / 1e18   // exactly 1% of price</code></pre>
 </tbody>
 </table>
 <p>The NFT is not moved on listing. Remember to approve the marketplace (<code>setApprovalForAll</code>), or sales will revert.</p>
-<h2>Fixed price vs. Dutch auction</h2>
+<h2>Fixed price vs. Dutch auction</h2>
 <p>The contract supports two pricing modes through the same function.</p>
 <p><strong>Fixed price.</strong> With <code>slopeMax = 0</code> and <code>slopeDuration = 0</code>, <code>listingPrice</code> always returns the base <code>price</code>. The listing form on this site creates fixed-price listings only.</p>
 <p><strong>Dutch auction.</strong> With a non-zero <code>slopeMax</code> and <code>slopeDuration</code>, the price starts above the base price and falls to it along a cubic curve:</p>
 <pre><code>r = (endTime - fixedDuration - now) * 1e12 / slopeDuration
-price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
+price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
 <p>Once the slope period has passed, <code>listingPrice</code> returns the base <code>price</code>. Dutch-auction listings are not offered by the form and must be created by calling the contract directly.</p>
-<h2>Buying a listing</h2>
-<pre><code>buyListing(uint256 listingId)</code></pre>
+<h2>Buying a listing</h2>
+<pre><code>buyListing(uint256 listingId)</code></pre>
 <p>Conditions that must all hold:</p>
 <table>
 <thead>
@@ -257,11 +257,11 @@ price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
 </tbody>
 </table>
 <p>When all conditions hold, the buyer pays <code>price</code> in USDC. The seller receives <code>price - fee</code>, the fee recipient receives <code>fee</code>, and the NFT is transferred from seller to buyer in the same transaction.</p>
-<h2>MC / FDV on each lot</h2>
+<h2>MC / FDV on each lot</h2>
 <p>The table shows what a lot's price implies for ANTS as a whole:</p>
 <pre><code>price per ANTS = price / ANTS in the position
 MC  = price per ANTS * totalSupply()   // ANTS minted so far, read live from the token
-FDV = price per ANTS * MAX_SUPPLY()    // 1,040,000,000 ANTS</code></pre>
+FDV = price per ANTS * MAX_SUPPLY()    // 1,040,000,000 ANTS</code></pre>
 <p>Example: 10 ANTS for 0.10 USDC is $0.01 per ANTS, an MC of about $1.19M and an FDV of about $10.4M. Trades between our own wallets are labelled *internal* and are not counted in volume or in the Implied FDV tile.</p>
 </section>
 <section id="positions-rewards">
@@ -307,7 +307,7 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <p>---</p>
 </section>
 <section id="snapshot-data">
-<h1>Snapshot & Data</h1>
+<h1>Snapshot & Data</h1>
 <p>The positions table computes from a snapshot, not from a live read of the whole network. A GitHub Actions job refreshes it three times a day (06, 14 and 22 UTC); the line under the table reads <code>Snapshot: block ..., epoch ..., taken ...</code>.</p>
 <p>Pool weights are read with <code>poolWeightAtEpoch(agentId, epoch)</code> for every pool with non-zero sales.</p>
 <p><strong>Known defect, fixed.</strong> Before 2026-09-21, weights were collected only for the 32 pools that hold our own positions, so the reward denominator was understated. The ratio of the full denominator to the partial one was 1.1179. As a result the site showed #27 at 43,022 instead of 38,486 — 11.8% too high. The defect was found and corrected, and the snapshot was rebuilt.</p>
@@ -318,36 +318,36 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <p>---</p>
 </section>
 <section id="faq">
-<h1>FAQ</h1>
-<h3>What is a lANTS position, and why does this market exist?</h3>
+<h1>FAQ</h1>
+<h3>What is a lANTS position, and why does this market exist?</h3>
 <p>A position is an ERC-721 from the AntseedSellerPools collection (0x8Bf4d39AA13F3CB03F87D9500767fBc4D0940652 on Base, chainId 8453). It represents ANTS locked by staking into a seller pool. ANTS themselves are non-transferable between wallets: transfersEnabled() is false and a transfer reverts with TransfersNotEnabled(). The stake contract sits in the transfer whitelist, so the position NFT is the only way to hand locked ANTS to another wallet. This market exists so that NFT can change hands.</p>
-<h3>How do I get a position?</h3>
+<h3>How do I get a position?</h3>
 <p>The main path is to stake: call stake(agentId, amount, stakeEpochs) on the pool, which mints the position NFT to you. stakeEpochs runs from minStakeEpochs = 1 to MAX_STAKE_EPOCHS = 104, where one epoch is one week. The position activates from the next epoch: stakeActivationDelay = 1. The other path is to buy an existing position from a listing here.</p>
-<h3>How do I list a position for sale?</h3>
+<h3>How do I list a position for sale?</h3>
 <p>First call setApprovalForAll for the marketplace, VexyMarketplace (0xC5BFc309a68dBf4e7eEca9BD91749d611c75C660); the NFT stays in your wallet. Then call createListing(nftCollection, nftId, currency, price, slopeMax, slopeDuration, fixedDuration). Settlement is in USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, 6 decimals). The seller pays a 1 % fee on sale. slopeDuration + fixedDuration must be <= 60 days.</p>
-<h3>What is the difference between a fixed price and a Dutch auction?</h3>
+<h3>What is the difference between a fixed price and a Dutch auction?</h3>
 <p>Fixed price: slopeMax = 0 and slopeDuration = 0. The price is constant. Dutch auction: slopeMax and slopeDuration are non-zero. price is the base price, which is also the final and minimum price; the auction starts above it and declines toward it.</p>
-<h3>How does the Dutch auction price actually move?</h3>
+<h3>How does the Dutch auction price actually move?</h3>
 <p>r is the remaining slope time: r = (endTime - fixedDuration - now) * 1e12 / slopeDuration. The price is price + (price * r^3 / 1e36) * slopeMax / 1e18. Early in the slope r is near 1, so the price is at its maximum and falls fast; toward the end it flattens out at the base price. The r^3 term means most of the drop happens near the start.</p>
-<h3>How do I buy a listing?</h3>
+<h3>How do I buy a listing?</h3>
 <p>Buyers fill a listing directly at its current price, paid in USDC. There is no bidding and no offer system: no offer contract exists.</p>
-<h3>How do I cancel a listing?</h3>
+<h3>How do I cancel a listing?</h3>
 <p>Call cancelNftListings(nftCollection, nftId). It cancels ALL of your listings on that NFT at once by incrementing the nonce; you cannot cancel a single lot by id. The records are not deleted, they just become unbuyable. The only cost is gas.</p>
-<h3>How much will my position sell for?</h3>
+<h3>How much will my position sell for?</h3>
 <p>We don't predict prices. The data so far: one internal test trade on 2026-09-25 (50 ANTS for 1.00 USDC, between our own wallets, not counted in volume) and five public lots of 10 ANTS at 0.10 USDC each, listed on 2026-09-26. Every lot shows the MC and FDV its price implies. Anyone citing an expected price is guessing.</p>
-<h3>Are there any listings right now?</h3>
+<h3>Are there any listings right now?</h3>
 <p>Open the Listings tab: listings are read live from the chain, and sold or cancelled ones are labelled. There is no offer system: buyers fill listings directly, they do not bid.</p>
-<h3>What do MC and FDV mean on a lot?</h3>
+<h3>What do MC and FDV mean on a lot?</h3>
 <p>They translate a lot's price into a valuation of ANTS: price per ANTS times ANTS minted so far (MC) and times the 1.04B max supply (FDV). A bare USDC price for a position is hard to compare; these two numbers make lots of any size comparable.</p>
-<h3>Why are Split and Move disabled for my position?</h3>
+<h3>Why are Split and Move disabled for my position?</h3>
 <p>The position is on max-lock. The contract reverts split and move on a max-locked position, so the site disables those buttons. Split or move before enabling max-lock.</p>
-<h3>How does the interface read data?</h3>
+<h3>How does the interface read data?</h3>
 <p>This site is static. All reads come from your connected wallet or a public RPC endpoint. There is no backend, no database, no server-side indexer of ours.</p>
-<h3>Who makes this, and what do you collect about me?</h3>
+<h3>Who makes this, and what do you collect about me?</h3>
 <p>One person, with help from AntSeed network models. There is no company and no team. We collect nothing: no accounts, no analytics, no cookies, no logs. See Privacy & Terms.</p>
 </section>
 <section id="contact">
-<h1>Contact</h1>
+<h1>Contact</h1>
 <p>Reach out on X. The ENS name lants.eth is a wallet address for on-chain interaction, not an inbox. We make no promise to respond.</p>
 <table>
 <thead>
@@ -360,8 +360,8 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 </table>
 </section>
 <section id="privacy-terms">
-<h1>Privacy & Terms</h1>
-<h2>Privacy</h2>
+<h1>Privacy & Terms</h1>
+<h2>Privacy</h2>
 <p>This interface is static and non-custodial. It never touches your keys or funds — every action is a transaction you sign in your own wallet.</p>
 <ul>
 <li>The wallet modal is Privy (privy.io), a React SDK bundled into this page; it talks to Privy servers (auth.privy.io) when the modal opens and a wallet connects. Login is wallet-only — no email, no social accounts, no embedded wallets — and connecting a phone by QR uses the public WalletConnect relay through the WalletConnect project ID configured by Privy.</li>
@@ -369,7 +369,7 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <li>Anything you send to the blockchain — addresses, listings, trades — is</li>
 </ul>
 <p>public and permanent. We can't delete or alter it, and neither can anyone else.</p>
-<h2>Terms</h2>
+<h2>Terms</h2>
 <ul>
 <li>The marketplace contract is adapted from Vexy and provided as-is, without</li>
 </ul>

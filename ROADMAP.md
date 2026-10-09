@@ -43,6 +43,7 @@ market layer (phase 4) does not start.
 | 27.09 | Claim and Restake buttons for staker rewards; portfolio polish (empty states, Staker Rewards tile, Est. reward column, snapshot caption) | 3 | ✅ |
 | 27.09 | Listed on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 3 | ✅ |
 | 27.09 | Incentives tab (Votium for AntSeed): pools ranked by what they paid stakers in completed epochs, seller names, sortable columns, USDC offers with a payout rule, calculator; an address for every view ([docs](docs/incentives.md)) | 3 | ✅ |
+| 07.10 | Rebate claims, escrow v2 for the first third-party offer (Apex, epoch 27): one shared `RebateClaims` contract (campaigns, no owner, canonical Uniswap claim core), payout tree + claim UI, honest persona stake gate; forge 26 / node 84 green, audit and deploy pending | 3 | 🔜 |
 | 01.10 | First staker reward for #27 · weekly recap #1 with the real number | build in public | 🔜 |
 | 02.10 | Launch announcement on X and in the AntSeed chat | 3 | 🔜 |
 | every Thu | Epoch recap (08.10, 15.10, …) | build in public | 🔜 |
@@ -214,6 +215,19 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**07.10.2026.** Rebate claims — the escrow v2 the D15 trigger asked for (first third-party offer: Apex, epoch 27).
+One shared `RebateClaims` contract for the whole platform: the seller launches a campaign and funds the cap before
+the epoch from a dedicated campaign wallet; after the epoch the payout tree is published and the seller finalizes
+the published root on chain; buyers claim inside 14 days; the unclaimed part returns to the seller. The contract has
+no owner — the operator is powerless over the money; the claim core is byte-for-byte the canonical Uniswap
+MerkleDistributor (GPL, isolated), everything else is gated on the campaign owner. The stake gate is honest: a
+position counts only if it does not move during the epoch, the identity is the deposit operator (same on both
+blocks) or the buyer itself, and one identity's stake opens the gate for `floor(stake / N)` buyers ranked by spend.
+Verified: 26 forge tests (Base-fork lifecycle on real USDC + JS-tree cross-test), 84 node tests, the rebate guard
+offline (independent Python keccak over the tree, claim UI on fixtures) and a live dry pipeline run on Apex epoch 23
+(28 payouts, $10 cap, real operator reads). Pending: audit gate (D2) and deploy; the epoch-25 dry run for the Apex
+letter comes after 08.10.
 
 **28.09.2026 (evening).** Rebate offers: the second offer type. A seller or sponsor gives the pool's buyers a discount in
 USDC on what they spent with that seller in an epoch; every payout is computed from on-chain usage and can be checked

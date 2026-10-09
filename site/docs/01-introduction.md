@@ -34,16 +34,18 @@ ENS name: `lants.eth`.
   in the current epoch. 0 means the seller has no pool. A "Selling, but no pool" list shows those sellers and
   the steps to create a pool.
 - Two offer types. Stake: a seller pays USDC to stakers for weight in their pool. Rebate: the seller or a sponsor
-  returns a % of buyers' spend in USDC, calculated from chain data. A "spend $Y → get $Z back" calculator shows
-  what a buyer gets back. Details: [docs/incentives.md](https://github.com/theYahia/lants-market/blob/main/docs/incentives.md).
+  returns a % of buyers' spend in USDC, calculated from chain data. Rebate campaigns are funded before the epoch in
+  the shared `RebateClaims` contract and buyers claim their share themselves (14-day window). A "spend $Y → get $Z
+  back" calculator shows what a buyer gets back. Details: [docs/incentives.md](https://github.com/theYahia/lants-market/blob/main/docs/incentives.md).
 
 A 1% fee is taken from each sale and sent to the fee recipient.
 
 ## What does not exist yet
 
 - **Bids on positions.** The market contract stores listings only; you cannot bid on a position yet.
-- **Escrow for incentive offers.** No contract holds money for stake or rebate offers. The payer named on each
-  offer (seller or sponsor) pays stakers or buyers directly after the epoch.
+- **Escrow for stake offers.** Stake offers are still paid directly by the payer named on the offer after the
+  epoch. Rebate offers use the shared claims contract: nothing is sent by hand, buyers claim with a merkle proof
+  and the unclaimed part returns to the seller.
 
 ## How this site reads the chain
 
