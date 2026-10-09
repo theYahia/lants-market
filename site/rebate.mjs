@@ -42,84 +42,84 @@ export function offerState(offer, displayEpoch) {
   return 'ended';
 }
 
-export const REBATE_FORMULA = 'r_i = min(spend_i × pctBps / 10000, capPerBuyer) (floor); buyers with spend_i < minSpend or in exclude dropped; if Σr > cap: p_i = r_i × cap / Σr (multiply, then floor); remainder not distributed';
+export const REBATE_FORMULA =
+  'persona gate: buyers sorted by spend desc (tie: addr asc); a persona admits k buyers (k = floor(stakeAnts / minStakeAnts)); payout = min(spend_i x pctBps / 10000, capPerBuyer) (floor); if sum(r) > cap: p_i = r_i x cap / sum(r) (floor); payout always to the buyer';
 
-export function rebatePayout(spends, offer, exclude, stakePositions) {
+export function rebatePayout(spends, offer, exclude, stakeByPersona, personaOf) {
   const bps = BigInt(offer.pctBps);
   const cap = BigInt(Math.round(offer.capUsdc * 1e6));
   const capPerBuyer = offer.capPerBuyerUsdc !== undefined ? BigInt(Math.round(offer.capPerBuyerUsdc * 1e6)) : undefined;
   const minSpend = offer.minSpendUsdc !== undefined ? BigInt(Math.round(offer.minSpendUsdc * 1e6)) : 0n;
   const stakeGate = offer.stakeGate || {};
   const minStakeAnts = stakeGate.minStakeAnts !== undefined ? BigInt(stakeGate.minStakeAnts) * 10n ** 18n : 0n;
-  const poolId = String(offer.pool);
 
   const excl = {};
-  for (const k in exclude) {
-    excl[k.toLowerCase()] = exclude[k];
-  }
+  for (const k in exclude) excl[k.toLowerCase()] = exclude[k];
 
-  const stakeByBuyer = new Map();
-  if (stakePositions && minStakeAnts > 0n) {
-    for (const pos of stakePositions) {
-      if (String(pos.agentId) === poolId) {
-        const owner = String(pos.owner || '').toLowerCase();
-        const weight = BigInt(pos.weightsByEpoch?.[String(offer.epochs[0])] || '0');
-        const ants = weight / 104n;
-        if (ants > 0n) {
-          const existing = stakeByBuyer.get(owner) || 0n;
-          stakeByBuyer.set(owner, existing + ants);
-        }
-      }
-    }
-  }
+  // persona: buyer -> persona (operator on two blocks, else the buyer itself).
+  const persona = (addr) => {
+    const p = personaOf && personaOf[addr.toLowerCase()];
+    return (p || addr).toLowerCase();
+  };
 
-  const r = {};
   const excluded = {};
+  const candidates = [];
   for (const a in spends) {
     const addr = a.toLowerCase();
-    const s = BigInt(spends[a]);
     if (addr in excl) {
       excluded[addr] = excl[addr];
       continue;
     }
+    const s = BigInt(spends[a]);
     if (s < minSpend) {
       excluded[addr] = 'below_min_spend';
       continue;
     }
-    if (minStakeAnts > 0n) {
-      const staked = stakeByBuyer.get(addr) || 0n;
-      if (staked < minStakeAnts) {
-        excluded[addr] = 'stake_gate';
-        continue;
+    candidates.push({ addr, s, p: persona(addr) });
+  }
+
+  const admitted = [];
+  if (minStakeAnts > 0n) {
+    // group by persona; within a persona sort by spend desc, then addr asc
+    const byPersona = {};
+    for (const c of candidates) (byPersona[c.p] ||= []).push(c);
+    for (const p in byPersona) {
+      const group = byPersona[p].sort((x, y) => {
+        if (x.s !== y.s) return x.s < y.s ? 1 : -1;
+        return x.addr < y.addr ? -1 : 1;
+      });
+      const stake = BigInt((stakeByPersona && stakeByPersona[p]) || '0');
+      const k = stake / minStakeAnts; // floor; how many buyers this persona can cover
+      for (let i = 0; i < group.length; i++) {
+        if (i < Number(k)) admitted.push(group[i]);
+        else excluded[group[i].addr] = 'stake_gate';
       }
     }
-    let v = s * bps / 10000n;
-    if (capPerBuyer !== undefined && v > capPerBuyer) {
-      v = capPerBuyer;
-    }
-    if (v > 0n) {
-      r[addr] = v;
-    }
+  } else {
+    admitted.push(...candidates);
   }
+
+  const r = {};
+  for (const b of admitted) {
+    let v = (b.s * bps) / 10000n;
+    if (capPerBuyer !== undefined && v > capPerBuyer) v = capPerBuyer;
+    if (v > 0n) r[b.addr] = v;
+  }
+
   let total = 0n;
-  for (const addr in r) {
-    total += r[addr];
-  }
-  let cut = total > cap;
+  for (const addr in r) total += r[addr];
+
+  const cut = total > cap;
   let payouts = r;
   if (cut) {
     const capped = {};
     for (const addr in r) {
-      const v = r[addr] * cap / total;
-      if (v > 0n) {
-        capped[addr] = v;
-      }
+      const v = (r[addr] * cap) / total;
+      if (v > 0n) capped[addr] = v;
     }
     payouts = capped;
     total = 0n;
-    for (const addr in payouts) {
-      total += payouts[addr];
-    }
+    for (const addr in payouts) total += payouts[addr];
   }
   return { payouts, excluded, total, cut };
 }

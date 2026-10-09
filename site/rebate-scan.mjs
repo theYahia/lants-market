@@ -110,26 +110,28 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function getLogs(from, to, epochTopic, rpcUrl) {
+async function getLogsRange(address, topics, from, to, rpcUrl) {
   const params = [{
-    address: CONTRACT,
+    address,
     fromBlock: numberToHex(from),
     toBlock: numberToHex(to),
-    topics: [TOPIC0, epochTopic]
+    topics
   }];
   return await rpcCall('eth_getLogs', params, rpcUrl);
 }
 
-async function scanWindows(epoch, pool, fromBlock, toBlock, rpcUrl) {
-  const epochTopic = padTopic(epoch);
-  const buyers = new Set();
-  const sellers = new Set();
+// Resilient windowed eth_getLogs: windows of WINDOW blocks, recursive split on
+// range errors, paced and retried by rpcCall. Shared by the buyer scan and the
+// lANTS Transfer scan. Returns raw logs in arrival order.
+export async function scanLogs({ address, topics, from, to, rpcUrl }) {
+  const url = rpcUrl || process.env.RPC_URL || RPC_DEFAULT;
+  const out = [];
 
   async function fetchWindow(start, end) {
     if (end < start) return;
     let logs;
     try {
-      logs = await getLogs(start, end, epochTopic, rpcUrl);
+      logs = await getLogsRange(address, topics, start, end, url);
     } catch (e) {
       if (e instanceof RangeError) {
         if (start === end) {
@@ -142,25 +144,33 @@ async function scanWindows(epoch, pool, fromBlock, toBlock, rpcUrl) {
       }
       throw e;
     }
-    if (logs) {
-      for (const log of logs) {
-        const data = log.data || '0x';
-        const agentWord = dataToWord(data, 0);
-        const agentId = dataWordToBigInt(agentWord).toString();
-        if (agentId === pool) {
-          const topics = log.topics || [];
-          if (topics.length >= 4) {
-            buyers.add(topicToAddress(topics[2]));
-            sellers.add(topicToAddress(topics[3]));
-          }
-        }
-      }
-    }
+    if (logs) out.push(...logs);
   }
 
-  for (let start = fromBlock; start <= toBlock; start += WINDOW) {
-    const end = Math.min(start + WINDOW - 1, toBlock);
+  for (let start = from; start <= to; start += WINDOW) {
+    const end = Math.min(start + WINDOW - 1, to);
     await fetchWindow(start, end);
+  }
+  return out;
+}
+
+async function scanWindows(epoch, pool, fromBlock, toBlock, rpcUrl) {
+  const epochTopic = padTopic(epoch);
+  const buyers = new Set();
+  const sellers = new Set();
+  const logs = await scanLogs({ address: CONTRACT, topics: [TOPIC0, epochTopic], from: fromBlock, to: toBlock, rpcUrl });
+
+  for (const log of logs) {
+    const data = log.data || '0x';
+    const agentWord = dataToWord(data, 0);
+    const agentId = dataWordToBigInt(agentWord).toString();
+    if (agentId === pool) {
+      const topics = log.topics || [];
+      if (topics.length >= 4) {
+        buyers.add(topicToAddress(topics[2]));
+        sellers.add(topicToAddress(topics[3]));
+      }
+    }
   }
   return { buyers: [...buyers].sort(), sellers: [...sellers].sort() };
 }
@@ -186,7 +196,7 @@ export async function scanBuyers(epoch, agentId, fromBlock, toBlock, rpcUrl) {
   return buyers;
 }
 
-const isEntry = import.meta.url === pathToFileURL(process.argv[1]).href;
+const isEntry = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
 if (isEntry) {
   const args = process.argv.slice(2);
   if (args.length !== 4) {

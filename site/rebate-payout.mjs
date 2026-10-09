@@ -1,6 +1,7 @@
 // Rebate payout for one offer and epoch: buyers from logs, spends from buyerAgentEpochUsage at a pinned block,
 // the formula from site/rebate.mjs. Node only. Spec: scripts/site/check_rebate.py (rebate_view, rebate_files).
-// Usage: node site/rebate-payout.mjs --epoch N --pool ID --from B --to B --pin B [--dry] [--offer file] [--out dir] [--snapshot file|url]
+// Usage: node site/rebate-payout.mjs --epoch N --pool ID [--from B] [--to B] [--pin B] [--dry] [--offer file] [--out dir] [--snapshot file|url]
+// Without --from/--to/--pin the epoch blocks are derived from epochBoundary(N) with blockAtOrBefore.
 
 import { createPublicClient, http, parseAbi } from 'viem';
 import { base } from 'viem/chains';
@@ -8,6 +9,8 @@ import { scanPool } from './rebate-scan.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { writeRebateFiles } from './rebate-files.mjs';
+import { epochBoundary } from './epochs.mjs';
+import { blockAtOrBefore } from './stake-positions.mjs';
 
 const CONTRACT = '0xAdd2D85316153D7bfaF7921EE9Bf1Bb6c7A1cBc9';
 const RPC_PRIMARY = 'https://mainnet.base.org';
@@ -93,13 +96,36 @@ async function main() {
   const args = process.argv.slice(2);
   const opts = parseArgs(args);
 
-  if (opts.epoch === undefined || opts.pool === undefined || opts.from === undefined || opts.to === undefined || opts.pin === undefined) {
-    console.error('usage: node site/rebate-payout.mjs --epoch N --pool P --from B --to B --pin B [--dry] [--offer file --out dir --snapshot file|url]');
+  if (opts.epoch === undefined || opts.pool === undefined) {
+    console.error('usage: node site/rebate-payout.mjs --epoch N --pool P [--from B] [--to B] [--pin B] [--dry] [--offer file --out dir --snapshot file|url]');
     process.exit(2);
   }
-  if (!Number.isInteger(opts.epoch) || !Number.isInteger(opts.from) || !Number.isInteger(opts.to) || !Number.isInteger(opts.pin)) {
-    console.error('rebate-payout: epoch/from/to/pin must be integers');
+  if (!Number.isInteger(opts.epoch)) {
+    console.error('rebate-payout: epoch must be an integer');
     process.exit(2);
+  }
+  for (const k of ['from', 'to', 'pin']) {
+    if (opts[k] !== undefined && !Number.isInteger(opts[k])) {
+      console.error(`rebate-payout: --${k} must be an integer`);
+      process.exit(2);
+    }
+  }
+
+  // Derive the epoch blocks deterministically when not passed: the epoch starts
+  // at epochBoundary(N), ends at epochBoundary(N+1), and the payout pin is the
+  // first block of N+1 plus 100.
+  if (opts.from === undefined || opts.to === undefined || opts.pin === undefined) {
+    const startTs = epochBoundary(opts.epoch).getTime();
+    const endTs = epochBoundary(opts.epoch + 1).getTime();
+    if (Date.now() < endTs) {
+      console.error('rebate-payout: epoch not finished yet; pass --from/--to/--pin explicitly');
+      process.exit(1);
+    }
+    const lastBeforeStart = await blockAtOrBefore(startTs);
+    const lastBeforeEnd = await blockAtOrBefore(endTs);
+    if (opts.from === undefined) opts.from = lastBeforeStart + 1;
+    if (opts.to === undefined) opts.to = lastBeforeEnd;
+    if (opts.pin === undefined) opts.pin = lastBeforeEnd + 100;
   }
 
   // 1) Scan logs for buyers and sellers of this pool in the epoch
