@@ -85,7 +85,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 | Make repo public + verify contract on Basescan and Blockscout | 24.09 | ✅ done |
 | Full trade flow through the site (create · buy · cancel · manage position) + e2e fork test and 19-check QA sweep | 25.09 | ✅ done |
 | Seller incentives board v1 — an Incentives tab on lants.eth (the Votium / Hidden Hand model for AntSeed): sellers post "X per 1,000 ANTS of weight in my pool for epoch N", paid in USDC or in their own inference credits; stakers stake there with one click; the site computes payouts from on-chain weight and sellers pay; stop if no seller posts an offer within 2 epochs. v2 later: escrow contract, audit, 2-5% fee | 27.09 | ✅ v1 live |
-| Pay the first incentive offer: new stakes in Open Forge for epoch 25, 1 USDC per 1,000 ANTS, up to 10 USDC | 09.10 | open |
+| Pay the first incentive offer: new stakes in Open Forge for epoch 25, 1 USDC per 1,000 ANTS, up to 10 USDC | 09.10 | ✅ none — 0 new stakes |
 | List on antseed.com/ecosystem ([PR #1065](https://github.com/AntSeed/antseed/pull/1065)) | 27.09 | ✅ done |
 | First staker reward for #27 + weekly recap #1 | 01.10 | open |
 | Fund the second (buyer) wallet for the first trade | 25.09 | ✅ done |
@@ -142,7 +142,7 @@ Plain tasks, due dates, status. No keys, no internal tooling.
 - [x] Claim / Restake buttons and the Incentives tab — 27.09
 - [ ] First staker reward for #27 + weekly recap #1 — 01.10
 - [ ] Launch announcement on X and in the AntSeed chat — 02.10
-- [ ] Pay the first incentive offer (Open Forge, epoch 25) and publish the transaction — 09.10
+- [x] Pay the first incentive offer (Open Forge, epoch 25) — 09.10 · no new stakes, nothing to pay
 - [ ] Weekly recaps + seller conversations about incentive offers — every Thursday
 - [ ] Signal check and money decision — 22.10 · stop rule check — 05.11
 
@@ -215,6 +215,14 @@ Most concrete first. Nothing here is decided before 22.10.
 ---
 
 ## Build log
+
+**09.10.2026.** The epoch-25 Open Forge offer is settled: **nothing to pay**. The offer was for new stakes only
+(`pays: new`) in pool 44694, and the last published snapshot of epoch 25
+(2026-10-08T00:12:29Z, block 52,314,479, CID `bafybeicqhuyjmupawuurcveqvscbb5pyzhlteq5p5d2sjnxhqjvdkyqjge`)
+lists four positions in the pool — #1 (`stakeStartEpoch` 22), #39, #40, #41 (all 24) — not one with
+`stakeStartEpoch == 25`. Zero recipients, zero USDC, no transaction; the 10,000-ANTS cap lapses with the epoch.
+Reproduce: `node site/stake-payout-run.mjs --epoch 25 --pool 44694 --snapshot <that snapshot>` →
+`total_usdc=0 recipients=0 pool_positions=4`.
 
 **07.10.2026.** Rebate claims — the escrow v2 the D15 trigger asked for (first third-party offer: Apex, epoch 27).
 One shared `RebateClaims` contract for the whole platform: the seller launches a campaign and funds the cap before
