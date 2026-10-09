@@ -372,6 +372,16 @@ function makeSpan(field, value) {
   return s;
 }
 
+// Micro info icon for rows newer than the snapshot: lock shows raw weeks until the next refresh.
+function freshNote(tip) {
+  const info = document.createElement('span');
+  info.className = 'info';
+  info.tabIndex = 0;
+  info.dataset.tip = tip;
+  info.textContent = 'ⓘ';
+  return info;
+}
+
 // Sales panel: sold lots read from the chain. Internal trades are listed, labelled, and kept out of volume/FDV.
 function updateSales(items, snapshot) {
   const panel = document.getElementById('sales-panel');
@@ -526,6 +536,9 @@ function render(snapshot, items) {
       }
     }
     lockSpan.textContent = lockVal;
+    if (item.isLive && !pos && item.chainStakeEnd != null) {
+      lockSpan.appendChild(freshNote('Created after the last snapshot: lock shows raw weeks. Exit appears after the next snapshot refresh.'));
+    }
     row.appendChild(lockSpan);
 
     // STATUS
@@ -1212,7 +1225,7 @@ export async function renderMyPositions(account, ids, snapshot) {
   });
 
   for (const id of ids) {
-    let amount, lockWeeks, rewardText, exitText, exitTitle = '', skip = false;
+    let amount, lockWeeks, rewardText, exitText, exitTitle = '', isFresh = false, skip = false;
 
     // a position newer than the snapshot (bought or split since the last run) is read from the chain below
     const pos = snapshot ? findPos(snapshot, id) : null;
@@ -1262,6 +1275,7 @@ export async function renderMyPositions(account, ids, snapshot) {
         rewardText = '—';
         exitText = '—';
         exitTitle = 'Appears after the next snapshot';
+        isFresh = true;
       } catch (e) {
         console.error('Error reading position', id, e);
         continue;
@@ -1270,12 +1284,19 @@ export async function renderMyPositions(account, ids, snapshot) {
 
     // Build row
     const row = document.createElement('div');
-    row.className = 'pf-pos-row';
+    row.className = isFresh ? 'pf-pos-row is-fresh' : 'pf-pos-row';
     row.dataset.id = id.toString();
+    if (isFresh) {
+      row.title = 'Created after the last snapshot: "max", reward and exit appear after the next snapshot refresh.';
+    }
 
     row.appendChild(makeSpan('id', '#' + id.toString()));
     row.appendChild(makeSpan('amount', amount.toFixed(2)));
-    row.appendChild(makeSpan('lock', String(lockWeeks)));
+    const lockSpan = makeSpan('lock', String(lockWeeks));
+    if (isFresh) {
+      lockSpan.appendChild(freshNote('Created after the last snapshot: lock shows raw weeks. "max", reward and exit appear after the next snapshot refresh.'));
+    }
+    row.appendChild(lockSpan);
     row.appendChild(makeSpan('reward', rewardText));
 
     const exitSpan = makeSpan('exit', exitText);

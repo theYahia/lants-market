@@ -847,6 +847,9 @@ body.view-incentives .market-strip,body.view-incentives .tabs,body.view-incentiv
 #pf-positions .pf-pos-head > span:nth-child(2),#pf-positions .pf-pos-head > span:nth-child(3),#pf-positions .pf-pos-head > span:nth-child(4),#pf-positions .pf-pos-head > span:nth-child(5),
 #pf-positions .pf-pos-row > span:nth-child(2),#pf-positions .pf-pos-row > span:nth-child(3),#pf-positions .pf-pos-row > span:nth-child(4),#pf-positions .pf-pos-row > span:nth-child(5){text-align:right;font-variant-numeric:tabular-nums;}
 #pf-positions .pf-actions{justify-self:end;display:flex;gap:8px;}
+#pf-positions .pf-pos-row.is-fresh > span:nth-child(3),
+#pf-positions .pf-pos-row.is-fresh > span:nth-child(4),
+#pf-positions .pf-pos-row.is-fresh > span:nth-child(5){color:var(--muted);}
 #pf-positions button.pf-list,#pf-positions button.pf-manage,#pf-positions button.pf-restake,#pf-positions button.claim{padding:4px 10px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent);font-family:var(--font-sans);font-weight:700;font-size:var(--fs-12);cursor:pointer;}
 #pf-positions button.pf-manage{border-color:var(--line);color:var(--ink);}
 #pf-positions button.pf-restake{border-color:var(--accent);color:var(--accent);}
