@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keccak256 } from 'viem';
-import { artifactHashes } from './rebate-deploy.mjs';
+import { artifactHashes, constructorArgsHex } from './rebate-deploy.mjs';
+
+test('constructorArgsHex: ABI-encodes the USDC address for --constructor-args', () => {
+  const usdc = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+  const enc = constructorArgsHex(usdc);
+  assert.match(enc, /^0x[0-9a-f]{64}$/);
+  assert.equal(enc, '0x000000000000000000000000833589fcd6edb6e08f4c7c32d4f71b54bda02913');
+  assert.notEqual(enc, usdc);
+});
 
 test('artifactHashes: hashes both code blobs and keeps the abi', () => {
   const artifact = {

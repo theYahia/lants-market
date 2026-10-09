@@ -6,7 +6,7 @@
 // (address, chainId, deployTx, commit, verified, runtimeCodeHash, initCodeHash)
 // without overwriting; the file is one of the FILES published in dist.
 
-import { createPublicClient, createWalletClient, http, keccak256, parseAbi } from 'viem';
+import { createPublicClient, createWalletClient, http, keccak256, parseAbi, encodeAbiParameters } from 'viem';
 import { base } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { execFileSync } from 'node:child_process';
@@ -67,29 +67,44 @@ function findForge() {
   return null;
 }
 
+// `constructor(address)` ABI-encoded, the form foundry's --constructor-args wants.
+// Passing the bare address (the old bug) made every verification fail.
+export function constructorArgsHex(usdc) {
+  return encodeAbiParameters([{ type: 'address' }], [usdc]);
+}
+
 function verifyOnExplorer(address, contractsDir) {
   const forge = findForge();
   if (!forge) return { verified: false, note: 'forge not found; verify manually' };
-  try {
-    const out = execFileSync(
-      forge,
-      [
-        'verify-contract',
-        address,
-        'src/RebateClaims.sol:RebateClaims',
-        '--verifier',
-        'blockscout',
-        '--verifier-url',
-        'https://base.blockscout.com/api/',
-        '--constructor-args',
-        USDC
-      ],
-      { cwd: contractsDir, encoding: 'utf-8', timeout: 180000 }
-    );
-    return { verified: true, note: out.trim().split('\n').slice(-1)[0] || '' };
-  } catch (e) {
-    return { verified: false, note: String((e && e.stderr) || e.message || e).slice(-200) };
+  const targets = [['blockscout', 'https://base.blockscout.com/api/']];
+  if (process.env.ETHERSCAN_API_KEY) targets.push(['etherscan', 'https://api.basescan.org/api']);
+  const args = constructorArgsHex(USDC);
+  const notes = [];
+  let anyVerified = false;
+  for (const [verifier, url] of targets) {
+    try {
+      const out = execFileSync(
+        forge,
+        [
+          'verify-contract',
+          address,
+          'src/RebateClaims.sol:RebateClaims',
+          '--verifier',
+          verifier,
+          '--verifier-url',
+          url,
+          '--constructor-args',
+          args
+        ],
+        { cwd: contractsDir, encoding: 'utf-8', timeout: 180000 }
+      );
+      anyVerified = true;
+      notes.push(`${verifier}: ${out.trim().split('\n').slice(-1)[0] || 'ok'}`);
+    } catch (e) {
+      notes.push(`${verifier}: ${String((e && e.stderr) || e.message || e).slice(-160)}`);
+    }
   }
+  return { verified: anyVerified, note: notes.join(' | ') };
 }
 
 async function main() {
