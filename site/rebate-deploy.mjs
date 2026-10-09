@@ -23,7 +23,31 @@ const erc20Abi = parseAbi([
   'function decimals() view returns (uint8)'
 ]);
 
-// { initCodeHash, runtimeCodeHash, bytecode, abi } from the forge artifact.
+// The forge artifact zeroes immutable values in the deployed bytecode; the
+// on-chain code carries the real values there instead. Solidity embeds an
+// immutable at 32-byte zero runs (RebateClaims: single immutable USDC, 6 embeds,
+// verified against build-info immutableReferences). Patch every 32-byte zero run
+// with the padded value and hash — that is the expected on-chain runtime hash.
+export function patchImmutableEmbeds(deployed, value32) {
+  const hex = deployed.startsWith('0x') ? deployed.slice(2) : deployed;
+  let patched = '';
+  for (let i = 0; i < hex.length; i += 2) {
+    if (hex[i] === '0' && hex[i + 1] === '0') {
+      let j = i;
+      while (j < hex.length && hex[j] === '0' && hex[j + 1] === '0') j += 2;
+      const run = hex.slice(i, j);
+      patched += run.length === 64 ? value32 : run;
+      i = j - 2;
+      continue;
+    }
+    patched += hex[i] + hex[i + 1];
+  }
+  return '0x' + patched;
+}
+
+// { initCodeHash, runtimeCodeHash, expectedRuntimeHash, bytecode, abi } from the
+// forge artifact. runtimeCodeHash is the zeroed-immutable artifact hash;
+// expectedRuntimeHash is what the chain must show after the deploy.
 export function artifactHashes(artifact) {
   const bytecode = artifact.bytecode?.object ?? artifact.bytecode;
   const deployed = artifact.deployedBytecode?.object ?? artifact.deployedBytecode;
@@ -33,11 +57,13 @@ export function artifactHashes(artifact) {
   if (typeof deployed !== 'string' || !deployed.startsWith('0x') || deployed.length <= 2) {
     throw new Error('rebate-deploy: artifact has no deployedBytecode (run forge build)');
   }
+  const usdc32 = encodeAbiParameters([{ type: 'address' }], [USDC]).slice(2);
   return {
     abi: artifact.abi,
     bytecode,
     initCodeHash: keccak256(bytecode),
-    runtimeCodeHash: keccak256(deployed)
+    runtimeCodeHash: keccak256(deployed),
+    expectedRuntimeHash: keccak256(patchImmutableEmbeds(deployed, usdc32))
   };
 }
 
@@ -133,7 +159,7 @@ async function main() {
     process.exit(1);
   }
   const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf-8'));
-  const { abi, bytecode, initCodeHash, runtimeCodeHash } = artifactHashes(artifact);
+  const { abi, bytecode, initCodeHash, runtimeCodeHash, expectedRuntimeHash } = artifactHashes(artifact);
 
   const client = createPublicClient({ chain: base, transport: http(undefined, { timeout: 30000 }) });
   let checks;
@@ -153,6 +179,7 @@ async function main() {
           bytecodeBytes: (bytecode.length - 2) / 2,
           initCodeHash,
           runtimeCodeHash,
+          expectedRuntimeCodeHash: expectedRuntimeHash,
           ...checks
         },
         null,
@@ -180,8 +207,8 @@ async function main() {
   const address = receipt.contractAddress;
   const code = await client.getCode({ address });
   const onchainHash = keccak256(code);
-  if (onchainHash !== runtimeCodeHash) {
-    console.error(`rebate-deploy: runtime code hash mismatch on chain (${onchainHash} != ${runtimeCodeHash})`);
+  if (onchainHash !== expectedRuntimeHash) {
+    console.error(`rebate-deploy: runtime code hash mismatch on chain (${onchainHash} != expected ${expectedRuntimeHash})`);
     process.exit(1);
   }
 
