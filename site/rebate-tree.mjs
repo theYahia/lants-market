@@ -24,45 +24,16 @@ function hashPair(a, b) {
 // Standard library "MerkleTree" computation over a full balanced level set.
 // `level` holds 32-byte hashes; while more than one, pair sorted neighbours and
 // lift an odd tail without hashing (matches combinedHash(single, undefined) -> el).
-function rootOf(level) {
-  while (level.length > 1) {
-    const next = [];
-    for (let i = 0; i < level.length; i += 2) {
-      if (i + 1 < level.length) {
-        next.push(hashPair(level[i], level[i + 1]));
-      } else {
-        next.push(level[i]);
-      }
+function nextLevel(level) {
+  const next = [];
+  for (let i = 0; i < level.length; i += 2) {
+    if (i + 1 < level.length) {
+      next.push(hashPair(level[i], level[i + 1]));
+    } else {
+      next.push(level[i]);
     }
-    level = next;
   }
-  return level[0];
-}
-
-// Canonical getPairElement: a pair that would fall off an odd level is omitted
-// (null), never zero-padded, so the proof length equals the number of real
-// levels from the leaf to the root.
-function proofOf(allLeaves, index) {
-  const proof = [];
-  let idx = index;
-  let level = allLeaves;
-  while (level.length > 1) {
-    const peerIdx = idx % 2 === 0 ? idx + 1 : idx - 1;
-    if (peerIdx < level.length) {
-      proof.push(level[peerIdx]);
-    }
-    const next = [];
-    for (let i = 0; i < level.length; i += 2) {
-      if (i + 1 < level.length) {
-        next.push(hashPair(level[i], level[i + 1]));
-      } else {
-        next.push(level[i]);
-      }
-    }
-    level = next;
-    idx = Math.floor(idx / 2);
-  }
-  return proof;
+  return next;
 }
 
 // Build the rebate claim tree for a payout map { address -> micro-USDC }.
@@ -88,9 +59,25 @@ export function buildRebateTree(payouts) {  if (!payouts || typeof payouts !== '
     total += amount;
   }
 
-  const root = rootOf(raw);
+  // Build every level once (O(n) hashes per level) and read the root and all
+  // proofs off it. Canonical getPairElement: a pair that would fall off an odd
+  // level is omitted (null), never zero-padded, so the proof length equals the
+  // number of real levels from the leaf to the root.
+  const levels = [raw];
+  while (levels[levels.length - 1].length > 1) {
+    levels.push(nextLevel(levels[levels.length - 1]));
+  }
+  const root = levels[levels.length - 1][0];
   for (const leaf of leaves) {
-    leaf.proof = proofOf(raw, leaf.index);
+    const proof = [];
+    let idx = leaf.index;
+    for (const level of levels) {
+      if (level.length <= 1) break;
+      const peerIdx = idx % 2 === 0 ? idx + 1 : idx - 1;
+      if (peerIdx < level.length) proof.push(level[peerIdx]);
+      idx = Math.floor(idx / 2);
+    }
+    leaf.proof = proof;
   }
 
   return { root, total: String(total), leaves };
