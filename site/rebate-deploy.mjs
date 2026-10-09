@@ -122,6 +122,11 @@ async function main() {
   }
 
   const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const outPath = path.join(repoRoot, outFile);
+  if (send && fs.existsSync(outPath)) {
+    console.error('rebate-deploy: output file already exists: ' + outFile);
+    process.exit(1);
+  }
   const artifactPath = path.join(repoRoot, ARTIFACT);
   if (!fs.existsSync(artifactPath)) {
     console.error(`rebate-deploy: artifact not found: ${ARTIFACT} (run forge build in contracts/)`);
@@ -190,11 +195,6 @@ async function main() {
     // not a git repo
   }
 
-  const outPath = path.join(repoRoot, outFile);
-  if (fs.existsSync(outPath)) {
-    console.error('rebate-deploy: output file already exists: ' + outFile);
-    process.exit(1);
-  }
   const record = {
     address,
     chainId: CHAIN_ID,
