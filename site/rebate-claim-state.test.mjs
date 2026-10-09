@@ -77,6 +77,11 @@ test('finalized with a matching root: claims open, then sweepable', () => {
   const done = call(600000, baseCampaign({ root: ROOT, total: 500n, sweepAfter: 500000n }), { root: ROOT });
   assert.equal(done.state, 'sweepable');
   assert.deepEqual(done.actions, { sweep: true });
+  // The contract rejects claim at exactly sweepAfter (>=), so the UI must not
+  // offer a claim in that second.
+  const boundary = call(500000, baseCampaign({ root: ROOT, total: 500n, sweepAfter: 500000n }), { root: ROOT });
+  assert.equal(boundary.state, 'sweepable');
+  assert.deepEqual(boundary.actions, { sweep: true });
 });
 
 test('statusText carries the words the board shows', () => {

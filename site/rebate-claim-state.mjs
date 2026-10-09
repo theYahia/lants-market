@@ -20,9 +20,7 @@
 // payer's authorization (verified at publication, re-checked by the CI guard) —
 // and only when its deadline bindings match the offer's epoch-derived params.
 
-import { campaignParams } from './rebate-campaign.mjs';
-
-export const OBJECTIONS_HOURS = 48;
+import { campaignParams, OBJECTIONS_HOURS } from './rebate-campaign.mjs';
 
 export function claimState({ now, epochStart, epochEnd, campaign, tree }) {
   const t = Number(now);
@@ -91,7 +89,7 @@ export function claimState({ now, epochStart, epochEnd, campaign, tree }) {
   if (!rootMatches) {
     return { ...base, state: 'root_mismatch', info, actions: {} };
   }
-  if (t > Number(campaign.sweepAfter)) {
+  if (t >= Number(campaign.sweepAfter)) {
     return { ...base, state: 'sweepable', info, actions: { sweep: true } };
   }
   return { ...base, state: 'claims_open', info, actions: { claim: true } };
