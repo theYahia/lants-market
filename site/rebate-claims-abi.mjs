@@ -13,7 +13,6 @@
 //   acceptOwnership(uint256)                                              0x952289cf
 //   campaign(uint256)                                                     0xccd39037
 //   isClaimed(uint256,uint256)                                            0xf364c90c
-//   nextCampaignId()                                                      0x7903a756
 //   USDC()                                                                0x89a30271
 
 export const SEL = {
@@ -26,7 +25,6 @@ export const SEL = {
   acceptOwnership: '0x952289cf',
   campaign: '0xccd39037',
   isClaimed: '0xf364c90c',
-  nextCampaignId: '0x7903a756',
   usdc: '0x89a30271'
 };
 

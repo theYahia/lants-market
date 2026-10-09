@@ -12,10 +12,10 @@ import { validRebate, rebatePayout } from './rebate.mjs';
 import { loadStakeSnapshot, positionsWithOwnersAt } from './stake-positions.mjs';
 import { resolveOperatorsAt, personaOf } from './rebate-operators.mjs';
 import { buildRebateTree } from './rebate-tree.mjs';
+import { CLAIM_WINDOW_DAYS } from './rebate-campaign.mjs';
 
 const REBATE_FORMULA = 'min(spend_i * pctBps / 10000, capPerBuyerUsdc), adjusted by the total cap';
 const MAX_LOCK_FACTOR = 104n;
-export const CLAIM_WINDOW_DAYS = 14;
 
 // One reason per address: seller/payer win over operators, the own list is
 // applied only when the payer is ours, the committed exclude file wins overall.
