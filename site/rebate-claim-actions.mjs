@@ -218,8 +218,7 @@ export function renderActions(block, { offer, epoch, params, tree, campaignId, c
           cancelDeadline: params.cancelDeadline,
           finalizeDeadline: params.finalizeDeadline,
           claimWindow: params.claimWindow,
-          signature,
-          signatureVerified: false
+          signature
         }));
       },
       msg

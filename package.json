@@ -5,7 +5,7 @@
   "description": "Valuation board, market layer and seller incentives for locked ANTS positions (lANTS) on AntSeed",
   "scripts": {
     "build": "node scripts/site/build-dist.mjs",
-    "test": "node --test site/*.test.mjs",
+    "test": "node --test site/*.test.mjs && node scripts/site/check_authorizations.mjs",
     "probe:state": "node scripts/probes/net-state.cjs",
     "probe:sellers": "node scripts/probes/seller-rank.cjs"
   },
