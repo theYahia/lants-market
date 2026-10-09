@@ -853,6 +853,29 @@ def main():
                          "finalizeDeadline": E28 + 7 * 86400 + 72 * 3600, "claimWindow": 1209600,
                          "claimWindowDays": 14, "authorizationType": "RebateCampaignAuthorization"}
 
+        # F1: a foreign campaign on the same (epoch, pool) must never win. camp_d
+        # is canonical (payer-owned, epoch-28 params); the squatter is newer and
+        # better-viewed (id 8 > 7, listed first). 33333 has only a squatter.
+        squatter = "0x" + "99" * 20
+        camp_d = {"owner": OFFER["payer"], "pendingOwner": "0x" + "00" * 20, "cancelDeadline": E28,
+                  "finalizeDeadline": E28 + 7 * 86400 + 72 * 3600, "claimWindow": 1209600, "epochId": 28,
+                  "poolId": "22222", "root": ZERO32, "total": 0, "funded": 10000000, "claimed": 0, "sweepAfter": 0}
+        camp_squat = dict(camp_d, owner=squatter, funded=1)
+        camp_only_squat = dict(camp_d, poolId="33333", owner=squatter, funded=1)
+        TOPIC_CREATED = "0xa0b75b3d48f1d411faf8eb6b3a6985271fc12369efb160c320304fbcfdc3f3b3"
+
+        def enc_campaign_log(cid, owner, epoch, pool, block):
+            body = pool.encode().hex()
+            data = _w(epoch) + _w(64) + _w(len(pool)) + body.ljust(64, "0")
+            return {"address": CLAIMS, "blockNumber": hex(block),
+                    "topics": [TOPIC_CREATED, _w(cid), _w(owner)], "data": "0x" + data}
+
+        created_logs = [
+            enc_campaign_log(8, squatter, 28, "22222", 51999500),
+            enc_campaign_log(7, OFFER["payer"], 28, "22222", 51999000),
+            enc_campaign_log(9, squatter, 28, "33333", 51999500),
+        ]
+
         def reb_offer(pool, epoch):
             return dict(OFFER, pool=pool, epochs=[epoch], note="claim ui fixture")
 
@@ -861,6 +884,7 @@ def main():
             {"pool": "44694", "epochs": [25], "usdcPer1k": 1, "capAnts": 10000,
              "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B", "pays": "new", "note": "stake fixture"},
             reb_offer("52894", 27), reb_offer("44694", 27), reb_offer("99999", 27), reb_offer("11111", 28),
+            reb_offer("22222", 28), reb_offer("33333", 28),
         ]
         files = {
             "rebate-claims.json": {"address": CLAIMS, "chainId": 8453, "runtimeCodeHash": HASH,
@@ -872,8 +896,10 @@ def main():
             "rebates/27-99999.tree.json": tree_bad,
             "rebates/27-99999.campaign.json": {"campaignId": 3},
             "rebates/28-11111.campaign-params.json": params_launch,
+            "rebates/28-22222.campaign-params.json": dict(params_launch, poolId="22222"),
+            "rebates/28-33333.campaign-params.json": dict(params_launch, poolId="33333"),
         }
-        campaigns = {1: camp_a, 2: camp_b, 3: camp_c}
+        campaigns = {1: camp_a, 2: camp_b, 3: camp_c, 7: camp_d, 8: camp_squat, 9: camp_only_squat}
         seen_claim_calls = []
 
         def rpc_result(method, params):
@@ -884,7 +910,9 @@ def main():
             if method == "eth_getCode":
                 return FAKE_CODE
             if method == "eth_getLogs":
-                return []
+                f = params[0] if params else {}
+                fb, tb = int(f["fromBlock"], 16), int(f["toBlock"], 16)
+                return [x for x in created_logs if fb <= int(x["blockNumber"], 16) <= tb]
             if method == "eth_call":
                 to = str(params[0].get("to", "")).lower()
                 data = str(params[0].get("data", ""))
@@ -982,6 +1010,22 @@ def main():
                     txt = " ".join(dblk.inner_text().split())
                     record("rebate_claim_ui", "11111 status lacks 'awaiting launch': %s" % txt[:120], "awaiting launch" in txt)
                     record("rebate_claim_ui", "11111 lacks the Launch & fund button", dblk.locator("button", has_text="Launch & fund").count() == 1)
+
+                eblk = block_for("22222")
+                record("rebate_claim_ui", "no claim block for pool 22222", eblk is not None)
+                if eblk is not None:
+                    txt = " ".join(eblk.inner_text().split())
+                    record("rebate_claim_ui", "22222 does not show the canonical campaign (squatter is newer): %s" % txt[:140],
+                           "funded $10.00" in txt and "awaiting launch" not in txt)
+                    record("rebate_claim_ui", "22222 shows Launch although the payer's campaign exists: %s" % txt[:140],
+                           eblk.locator("button", has_text="Launch & fund").count() == 0)
+
+                fblk = block_for("33333")
+                record("rebate_claim_ui", "no claim block for pool 33333", fblk is not None)
+                if fblk is not None:
+                    txt = " ".join(fblk.inner_text().split())
+                    record("rebate_claim_ui", "33333: a lone squatter hid Launch: %s" % txt[:140],
+                           "awaiting launch" in txt and fblk.locator("button", has_text="Launch & fund").count() == 1)
                 b.close()
         finally:
             e2e.stop_all()
