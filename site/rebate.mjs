@@ -3,6 +3,10 @@
 // An optional `stakeGate: {minStakeAnts}` pays only buyers who own >= N ANTS (at max lock,
 // weight / 104) in the seller's pool during the offer's epoch. Positions carry a resolved `owner`.
 
+// D18: a campaign cap above $20 needs the external audit first; raising the
+// bound is a separate commit (docs/decisions.md).
+export const MAX_CAP_USDC_PRE_AUDIT = 20;
+
 export function validRebate(offer) {
   if (!offer || typeof offer !== 'object') return false;
   if (offer.type !== 'rebate') return false;
@@ -13,8 +17,10 @@ export function validRebate(offer) {
   if (!Number.isInteger(offer.pctBps)) return false;
   if (!(offer.pctBps >= 1 && offer.pctBps <= 5000)) return false;
   if (typeof offer.capUsdc !== 'number' || !Number.isFinite(offer.capUsdc) || !(offer.capUsdc > 0)) return false;
+  if (offer.capUsdc > MAX_CAP_USDC_PRE_AUDIT) return false;
   if (offer.capPerBuyerUsdc !== undefined) {
     if (typeof offer.capPerBuyerUsdc !== 'number' || !Number.isFinite(offer.capPerBuyerUsdc) || !(offer.capPerBuyerUsdc > 0)) return false;
+    if (offer.capPerBuyerUsdc > offer.capUsdc) return false;
   }
   if (offer.minSpendUsdc !== undefined) {
     if (typeof offer.minSpendUsdc !== 'number' || !Number.isFinite(offer.minSpendUsdc) || !(offer.minSpendUsdc >= 0)) return false;

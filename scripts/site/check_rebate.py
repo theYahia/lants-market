@@ -30,7 +30,8 @@ The formula (plan ПЛАН-rebate-v1, fix 2), all integers in micro-USDC, floor 
 Module contract (site/rebate.mjs, pure ES module):
   validRebate(offer) -> boolean
       type === 'rebate'; pool = digits; epochs = array of exactly one integer; pctBps integer 1..5000;
-      capUsdc number > 0; capPerBuyerUsdc optional number > 0; minSpendUsdc optional number >= 0;
+      capUsdc number > 0, <= 20 until the external audit (D18); capPerBuyerUsdc optional number > 0, <= capUsdc;
+      minSpendUsdc optional number >= 0;
       payer 0x + 40 hex; note optional string <= 140; usdcPer1k / capAnts must be absent.
   offerState(offer, displayEpoch) -> 'upcoming' | 'active' | 'ended'   (epochs[0] vs displayEpoch)
   rebatePayout(spends, offer, exclude, stakeByPersona?, personaOf?) -> {payouts: {addr: BigInt}, excluded: {addr: reason}, total: BigInt, cut: boolean}
@@ -293,11 +294,13 @@ def schema_cases():
     minimal = {k: OFFER[k] for k in ("type", "pool", "epochs", "pctBps", "capUsdc", "payer")}
     bad = [
         dict(OFFER, pctBps=2.5), dict(OFFER, pctBps=0), dict(OFFER, pctBps=5001), dict(OFFER, capUsdc=0),
+        dict(OFFER, capUsdc=21), dict(OFFER, capPerBuyerUsdc=11),
         dict(OFFER, usdcPer1k=1), dict(OFFER, payer="0x3d4C"), dict(OFFER, note="x" * 141), dict(OFFER, type="stake"),
         {k: v for k, v in OFFER.items() if k != "type"}, dict(OFFER, epochs=[25, 26]), dict(OFFER, pool="abc"),
         dict(OFFER, capPerBuyerUsdc=-1), dict(OFFER, minSpendUsdc=-1),
     ]
     cases = [({"fn": "validRebate", "offer": good}, True), ({"fn": "validRebate", "offer": minimal}, True)]
+    cases += [({"fn": "validRebate", "offer": dict(OFFER, capUsdc=20)}, True)]
     cases += [({"fn": "validRebate", "offer": b}, False) for b in bad]
     cases += [({"fn": "offerState", "offer": good, "display": d}, want) for d, want in ((24, "upcoming"), (25, "active"), (26, "ended"))]
     return cases

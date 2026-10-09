@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validRebate, rebatePayout, rebateLabel } from './rebate.mjs';
+import { validRebate, rebatePayout, rebateLabel, MAX_CAP_USDC_PRE_AUDIT } from './rebate.mjs';
 
 const WEI = 10n ** 18n;
 const PAYER = '0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B';
@@ -27,6 +27,14 @@ test('validRebate rejects a malformed stakeGate', () => {
   }
   assert.equal(validRebate({ ...offer, stakeGate: 100 }), false);
   assert.equal(validRebate({ ...offer, stakeGate: { minStakeAnts: 50, extra: 1 } }), false);
+});
+
+test('validRebate holds the pre-audit cap and the per-buyer bound (D18)', () => {
+  assert.equal(MAX_CAP_USDC_PRE_AUDIT, 20);
+  assert.equal(validRebate({ ...offer, capUsdc: 20 }), true, 'the boundary is allowed');
+  assert.equal(validRebate({ ...offer, capUsdc: 20, capPerBuyerUsdc: 20 }), true);
+  assert.equal(validRebate({ ...offer, capUsdc: 21 }), false, 'above the cap needs the audit');
+  assert.equal(validRebate({ ...offer, capUsdc: 10, capPerBuyerUsdc: 11 }), false, 'per-buyer above the total');
 });
 
 test('persona: stake only at the operator -> the buyer is paid', () => {

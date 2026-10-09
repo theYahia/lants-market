@@ -152,7 +152,7 @@ from the platform's shared `RebateClaims` contract.
 | `pool` | seller pool (agent id) |
 | `epochs` | one epoch, `[N]` |
 | `pctBps` | rebate in basis points, integer 1…5000 (`300` = 3%) |
-| `capUsdc` | total budget of the offer, USDC — deposited into the campaign before the epoch |
+| `capUsdc` | total budget of the offer, USDC — deposited into the campaign before the epoch; ≤ 20 until an external audit ([D18](decisions.md)) |
 | `capPerBuyerUsdc` | optional: the most one buyer can get, USDC |
 | `minSpendUsdc` | optional: buyers who spent less get nothing, USDC |
 | `stakeGate` | optional `{minStakeAnts}`: only buyers who held ≥ N ANTS (at max lock, `weight / 104`) in this pool for the whole epoch get the rebate (see below) |
