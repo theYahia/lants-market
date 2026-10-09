@@ -159,6 +159,9 @@ from the platform's shared `RebateClaims` contract.
 | `payer` | the address that funds the campaign, shown on the offer |
 | `note` | up to 140 characters |
 
+**Seller process:** [seller-onboarding.md](seller-onboarding.md) — selection → offer PR → authorization
+PR → funding → payout → finalize; the same steps for every seller.
+
 **The cycle, end to end:**
 
 1. **Before the epoch** the seller launches a campaign in the shared `RebateClaims` contract and funds it with the

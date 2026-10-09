@@ -1,0 +1,72 @@
+name: Rebate offer
+description: Post a rebate offer for one epoch (funded before the epoch, claimed from RebateClaims)
+title: "[rebate] pool <id>, epoch <N>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Rebate offers are funded before the epoch and claimed by buyers from the shared
+        `RebateClaims` contract. `capUsdc` must be ≤ 20 USDC until the external audit (D18).
+        The full process: [Seller onboarding](https://github.com/theYahia/lants-market/blob/main/docs/seller-onboarding.md).
+  - type: input
+    id: pool
+    attributes:
+      label: Pool (agent id)
+      placeholder: "52894"
+    validations:
+      required: true
+  - type: input
+    id: epoch
+    attributes:
+      label: Epoch (one)
+      placeholder: "28"
+    validations:
+      required: true
+  - type: input
+    id: pct_bps
+    attributes:
+      label: pctBps (rebate in basis points, 100 = 1%)
+      placeholder: "300"
+    validations:
+      required: true
+  - type: input
+    id: cap_usdc
+    attributes:
+      label: capUsdc (total budget, ≤ 20)
+      placeholder: "10"
+    validations:
+      required: true
+  - type: input
+    id: cap_per_buyer
+    attributes:
+      label: capPerBuyerUsdc (optional)
+      placeholder: "2"
+  - type: input
+    id: min_spend
+    attributes:
+      label: minSpendUsdc (optional)
+      placeholder: "1"
+  - type: input
+    id: stake_gate
+    attributes:
+      label: stakeGate.minStakeAnts (optional, ANTS)
+      placeholder: "100"
+  - type: input
+    id: payer
+    attributes:
+      label: Payer address
+      description: The seller wallet that signs the EIP-712 authorization (never sends funds); 0x + 40 hex
+      placeholder: "0x..."
+    validations:
+      required: true
+  - type: input
+    id: campaign_wallet
+    attributes:
+      label: Campaign wallet (optional now)
+      description: The wallet that will fund and run the campaign; fixed at authorization time
+      placeholder: "0x..."
+  - type: textarea
+    id: note
+    attributes:
+      label: Note (≤ 140 characters, shown on the board)
+      placeholder: "Sponsored by <name>: 3% back on purchases, new buyers welcome."
