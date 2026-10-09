@@ -1,0 +1,12 @@
+{
+  "address": "0x66b0b672f8ac84d0172a00927a20f267ebbf39f1",
+  "chainId": 8453,
+  "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "deployTx": "0x6b739be8c8e2699d22b75ff616b2694dc6632c3af474a3a18781da84fdcc1588",
+  "deployBlock": "52392514",
+  "commit": "c40b22b106c562e702f92804d1147b52c4bef2fa",
+  "verified": false,
+  "verifyNote": "on-chain code hash 0xd840…f279 == artifact deployed code with the USDC immutable embedded (immutableReferences from build-info: 6 x 32-byte embeds patched with 0x8335…2913, byte-for-byte). USDC() returns 0x8335…2913, nextCampaignId() = 0. Explorer verification pending: Blockscout API is Cloudflare-challenged from this machine, Sourcify job afb6af30-96e3-4102-8b61-e064f45264fa submitted but status endpoints unreachable; Basescan verification needs ETHERSCAN_API_KEY.",
+  "runtimeCodeHash": "0xd840ac24e8caf4121745cb93f4f4ae1fcd61a95826f9c208a4e3c5c5424fc279",
+  "initCodeHash": "0x61d48800d04c8122be781df9bf7bf7763b2090f1ed40519627313dd0aef538bc"
+}
