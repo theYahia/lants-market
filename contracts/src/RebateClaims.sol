@@ -138,8 +138,8 @@ contract RebateClaims {
         c.poolId = poolId_;
 
         if (amount_ > 0) {
-            USDC.safeTransferFrom(msg.sender, address(this), amount_);
             c.funded = amount_;
+            USDC.safeTransferFrom(msg.sender, address(this), amount_);
         }
 
         emit CampaignCreated(id, msg.sender, epochId_, poolId_);
@@ -151,8 +151,8 @@ contract RebateClaims {
         if (amount == 0) revert InvalidParams();
         Campaign storage c = campaigns[id];
         if (c.root != bytes32(0)) revert AlreadyFinalized();
-        USDC.safeTransferFrom(msg.sender, address(this), amount);
         c.funded += amount;
+        USDC.safeTransferFrom(msg.sender, address(this), amount);
         emit Funded(id, amount);
     }
 
