@@ -1,0 +1,39 @@
+{
+  "root": "0x5a1ebceeca0a7be01d190b120c2d2bfbe1a79b8260b97aeccf41d8f605a8013a",
+  "total": "7500000",
+  "fundedMicro": "15000000",
+  "claimWindowDays": 14,
+  "cancelDeadlineOffsetSec": 86400,
+  "finalizeDeadlineOffsetSec": 172800,
+  "leaves": [
+    {
+      "index": 0,
+      "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "amount": "1250000",
+      "proof": [
+        "0xf03adf2cfa913903b2576a162edf488a2567ede8b56f5d84ce49e451b76221c7",
+        "0x12f385777d0cee494823f3771de0983ea5f1231345f44826396055ce1e15aacd"
+      ],
+      "proofCount": 2
+    },
+    {
+      "index": 1,
+      "account": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "amount": "2500000",
+      "proof": [
+        "0xc50a596fc3c30334868d8b211c56c3f0a172502f70347f4c2265104b7e7e6ca0",
+        "0x12f385777d0cee494823f3771de0983ea5f1231345f44826396055ce1e15aacd"
+      ],
+      "proofCount": 2
+    },
+    {
+      "index": 2,
+      "account": "0xcccccccccccccccccccccccccccccccccccccccc",
+      "amount": "3750000",
+      "proof": [
+        "0xcb08059df6199df8a388a82e90a11712665ff89836546091fc92e91d8bdb8d05"
+      ],
+      "proofCount": 1
+    }
+  ]
+}
