@@ -1,5 +1,6 @@
 import { rewardMode } from './metrics.mjs';
 import { validRebate, rebateLine, rebateLabel, rebateForSpend } from './rebate.mjs';
+import { epochBoundary } from './epochs.mjs';
 
 async function loadJSON(urls) {
   for (const url of urls) {
@@ -126,15 +127,6 @@ function buildOfferSection(offers, displayEpoch, poolNames) {
 
   div.appendChild(ul);
   return div;
-}
-
-// Epoch boundary base: epoch 25 starts 2026-10-01T09:54:21Z, each next +7 days.
-const EPOCH_BASE = new Date('2026-10-01T09:54:21Z');
-const EPOCH_BASE_NUM = 25;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-function epochBoundary(epochNum) {
-  return new Date(EPOCH_BASE.getTime() + (epochNum - EPOCH_BASE_NUM) * WEEK_MS);
 }
 
 // Staker budget of epoch N as the rewards contract projects it; null for older snapshots or another epoch.

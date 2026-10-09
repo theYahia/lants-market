@@ -24,6 +24,31 @@ const FILES = [
   ['site/vendor/mipd/utils.js', 'dist/vendor/mipd/utils.js'],
 ];
 
+// Claim UI modules (Stage 8): the rebate claim panel and its pure helpers.
+FILES.push(
+  ['site/rebate-claim.mjs', 'dist/rebate-claim.mjs'],
+  ['site/rebate-claim-chain.mjs', 'dist/rebate-claim-chain.mjs'],
+  ['site/rebate-claim-state.mjs', 'dist/rebate-claim-state.mjs'],
+  ['site/rebate-claims-abi.mjs', 'dist/rebate-claims-abi.mjs'],
+  ['site/rebate-campaign.mjs', 'dist/rebate-campaign.mjs'],
+  ['site/epochs.mjs', 'dist/epochs.mjs'],
+  ['site/keccak.mjs', 'dist/keccak.mjs']
+);
+
+// Published claim files: present only after the operator deploys the shared
+// contract / runs the payout pipeline. The UI handles their absence (404).
+if (statSync('site/rebate-claims.json', { throwIfNoEntry: false })?.isFile()) {
+  FILES.push(['site/rebate-claims.json', 'dist/rebate-claims.json']);
+  console.log('rebate_claims_included=1');
+} else {
+  console.log('rebate_claims_included=0');
+}
+if (statSync('rebates', { throwIfNoEntry: false })?.isDirectory()) {
+  for (const name of readdirSync('rebates').filter((f) => f.endsWith('.json')).sort()) {
+    FILES.push([join('rebates', name), join('dist/rebates', name)]);
+  }
+}
+
 // The only allowed external data-URL: canonical IPNS key.
 const ALLOWED_IPNS_KEY = 'k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b';
 // The additional allowed external data URL (live JSON snapshot).
@@ -41,6 +66,7 @@ const fail = (msg) => {
 rmSync(DIST_ROOT, { recursive: true, force: true });
 mkdirSync(join(DIST_ROOT, 'fixtures'), { recursive: true });
 mkdirSync(join(DIST_ROOT, 'vendor/mipd'), { recursive: true });
+mkdirSync(join(DIST_ROOT, 'rebates'), { recursive: true });
 
 // 2. Copy every file listed in FILES.
 for (const [src] of FILES) {
@@ -243,4 +269,4 @@ for (const [, dest] of FILES) {
 }
 console.log(`OK dist/vendor/privy ${privyCount} files ${privyBytes} bytes`);
 total += privyBytes;
-console.log(`dist_files=300 dist_bytes=${total}`);
+console.log(`dist_files=${FILES.length + privyCount} dist_bytes=${total}`);
