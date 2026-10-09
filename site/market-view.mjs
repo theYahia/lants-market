@@ -12,6 +12,7 @@ import {
 } from './market-config.mjs';
 import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn } from './metrics.mjs';
+import { freshTip, freshNote } from './portfolio-fresh.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
 // pulled in via a static import at module load (a headless watchdog that does
@@ -372,16 +373,6 @@ function makeSpan(field, value) {
   return s;
 }
 
-// Micro info icon for rows newer than the snapshot: lock shows raw weeks until the next refresh.
-function freshNote(tip) {
-  const info = document.createElement('span');
-  info.className = 'info';
-  info.tabIndex = 0;
-  info.dataset.tip = tip;
-  info.textContent = 'ⓘ';
-  return info;
-}
-
 // Sales panel: sold lots read from the chain. Internal trades are listed, labelled, and kept out of volume/FDV.
 function updateSales(items, snapshot) {
   const panel = document.getElementById('sales-panel');
@@ -537,7 +528,7 @@ function render(snapshot, items) {
     }
     lockSpan.textContent = lockVal;
     if (item.isLive && !pos && item.chainStakeEnd != null) {
-      lockSpan.appendChild(freshNote('Created after the last snapshot: lock shows raw weeks. Exit appears after the next snapshot refresh.'));
+      lockSpan.appendChild(freshNote(freshTip(snapshot && snapshot.epoch)));
     }
     row.appendChild(lockSpan);
 
@@ -1287,14 +1278,14 @@ export async function renderMyPositions(account, ids, snapshot) {
     row.className = isFresh ? 'pf-pos-row is-fresh' : 'pf-pos-row';
     row.dataset.id = id.toString();
     if (isFresh) {
-      row.title = 'Created after the last snapshot: "max", reward and exit appear after the next snapshot refresh.';
+      row.title = freshTip(snapshot && snapshot.epoch);
     }
 
     row.appendChild(makeSpan('id', '#' + id.toString()));
     row.appendChild(makeSpan('amount', amount.toFixed(2)));
     const lockSpan = makeSpan('lock', String(lockWeeks));
     if (isFresh) {
-      lockSpan.appendChild(freshNote('Created after the last snapshot: lock shows raw weeks. "max", reward and exit appear after the next snapshot refresh.'));
+      lockSpan.appendChild(freshNote(row.title));
     }
     row.appendChild(lockSpan);
     row.appendChild(makeSpan('reward', rewardText));
