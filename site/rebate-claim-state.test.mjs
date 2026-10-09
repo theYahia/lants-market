@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { claimState, statusText } from './rebate-claim-state.mjs';
+import { claimState, statusText, pickCanonical, isCanonicalCampaign } from './rebate-claim-state.mjs';
+import { campaignParams } from './rebate-campaign.mjs';
 
 const ROOT = '0x' + 'ab'.repeat(32);
 const OTHER = '0x' + 'cd'.repeat(32);
@@ -86,4 +87,86 @@ test('statusText carries the words the board shows', () => {
   assert.match(statusText('root_mismatch', null), /root mismatch/);
   assert.match(statusText('claims_open', { sweepAfter: 1792662861 }), /claims open · claim by 2026-10-22/);
   assert.match(statusText('sweepable', { remaining: '1000000' }), /unclaimed \$1\.00/);
+});
+
+// --- canonical campaign selection (F1): a foreign campaign on the same
+// (epoch, pool) must never be shown or hide the seller's launch button ---
+
+const PAYER = '0x3d4cccfaa3b25997f4ab33f838558521259eef1b';
+const CAMPAIGN_WALLET = '0x2222222222222222222222222222222222222222';
+const ATTACKER = '0x9999999999999999999999999999999999999999';
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+
+const CANON_OFFER = { type: 'rebate', pool: '11111', epochs: [28], pctBps: 300, capUsdc: 10, payer: PAYER };
+const CANON_PARAMS = campaignParams(CANON_OFFER, 28);
+
+const canonicalCampaign = (owner, over = {}) => ({
+  owner,
+  pendingOwner: ZERO_ADDR,
+  cancelDeadline: BigInt(CANON_PARAMS.cancelDeadline),
+  finalizeDeadline: BigInt(CANON_PARAMS.finalizeDeadline),
+  claimWindow: BigInt(CANON_PARAMS.claimWindow),
+  epochId: 28n,
+  poolId: '11111',
+  root: ZERO,
+  total: 0n,
+  funded: 10000000n,
+  claimed: 0n,
+  sweepAfter: 0n,
+  ...over
+});
+
+const authorization = (over = {}) => ({
+  payer: PAYER,
+  campaignWallet: CAMPAIGN_WALLET,
+  epochId: 28,
+  poolId: '11111',
+  cancelDeadline: CANON_PARAMS.cancelDeadline,
+  finalizeDeadline: CANON_PARAMS.finalizeDeadline,
+  claimWindow: CANON_PARAMS.claimWindow,
+  signature: '0x' + 'ab'.repeat(65),
+  ...over
+});
+
+test('canonical: a lone squatter is not canonical, so launch stays visible', () => {
+  const candidates = [{ id: 9n, owner: ATTACKER }];
+  const campaigns = { 9: canonicalCampaign(ATTACKER) };
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, null), null);
+  // What the UI does with the null: no campaign block, the state machine shows launch.
+  const state = call(500, null, null);
+  assert.equal(state.state, 'awaiting_launch');
+  assert.equal(state.actions.launch, true);
+});
+
+test('canonical: a squatter newer than the payer campaign loses', () => {
+  const candidates = [
+    { id: 7n, owner: ATTACKER },
+    { id: 3n, owner: PAYER }
+  ];
+  const campaigns = { 7: canonicalCampaign(ATTACKER), 3: canonicalCampaign(PAYER) };
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, null), 3n);
+});
+
+test('canonical: the authorized campaign wallet of the payer is accepted', () => {
+  const candidates = [{ id: 4n, owner: CAMPAIGN_WALLET }];
+  const campaigns = { 4: canonicalCampaign(CAMPAIGN_WALLET) };
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, authorization()), 4n);
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, null), null, 'same wallet without an authorization');
+});
+
+test('canonical: an authorization with different deadlines does not match', () => {
+  const candidates = [{ id: 4n, owner: CAMPAIGN_WALLET }];
+  const campaigns = { 4: canonicalCampaign(CAMPAIGN_WALLET) };
+  const stale = authorization({ cancelDeadline: CANON_PARAMS.cancelDeadline - 1 });
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, stale), null);
+  const wrongPay = authorization({ payer: ATTACKER });
+  assert.equal(pickCanonical(candidates, campaigns, CANON_OFFER, wrongPay), null);
+});
+
+test('canonical: deadlines that do not match the epoch-derived params are rejected', () => {
+  const skewed = canonicalCampaign(PAYER, { finalizeDeadline: BigInt(CANON_PARAMS.finalizeDeadline + 3600) });
+  assert.equal(isCanonicalCampaign(skewed, CANON_OFFER, null), false);
+  const wrongPool = canonicalCampaign(PAYER, { poolId: '44694' });
+  assert.equal(isCanonicalCampaign(wrongPool, CANON_OFFER, null), false);
+  assert.equal(isCanonicalCampaign(canonicalCampaign(PAYER), CANON_OFFER, null), true);
 });

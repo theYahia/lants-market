@@ -838,7 +838,7 @@ def main():
         tree_bad["leaves"][0]["proof"] = [ROOT_AB]
 
         camp_a = {"owner": OFFER["payer"], "pendingOwner": "0x" + "00" * 20, "cancelDeadline": 1792058061,
-                  "finalizeDeadline": 1792662861, "claimWindow": 1209600, "epochId": 27, "poolId": "52894",
+                  "finalizeDeadline": 1792922061, "claimWindow": 1209600, "epochId": 27, "poolId": "52894",
                   "root": tree_a["root"], "total": int(tree_a["total"]), "funded": 20000000, "claimed": 0,
                   "sweepAfter": SWEEP_FAR}
         camp_b = dict(camp_a, poolId="44694", root=ROOT_AB, total=500000)

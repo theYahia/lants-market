@@ -19,7 +19,7 @@ import { keccakConcat } from './keccak.mjs';
 import { loadClaimsConfig } from './rebate-claim-chain.mjs';
 import { humanError } from './market-view.mjs';
 import { el, button, currentAccount, renderActions } from './rebate-claim-actions.mjs';
-import { OFFERS_URLS, loadJson, offerData, payerLink } from './rebate-claim-data.mjs';
+import { OFFERS_URLS, loadJson, offerData } from './rebate-claim-data.mjs';
 
 // --- merkle proof verification (same convention as site/rebate-tree.mjs) ---
 const word = (v) => '0x' + BigInt(v).toString(16).padStart(64, '0');
@@ -47,7 +47,7 @@ export function verifyTree(tree) {
 }
 
 async function renderOffer(block, offer, config, account) {
-  const { epoch, params, tree, campaignFile, campaignId, campaign } = await offerData(offer, config);
+  const { epoch, params, tree, campaignId, campaign, warn } = await offerData(offer, config);
   const head = el('div', 'inc-claim-head', `Rebate · pool ${offer.pool} · epoch ${epoch}`);
   block.appendChild(head);
 
@@ -63,6 +63,9 @@ async function renderOffer(block, offer, config, account) {
   if (tree && !verifyTree(tree)) {
     block.appendChild(el('div', 'inc-claim-warn', 'published tree failed local verification — do not claim'));
     return;
+  }
+  if (warn) {
+    block.appendChild(el('div', 'inc-claim-warn', warn));
   }
   // The published campaign params must match the offer and the epoch; a
   // mismatch disables every launch/finalize action.
@@ -89,9 +92,6 @@ async function renderOffer(block, offer, config, account) {
     block.appendChild(el('div', 'inc-claim-warn', 'campaign params mismatch — claim disabled'));
     block.appendChild(msg);
     return;
-  }
-  if (campaign && config && payerLink(offer, campaign, campaignFile) === 'none') {
-    block.appendChild(el('div', 'inc-claim-warn', 'campaign not verified with the payer'));
   }
 
   const actions = state.actions;

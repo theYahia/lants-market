@@ -62,16 +62,18 @@ export async function loadClaimsConfig(url = './rebate-claims.json') {
 }
 
 // CampaignCreated scan (fallback when rebates/<N>-<pool>.campaign.json is not
-// published). Newest-first in 2,000-block windows, capped. Results — including
-// a negative one — are cached per session and per (epoch, pool), so a page
-// render pays for at most one scan per offer instead of one per refresh.
+// published). Newest-first in 2,000-block windows, capped; every campaign of
+// the (epoch, pool) pair is returned oldest-first so the caller can pick the
+// canonical one (see pickCanonical). Results — including an empty list — are
+// cached per session and per (epoch, pool), so a page render pays for at most
+// one scan per offer instead of one per refresh.
 const campaignCache = new Map();
 
-export async function findCampaignId({ address, deployBlock, epochId, poolId, maxWindows = 400 }) {
+export async function findCampaigns({ address, deployBlock, epochId, poolId, maxWindows = 400 }) {
   const key = `${String(address).toLowerCase()}:${epochId}:${poolId}`;
   if (campaignCache.has(key)) return campaignCache.get(key);
 
-  let found = null;
+  const found = [];
   const latest = Number(BigInt(await rpc('eth_blockNumber', [])));
   const from0 = deployBlock ? Number(deployBlock) : 0;
   let to = latest;
@@ -82,14 +84,12 @@ export async function findCampaignId({ address, deployBlock, epochId, poolId, ma
     ]);
     for (const l of logs) {
       const p = parseCampaignCreated(l);
-      if (p && p.epochId === BigInt(epochId) && p.poolId === String(poolId)) {
-        found = p;
-        break;
-      }
+      if (p && p.epochId === BigInt(epochId) && p.poolId === String(poolId)) found.push(p);
     }
-    if (found || from === from0) break;
+    if (from === from0) break;
     to = from - 1;
   }
+  found.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   campaignCache.set(key, found);
   return found;
 }

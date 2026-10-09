@@ -1,10 +1,12 @@
 // Data loading for the rebate claim panel: offers.json, the published
-// rebates/<epoch>-<pool>.* files, the offer's campaign (from campaign.json or
-// the CampaignCreated scan) and the payer-authorization bindings. Split out of
-// rebate-claim.mjs to keep both files small.
+// rebates/<epoch>-<pool>.* files and the offer's canonical campaign — the one
+// whose owner is provably the payer's (campaign.json campaignId first, else
+// the CampaignCreated scan). Foreign campaigns on the same (epoch, pool) are
+// ignored. Split out of rebate-claim.mjs to keep both files small.
 
 import { decodeCampaign, encCampaignData } from './rebate-claims-abi.mjs';
-import { ethCall, findCampaignId } from './rebate-claim-chain.mjs';
+import { ethCall, findCampaigns } from './rebate-claim-chain.mjs';
+import { isCanonicalCampaign, pickCanonical } from './rebate-claim-state.mjs';
 
 export const OFFERS_URLS = [
   'https://raw.githubusercontent.com/theYahia/lants-market/main/site/offers.json',
@@ -33,29 +35,6 @@ async function loadRebateFile(name) {
   return null;
 }
 
-// Publication-time verified payer authorization, re-checked for its bindings.
-export function payerLink(offer, campaign, campaignFile) {
-  if (!campaign) return 'none';
-  const owner = campaign.owner.toLowerCase();
-  if (owner === offer.payer.toLowerCase()) return 'owner';
-  const a = campaignFile && campaignFile.payerAuthorization;
-  if (
-    a &&
-    a.signature &&
-    a.signatureVerified === true &&
-    String(a.payer).toLowerCase() === offer.payer.toLowerCase() &&
-    String(a.campaignWallet).toLowerCase() === owner &&
-    Number(a.epochId) === offer.epochs[0] &&
-    String(a.poolId) === String(offer.pool) &&
-    Number(a.cancelDeadline) === Number(campaign.cancelDeadline) &&
-    Number(a.finalizeDeadline) === Number(campaign.finalizeDeadline) &&
-    Number(a.claimWindow) === Number(campaign.claimWindow)
-  ) {
-    return 'authorization';
-  }
-  return 'none';
-}
-
 export async function offerData(offer, config) {
   const epoch = offer.epochs[0];
   const base = `${epoch}-${offer.pool}`;
@@ -64,21 +43,42 @@ export async function offerData(offer, config) {
     loadRebateFile(`${base}.tree.json`),
     loadRebateFile(`${base}.campaign.json`)
   ]);
-  let campaignId = campaignFile && campaignFile.campaignId !== undefined ? BigInt(campaignFile.campaignId) : null;
+  const authorization = (campaignFile && campaignFile.payerAuthorization) || null;
+  const fileId =
+    campaignFile && campaignFile.campaignId !== undefined && campaignFile.campaignId !== null
+      ? BigInt(campaignFile.campaignId)
+      : null;
+  let campaignId = null;
   let campaign = null;
+  let warn = null;
   if (config) {
+    if (fileId !== null) {
+      const decoded = decodeCampaign(await ethCall(config.address, encCampaignData(fileId)));
+      if (isCanonicalCampaign(decoded, offer, authorization)) {
+        campaignId = fileId;
+        campaign = decoded;
+      } else {
+        warn = `campaign ${fileId} from campaign.json is not the payer's campaign — ignored`;
+      }
+    }
     if (campaignId === null) {
-      const found = await findCampaignId({
+      const candidates = await findCampaigns({
         address: config.address,
         deployBlock: config.deployBlock,
         epochId: epoch,
         poolId: offer.pool
       });
-      if (found) campaignId = found.id;
-    }
-    if (campaignId !== null) {
-      campaign = decodeCampaign(await ethCall(config.address, encCampaignData(campaignId)));
+      const campaignsById = {};
+      for (const c of candidates) {
+        if (fileId !== null && c.id === fileId) continue; // checked (and rejected) above
+        campaignsById[String(c.id)] = decodeCampaign(await ethCall(config.address, encCampaignData(c.id)));
+      }
+      const picked = pickCanonical(candidates, campaignsById, offer, authorization);
+      if (picked !== null) {
+        campaignId = picked;
+        campaign = campaignsById[String(picked)];
+      }
     }
   }
-  return { epoch, base, params, tree, campaignFile, campaignId, campaign };
+  return { epoch, base, params, tree, campaignFile, campaignId, campaign, warn };
 }
