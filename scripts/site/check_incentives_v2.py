@@ -148,14 +148,26 @@ def starter_estimate(snap, s):
     return min(cap, sb * weekly * w2 // t) // 10**18
 
 
+def position_weights(snap):
+    """Next-epoch weight per pool from positions (sum of weightsByEpoch). The contract value equals this
+    sum; poolWeightByEpoch in the snapshot is sales-limited (pools without sales are absent), so it must
+    not be used for pool-membership questions (86897/GesundAI class, 13.10)."""
+    n = str(int(snap["epoch"]) + 1)
+    out = {}
+    for p in snap.get("positions", []):
+        a = str(p["agentId"])
+        out[a] = out.get(a, 0) + int(str(p.get("weightsByEpoch", {}).get(n, "0") or "0"))
+    return out
+
+
 def nopool_lists(snap):
     gen = int(datetime.fromisoformat(snap["generatedAt"].replace("Z", "+00:00")).timestamp())
-    n = str(int(snap["epoch"]) + 1)
+    posw = position_weights(snap)
     active, inactive = [], []
     for pid, s in sorted(snap["sellersById"].items(), key=lambda kv: -int(kv[1]["earnedUsdc"])):
         if int(s["earnedUsdc"]) < NOPOOL_EARNED:
             continue
-        if str(snap["poolWeightByEpoch"].get(pid, {}).get(n, "0") or "0") != "0":
+        if posw.get(pid, 0) != 0:
             continue
         (active if gen - s["lastSeenAt"] <= ACTIVE_SECS else inactive).append((pid, s))
     return active, inactive
@@ -164,7 +176,7 @@ def nopool_lists(snap):
 def net_line(snap):
     n = str(int(snap["epoch"]) + 1)
     budget = int(snap["stakerBudgetNext"]) // 10**18
-    weight = sum(int(v.get(n, "0") or 0) for v in snap["poolWeightByEpoch"].values())
+    weight = sum(position_weights(snap).values())  # весь стейк сети; poolWeightByEpoch sales-limited
     staked = weight / 1e18 / 104
     avg = round(budget / staked * 1000)
     return f"Network, epoch {n}: {fmt(budget)} ANTS to stakers · {fmt(round(staked))} ANTS staked · {avg} per 1,000 on average"

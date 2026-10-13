@@ -334,7 +334,6 @@ function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
       output.textContent = '';
       return;
     }
-    const poolWeights = snapshot.poolWeightByEpoch?.[pool];
     const wNext = poolData.get(pool)?.WN || 0;
     if (wNext === 0) {
       output.textContent = 'This pool is not counted next epoch.';
@@ -391,6 +390,7 @@ function buildNoPool(snapshot, poolNames) {
   const e = Number(snapshot.epoch);
   const nextEpoch = String(e + 1);
   const genSecs = Math.floor(new Date(snapshot.generatedAt).getTime() / 1000);
+  const positions = snapshot.positions || [];
 
   const usage = snapshot.usageByEpoch?.[String(e)] || {};
   const sb = BigInt(usage.sellerBudget || '0');
@@ -410,12 +410,22 @@ function buildNoPool(snapshot, poolNames) {
     return (v < cap ? v : cap) / 10n ** 18n;
   };
 
+  // Пул здесь = несёт вес в следующей эпохе. Считаем вес из positions (сумма weightsByEpoch) — так же,
+  // как доска, — а НЕ из poolWeightByEpoch: последний enrich-snapshot заполняет ТОЛЬКО для пулов с
+  // продажами, и продавец с живым толстым пулом без свежих продаж (GesundAI 87124, 13.10: вес 10.7M)
+  // ошибочно попадал в «Selling, but no pool». Сумма позиционных весов = poolWeightAtEpoch
+  // (сверено на Apex 52894: 18.78M в обоих источниках).
+  const nextEpochWeight = new Map();
+  for (const pos of positions) {
+    const pool = String(pos.agentId);
+    nextEpochWeight.set(pool, (nextEpochWeight.get(pool) || 0n) + BigInt(String(pos.weightsByEpoch?.[nextEpoch] || '0')));
+  }
+
   const sellers = [];
   for (const [id, s] of Object.entries(snapshot.sellersById || {})) {
     const earned = BigInt(s.earnedUsdc || '0');
     if (earned < MIN_EARNED) continue;
-    const w = BigInt(String(snapshot.poolWeightByEpoch?.[id]?.[nextEpoch] || '0'));
-    if (w !== 0n) continue;
+    if ((nextEpochWeight.get(id) || 0n) !== 0n) continue;
     sellers.push({ id, ...s, earned });
   }
   sellers.sort((a, b) => (a.earned < b.earned ? 1 : -1));
@@ -987,12 +997,12 @@ async function init() {
     const stakerBudgetBig = snapshot.stakerBudgetNext ? BigInt(snapshot.stakerBudgetNext) : 0n;
     const B = Number(stakerBudgetBig / 1000000000000000000n);
     const nextEpochStr = String(N);
+    // «S ANTS staked» = весь стейк сети, поэтому вес берём из positions (сумма weightsByEpoch), а не из
+    // poolWeightByEpoch: последний sales-limited (пулы без продаж оттуда выпадают — на 13.10 это 8 пулов
+    // и ~124.6k ANTS, занижение «застейкано» на 20%). Сумма позиционных весов = poolWeightAtEpoch.
     let totalWeight = 0n;
-    for (const poolId of Object.keys(snapshot.poolWeightByEpoch || {})) {
-      const poolWeights = snapshot.poolWeightByEpoch[poolId];
-      if (poolWeights && poolWeights[nextEpochStr]) {
-        totalWeight += BigInt(poolWeights[nextEpochStr]);
-      }
+    for (const pos of snapshot.positions || []) {
+      totalWeight += BigInt(String(pos.weightsByEpoch?.[nextEpochStr] || '0'));
     }
     const stakedFloat = Number(totalWeight) / 1e18 / 104;
     const S = Math.round(stakedFloat);
