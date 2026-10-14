@@ -356,6 +356,19 @@ function findPos(snapshot, nftId) {
   return positions.find(p => String(p.id) === key) || null;
 }
 
+// Seller pool names for the portfolio POOL column (id → display name).
+let poolNamesCache = null;
+async function loadPoolNames() {
+  if (poolNamesCache) return poolNamesCache;
+  try {
+    const res = await fetch('./pool-names.json', { cache: 'no-store' });
+    poolNamesCache = await res.json();
+  } catch {
+    poolNamesCache = {};
+  }
+  return poolNamesCache;
+}
+
 // Helper: format USDC price without trailing zeros / dot.
 function fmtPrice(raw) {
   let s = formatUnits(raw, MARKET.usdcDecimals);
@@ -847,6 +860,7 @@ export function initManagePosition() {
   const splitSel = '0xdc310451';
   const moveSel = '0x5437910a';
   const maxlockSel = '0xedcb5e4e';
+  const maxlockoffSel = '0x8e7a6bc2';
   const positionsSel = '0x99fbab88';
   const posMaxLockSel = '0xdb39a228';
   const currentEpochSel = '0x76671808';
@@ -862,6 +876,7 @@ export function initManagePosition() {
   const mfAgent = document.getElementById('mf-agent');
   const mfMoveBtn = document.getElementById('mf-move-btn');
   const mfMaxlockBtn = document.getElementById('mf-maxlock-btn');
+  const mfMaxlockOffBtn = document.getElementById('mf-maxlockoff-btn');
   const manageStatus = document.getElementById('manage-status');
   const brBuyer = document.getElementById('br-buyer');
   const brEpoch = document.getElementById('br-epoch');
@@ -914,6 +929,7 @@ export function initManagePosition() {
       // the contract reverts split and move on a max-locked position (PositionClosed)
       mfSplitBtn.disabled = maxLock;
       mfMoveBtn.disabled = maxLock;
+      if (mfMaxlockOffBtn) mfMaxlockOffBtn.disabled = !maxLock;
       setStatus(mfCard, `Position ${id.toString()} · ${amount.toString()} ANTS · pool ${agentId.toString()} · rewards from epoch ${stakeStartEpoch.toString()} · ${maxLock ? 'max-lock ON: split and move are disabled' : 'max-lock off'}`);
     } catch (e) {
       mfSplitBtn.disabled = false;
@@ -1062,6 +1078,25 @@ export function initManagePosition() {
     setStatus(manageStatus, 'Max-lock enabled: power stays at amount x 104. Split and move are now disabled for this position.');
   });
 
+  if (mfMaxlockOffBtn) {
+    mfMaxlockOffBtn.addEventListener('click', async () => {
+      const posidStr = mfPosid.value.trim();
+      if (!posidStr) {
+        setStatus(manageStatus, 'Enter position id');
+        return;
+      }
+      const posid = BigInt(posidStr);
+      const receipt = await sendTx(
+        MANAGE_ADDR,
+        maxlockoffSel + encUint(posid),
+        mfMaxlockOffBtn, manageStatus, ''
+      );
+      if (!receipt) return;
+      await refreshCard();
+      setStatus(manageStatus, 'Max-lock disabled: a fresh 104-week countdown starts next epoch. Split and move are enabled again.');
+    });
+  }
+
   if (brBuyer) {
     const setBuyerDefault = () => {
       if (connectedAccount && !brBuyer.value) {
@@ -1209,7 +1244,7 @@ export async function renderMyPositions(account, ids, snapshot) {
   // Build header row
   const head = document.createElement('div');
   head.className = 'pf-pos-head';
-  ['#', 'AMOUNT', 'LOCK', 'EST. REWARD', 'EXIT', ''].forEach(text => {
+  ['#', 'POOL', 'AMOUNT', 'LOCK', 'EST. REWARD', 'EXIT', ''].forEach(text => {
     const span = document.createElement('span');
     span.textContent = text;
     head.appendChild(span);
@@ -1217,6 +1252,7 @@ export async function renderMyPositions(account, ids, snapshot) {
 
   for (const id of ids) {
     let amount, lockWeeks, rewardText, exitText, exitTitle = '', isFresh = false, skip = false;
+    let agentId = null;
 
     // a position newer than the snapshot (bought or split since the last run) is read from the chain below
     const pos = snapshot ? findPos(snapshot, id) : null;
@@ -1225,6 +1261,7 @@ export async function renderMyPositions(account, ids, snapshot) {
       // Closed filter
       if (pos.withdrawn || (Number(pos.closedAtEpoch) > 0 && Number(pos.closedAtEpoch) <= Number(snapshot.epoch))) continue;
 
+      agentId = String(pos.agentId);
       amount = Number(pos.amount) / 1e18;
       lockWeeks = isMaxLock(pos, E) ? 'max' : Math.max(0, Number(pos.stakeEndEpoch) - Number(E)) + 'w';
 
@@ -1261,6 +1298,7 @@ export async function renderMyPositions(account, ids, snapshot) {
         if (withdrawn || (closedAt > 0 && closedAt <= Number(snapshot?.epoch || 0))) continue;
 
         amount = Number(wordToBigInt(w[2])) / 1e18;
+        agentId = String(wordToBigInt(w[1]));
         const endEp = Number(wordToBigInt(w[5]));
         lockWeeks = Math.max(0, endEp - Number(E)) + 'w';
         rewardText = '—';
@@ -1282,6 +1320,12 @@ export async function renderMyPositions(account, ids, snapshot) {
     }
 
     row.appendChild(makeSpan('id', '#' + id.toString()));
+
+    const poolNames = await loadPoolNames();
+    const poolCell = makeSpan('pool', agentId != null ? (poolNames[agentId] || '#' + agentId) : '—');
+    if (agentId != null) poolCell.title = 'Seller pool ' + agentId;
+    row.appendChild(poolCell);
+
     row.appendChild(makeSpan('amount', amount.toFixed(2)));
     const lockSpan = makeSpan('lock', String(lockWeeks));
     if (isFresh) {

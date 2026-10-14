@@ -410,11 +410,12 @@ function buildNoPool(snapshot, poolNames) {
     return (v < cap ? v : cap) / 10n ** 18n;
   };
 
-  // Пул здесь = несёт вес в следующей эпохе. Считаем вес из positions (сумма weightsByEpoch) — так же,
-  // как доска, — а НЕ из poolWeightByEpoch: последний enrich-snapshot заполняет ТОЛЬКО для пулов с
-  // продажами, и продавец с живым толстым пулом без свежих продаж (GesundAI 87124, 13.10: вес 10.7M)
-  // ошибочно попадал в «Selling, but no pool». Сумма позиционных весов = poolWeightAtEpoch
-  // (сверено на Apex 52894: 18.78M в обоих источниках).
+  // A pool here = one that carries weight into the next epoch. Weight is summed from
+  // positions (weightsByEpoch), the same way the board does — NOT from poolWeightByEpoch:
+  // the latest enrich-snapshot fills that only for pools with sales, so a seller with a
+  // live fat pool but no fresh sales (GesundAI 87124, 13.10: weight 10.7M) was wrongly
+  // listed as "Selling, but no pool". Position-weight sum == poolWeightAtEpoch
+  // (cross-checked on Apex 52894: 18.78M in both sources).
   const nextEpochWeight = new Map();
   for (const pos of positions) {
     const pool = String(pos.agentId);
@@ -997,9 +998,10 @@ async function init() {
     const stakerBudgetBig = snapshot.stakerBudgetNext ? BigInt(snapshot.stakerBudgetNext) : 0n;
     const B = Number(stakerBudgetBig / 1000000000000000000n);
     const nextEpochStr = String(N);
-    // «S ANTS staked» = весь стейк сети, поэтому вес берём из positions (сумма weightsByEpoch), а не из
-    // poolWeightByEpoch: последний sales-limited (пулы без продаж оттуда выпадают — на 13.10 это 8 пулов
-    // и ~124.6k ANTS, занижение «застейкано» на 20%). Сумма позиционных весов = poolWeightAtEpoch.
+    // "S ANTS staked" = the whole network stake, so weight is summed from positions
+    // (weightsByEpoch), not from poolWeightByEpoch: the latest snapshot is sales-limited
+    // (pools without sales drop out — on 13.10 that was 8 pools and ~124.6k ANTS, a 20%
+    // undercount of "staked"). Position-weight sum == poolWeightAtEpoch.
     let totalWeight = 0n;
     for (const pos of snapshot.positions || []) {
       totalWeight += BigInt(String(pos.weightsByEpoch?.[nextEpochStr] || '0'));
