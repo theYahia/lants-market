@@ -1,6 +1,6 @@
 import test, { after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendMessage } from './telegram.mjs';
+import { sendMessage, pinMessage } from './telegram.mjs';
 
 const calls = [];
 const originalFetch = globalThis.fetch;
@@ -84,4 +84,20 @@ test('sendMessage: TG_API_URL override routes through a relay', async () => {
   okFetch();
   await sendMessage('hi', { token: 't', chatId: 'c', apiUrl: 'https://relay.example/' });
   assert.ok(calls[0].url.startsWith('https://relay.example/bott/'));
+});
+
+test('pinMessage: pins the given message id in the chat', async () => {
+  okFetch();
+  const res = await pinMessage(42, { token: '123:ABC', chatId: '@lants_alerts' });
+  assert.ok(res.ok);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.telegram.org/bot123:ABC/pinChatMessage');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.chat_id, '@lants_alerts');
+  assert.equal(body.message_id, 42);
+});
+
+test('pinMessage: throws on API rejection', async () => {
+  okFetch(() => ({ ok: true, json: async () => ({ ok: false, description: 'not enough rights' }) }));
+  await assert.rejects(() => pinMessage(1, { token: 't', chatId: 'c' }), /not enough rights/);
 });

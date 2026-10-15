@@ -12,7 +12,9 @@ export function defaultState() {
     version: STATE_VERSION,
     epochPost: null, // epoch number of the last "epoch ended" post
     rebates: {}, // "<epoch>-<pool>" -> { open: bool, warn48: bool }
-    lastRebateCheck: 0 // epoch ms of the last successful rebate watch run
+    lastRebateCheck: 0, // epoch ms of the last successful rebate watch run
+    welcomeMessageId: null, // message_id of the pinned welcome post
+    welcomePinned: null // message_id the welcome post is confirmed pinned as
   };
 }
 

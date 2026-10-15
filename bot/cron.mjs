@@ -11,7 +11,8 @@ import http from 'node:http';
 import { decideEpochPost } from './epoch-check.mjs';
 import { checkRebates, loadLocalConfig, loadVerifiedConfig, OFFERS_URLS } from './rebate-check.mjs';
 import { loadState, saveState } from './state.mjs';
-import { sendMessage, sleep } from './telegram.mjs';
+import { sendMessage, pinMessage, sleep } from './telegram.mjs';
+import { welcomeText } from './welcome.mjs';
 
 const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
 const REBATE_INTERVAL_MS = Number(process.env.REBATE_INTERVAL_MS || 6 * 60 * 60 * 1000);
@@ -149,6 +150,35 @@ function startHealthServer() {
   server.listen(HEALTH_PORT, '127.0.0.1', () => log(`health server on 127.0.0.1:${HEALTH_PORT}`));
 }
 
+// Sends the welcome post once, then keeps it pinned. Idempotent across
+// restarts: the message id survives in state, the pin is retried if it failed.
+async function ensureWelcomePin(state) {
+  if (DRY_RUN) {
+    if (!state.welcomeMessageId) log('DRY-RUN would send welcome:\n' + welcomeText());
+    return;
+  }
+  if (!state.welcomeMessageId) {
+    try {
+      const res = await sendMessage(welcomeText());
+      state.welcomeMessageId = res.result.message_id;
+      saveState(STATE_FILE, state);
+      log('sent welcome post (message_id ' + state.welcomeMessageId + ')');
+    } catch (e) {
+      log('welcome delivery failed: ' + e.message);
+      return;
+    }
+  }
+  if (state.welcomePinned === state.welcomeMessageId) return;
+  try {
+    await pinMessage(state.welcomeMessageId);
+    state.welcomePinned = state.welcomeMessageId;
+    saveState(STATE_FILE, state);
+    log('welcome post pinned');
+  } catch (e) {
+    log('pin failed (will retry on next restart): ' + e.message);
+  }
+}
+
 async function main() {
   const state = loadState(STATE_FILE);
   log(
@@ -157,6 +187,7 @@ async function main() {
   );
 
   await tick(state);
+  await ensureWelcomePin(state);
   if (ONCE) return;
 
   startHealthServer();
