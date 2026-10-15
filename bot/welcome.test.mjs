@@ -7,8 +7,8 @@ test('welcome post fits Telegram limits and names the schedule', () => {
   assert.ok(text.length <= 4096, `welcome text is ${text.length} chars`);
   assert.ok(text.includes('Thursday'));
   assert.ok(text.includes('09:54 UTC'));
-  assert.ok(text.includes('rebate'));
-  assert.ok(text.includes('48h'));
+  assert.ok(text.includes('Claim'));
+  assert.ok(text.includes('Restake'));
 });
 
 test('welcome post mentions the site as the place to claim', () => {
@@ -16,8 +16,9 @@ test('welcome post mentions the site as the place to claim', () => {
   assert.ok(text.includes('lants.eth.limo'));
 });
 
-test('welcome post does not advertise the not-yet-launched Incentives tab', () => {
+test('welcome post does not advertise rebates or the not-yet-launched Incentives tab', () => {
   const text = welcomeText();
+  assert.ok(!text.includes('rebate'));
   assert.ok(!text.includes('Incentives'));
   assert.ok(!text.includes('#incentives'));
 });

@@ -8,8 +8,6 @@ export function welcomeText() {
     'This bot posts claim reminders for lANTS / AntSeed (Base):',
     '',
     '• Weekly, on Thursday after the epoch closes (09:54 UTC) — staker rewards for the finished epoch are claimable (Claim or Restake), buyer rewards can be staked into a seller pool.',
-    '• When a rebate claim window opens — one post with the deadline.',
-    '• 48h before a rebate window closes — one last-chance reminder.',
     '',
     'Claim everything on the site:',
     '',
