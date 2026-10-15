@@ -2,14 +2,25 @@
 // statuses and trust checks work before connecting. Browser + Node (fetch).
 // Everything is pinned to the canonical USDC on Base 8453.
 
-import { SEL, TOPIC, decodeAddress, parseCampaignCreated } from './rebate-claims-abi.mjs';
+import { SEL, TOPIC, decodeAddress, decodeCampaign, encCampaignData, parseCampaignCreated } from './rebate-claims-abi.mjs';
 import { keccak256 } from './keccak.mjs';
+
+// --- Constants ---------------------------------------------------------------
 
 export const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 export const CHAIN_ID = 8453;
 const RPC_URLS = ['https://mainnet.base.org', 'https://base-mainnet.public.blastapi.io'];
 
+// nextCampaignId() — public state counter (selector precomputed with viem).
+const NEXT_CAMPAIGN_ID_SELECTOR = '0x7903a756';
+// Public RPCs now cap eth_getLogs ranges hard (blastapi: 10 blocks), so the
+// primary campaign lookup enumerates ids through eth_call; the event scan
+// stays as a fallback for deployments where the counter read fails.
+const MAX_ENUM_CAMPAIGNS = 64;
+
 const hex = (n) => '0x' + BigInt(n).toString(16);
+
+// --- Low-level RPC -----------------------------------------------------------
 
 export async function rpc(method, params) {
   let last = new Error('rpc: no endpoint');
@@ -38,6 +49,8 @@ export async function ethCall(to, data) {
   return rpc('eth_call', [{ to, data }, 'latest']);
 }
 
+// --- Trust check -------------------------------------------------------------
+
 // The published rebate-claims.json (dist), re-checked against the chain:
 // chainId, code presence, keccak(runtime code), USDC(). Returns null when the
 // file is absent (contract not deployed yet) and throws on a mismatch.
@@ -61,18 +74,34 @@ export async function loadClaimsConfig(url = './rebate-claims.json') {
   return j;
 }
 
-// CampaignCreated scan (fallback when rebates/<N>-<pool>.campaign.json is not
-// published). Newest-first in 2,000-block windows, capped; every campaign of
-// the (epoch, pool) pair is returned oldest-first so the caller can pick the
-// canonical one (see pickCanonical). Results — including an empty list — are
-// cached per session and per (epoch, pool), so a page render pays for at most
-// one scan per offer instead of one per refresh.
+// --- Campaign lookup ---------------------------------------------------------
+
+// Results — including an empty list — are cached per session and per
+// (epoch, pool), so a page render pays for at most one lookup per offer
+// instead of one per refresh.
 const campaignCache = new Map();
 
-export async function findCampaigns({ address, deployBlock, epochId, poolId, maxWindows = 400 }) {
-  const key = `${String(address).toLowerCase()}:${epochId}:${poolId}`;
-  if (campaignCache.has(key)) return campaignCache.get(key);
+// Primary: walk ids from the nextCampaignId counter and read each campaign.
+// Returns candidates for the (epoch, pool) pair, oldest-first, or throws when
+// the counter read fails or grows past the enumeration bound.
+async function enumerateCampaigns({ address, epochId, poolId }) {
+  const next = BigInt(await ethCall(address, NEXT_CAMPAIGN_ID_SELECTOR));
+  if (next > BigInt(MAX_ENUM_CAMPAIGNS)) {
+    throw new Error('campaign counter above the enumeration bound');
+  }
+  const found = [];
+  for (let id = 0n; id < next; id++) {
+    const c = decodeCampaign(await ethCall(address, encCampaignData(id)));
+    if (c.epochId === BigInt(epochId) && String(c.poolId) === String(poolId)) {
+      found.push({ id, owner: c.owner, epochId: c.epochId, poolId: c.poolId });
+    }
+  }
+  return found;
+}
 
+// Fallback: CampaignCreated events, newest-first in 2,000-block windows.
+// Returns the same candidate shape as enumerateCampaigns, oldest-first.
+async function scanCampaignCreated({ address, deployBlock, epochId, poolId, maxWindows }) {
   const found = [];
   const latest = Number(BigInt(await rpc('eth_blockNumber', [])));
   const from0 = deployBlock ? Number(deployBlock) : 0;
@@ -90,13 +119,27 @@ export async function findCampaigns({ address, deployBlock, epochId, poolId, max
     to = from - 1;
   }
   found.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return found;
+}
+
+export async function findCampaigns({ address, deployBlock, epochId, poolId, maxWindows = 400 }) {
+  const key = `${String(address).toLowerCase()}:${epochId}:${poolId}`;
+  if (campaignCache.has(key)) return campaignCache.get(key);
+
+  let found;
+  try {
+    found = await enumerateCampaigns({ address, epochId, poolId });
+  } catch {
+    found = await scanCampaignCreated({ address, deployBlock, epochId, poolId, maxWindows });
+  }
   campaignCache.set(key, found);
   return found;
 }
 
+// --- Simulation --------------------------------------------------------------
+
 // Simulate a transaction from `from` via eth_call; throws with the revert data
 // on failure so the UI can refuse to open the wallet.
 export async function simulate(from, to, data) {
-  const res = await rpc('eth_call', [{ from, to, data }, 'latest']);
-  return res;
+  return rpc('eth_call', [{ from, to, data }, 'latest']);
 }
