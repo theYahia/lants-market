@@ -43,23 +43,35 @@ Environment:
 | `REBATE_INTERVAL_MS` | rebate watch throttle (default 6 h) |
 | `STATE_FILE` | dedupe state path (default `bot/data/state.json`) |
 
-## Deploy (sxsi.agency container)
+## Deploy
+
+**Prod: Coolify on the akilon-box (37.140.241.171).** The root
+`../docker-compose.yml` is the Coolify deployment: the container runs in the
+host network (only that way it can reach the host sing-box on
+`127.0.0.1:10808`, the box's only path to api.telegram.org) and routes only
+Telegram through it; Base RPC / the site / GitHub stay direct via `NO_PROXY`.
+Coolify app: project `stablebots`, app `lants-alerts`
+(`iqfc2vo5wmuu2kwxmb2wkxd3`), git `theYahia/lants-market` branch `bot-alerts`,
+build pack docker compose. Secrets (`TG_BOT_TOKEN`, `TG_CHAT_ID`) live in the
+Coolify env store; keep the proxy vars (`NODE_USE_ENV_PROXY`, `HTTPS_PROXY`,
+`NO_PROXY`) OUT of the store — as build-time env they would break the Docker
+Hub pull (BuildKit would try the proxy inside the builder). They are literals
+in the compose file. State volume: `/home/botuser/lants-alerts/data` on the box.
+
+**Alternative: sxsi.agency container** (`bot/docker-compose.yml`): bridge
+network, direct Telegram egress, secrets in `bot/.env`.
+
+Setup on any host:
 
 1. Create the bot with @BotFather, get the token.
-2. Create the public channel, add the bot as **admin** (it only needs to post).
-3. Put the two values into `bot/.env` (gitignored):
+2. Add the bot to the chat/channel and note its id (private chat number or
+   channel `@username`).
+3. Set the two values in the host's secret store (Coolify env store or
+   `bot/.env`, gitignored).
+4. Deploy: Coolify redeploy, or `cd bot && docker compose up -d --build`.
 
-   ```
-   TG_BOT_TOKEN=123456:AA…
-   TG_CHAT_ID=@lants_alerts
-   ```
-
-4. `cd bot && docker compose up -d --build`
-
-The state file (`./data/state.json`) records what was already posted, so
-restarts never repeat a message. On sxsi.agency Telegram is reachable
-directly; no relay is needed. On the RU prod box (37.140.241.171) set
-`TG_API_URL` to the Cloudflare relay.
+The state file (`data/state.json`) records what was already posted, so
+restarts never repeat a message.
 
 ## Files
 
