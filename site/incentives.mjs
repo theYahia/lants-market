@@ -972,7 +972,6 @@ async function init() {
     const mode = rewardMode(snapshot);
     const e = Number(mode.epoch);
     const N = e + 1;
-    const boundary = epochBoundary(N);
 
     let offers = null;
     try {
@@ -985,9 +984,16 @@ async function init() {
     header.className = 'inc-header';
     header.innerHTML = '';
     const title = document.createElement('h2');
+    // The banner advertises the first epoch that has not started yet. It is
+    // wall-clock based, so it rolls to the next epoch right at the boundary
+    // instead of waiting for the next published snapshot.
     const setTitle = () => {
-      const left = formatCountdown(boundary.getTime() - Date.now());
-      title.textContent = `Epoch ${N} · stake now to count from it · starts ${formatUtc(boundary)} · in ${left}`;
+      const now = Date.now();
+      let n = Number(mode.epoch) + 1;
+      while (epochBoundary(n).getTime() <= now) n += 1;
+      const nextBoundary = epochBoundary(n);
+      const left = formatCountdown(nextBoundary.getTime() - now);
+      title.textContent = `Epoch ${n} · stake now to count from it · starts ${formatUtc(nextBoundary)} · in ${left}`;
     };
     setTitle();
     setInterval(setTitle, 60000);
