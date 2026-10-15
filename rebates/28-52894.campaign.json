@@ -1,4 +1,5 @@
 {
+  "campaignId": "0",
   "payerAuthorization": {
     "chainId": 8453,
     "claimsAddress": "0x66b0b672f8ac84d0172a00927a20f267ebbf39f1",
