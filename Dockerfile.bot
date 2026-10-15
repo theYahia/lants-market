@@ -1,0 +1,20 @@
+# lANTS alerts bot — posts claim reminders into a Telegram channel.
+# Build context: the repo root (lants-market/). No build step: plain Node ESM.
+# Node 24: native fetch honors NODE_USE_ENV_PROXY/HTTPS_PROXY — on the RU prod
+# box Telegram is reachable only through the host sing-box (127.0.0.1:10808).
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY bot/ bot/
+
+# The site modules the bot reuses (pure, no DOM/bundler): epochs, the claim
+# ABI, the campaign state machine, the pinned claims config and pool names.
+COPY site/epochs.mjs site/keccak.mjs site/rebate.mjs site/rebate-campaign.mjs \
+     site/rebate-claims-abi.mjs site/rebate-claim-state.mjs site/rebate-claim-chain.mjs \
+     site/rebate-claims.json site/pool-names.json site/
+
+ENV NODE_ENV=production
+ENV STATE_FILE=/app/bot/data/state.json
+
+CMD ["node", "bot/cron.mjs"]

@@ -1,0 +1,19 @@
+# Run on sxsi.agency (direct Telegram egress):
+#   cd lants-market/bot && docker compose up -d --build
+# Secrets stay in .env (gitignored), the state file survives restarts in ./data.
+services:
+  lants-alerts:
+    build:
+      context: ..
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Optional overrides:
+      # TG_API_URL: https://tg-relay.example (behind a relay on RU boxes)
+      # RPC_URLS: https://mainnet.base.org,https://base-mainnet.public.blastapi.io
+      # TICK_MS: 600000
+      # REBATE_INTERVAL_MS: 21600000
+    volumes:
+      - ./data:/app/bot/data

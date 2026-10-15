@@ -1,0 +1,32 @@
+# Coolify (RU prod box 37.140.241.171) deployment of the lANTS alerts bot.
+# The box cannot reach api.telegram.org directly; the host sing-box on
+# 127.0.0.1:10808 does, so the container runs in the host network and routes
+# only Telegram through it (NO_PROXY keeps Base RPC / site / GitHub direct).
+# Secrets live in the Coolify env store: TG_BOT_TOKEN, TG_CHAT_ID.
+# State survives restarts in /home/botuser/lants-alerts/data (created on the box).
+services:
+  lants-alerts:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    image: lants-alerts:latest
+    container_name: lants-alerts
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NODE_USE_ENV_PROXY: "1"
+      HTTPS_PROXY: http://127.0.0.1:10808
+      NO_PROXY: mainnet.base.org,base-mainnet.public.blastapi.io,lants.eth.limo,raw.githubusercontent.com,api.github.com
+      STATE_FILE: /app/bot/data/state.json
+      HEALTH_PORT: "18089"
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN}
+      TG_CHAT_ID: ${TG_CHAT_ID}
+    volumes:
+      - /home/botuser/lants-alerts/data:/app/bot/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:18089/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
