@@ -8,7 +8,8 @@ export const walletRequest = (args) => (selectedProvider ?? window.ethereum).req
 
 import {
   MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
-  cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS
+  cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS,
+  encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
 import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn } from './metrics.mjs';
@@ -1233,6 +1234,26 @@ export function initCancelHandler() {
   });
 }
 
+// Index the row's pool rewards when the finished epochs still hold unindexed
+// pending. Updates the button text; returns true when it is safe to proceed
+// with the claim/restake transaction.
+async function indexPoolRewardsIfNeeded(target, rowEl, originalText, from, nextLabel) {
+  if (rowEl.dataset.needsIndex !== '1' || !rowEl.dataset.agentId) return true;
+  target.textContent = 'Indexing...';
+  const idxHash = await walletRequest({
+    method: 'eth_sendTransaction',
+    params: [{ from, to: MARKET.stakerRewards, data: encIndexPoolRewards(BigInt(rowEl.dataset.agentId), 2n) }]
+  });
+  const idxReceipt = await waitReceipt(idxHash);
+  if (!idxReceipt || idxReceipt.status !== '0x1') {
+    target.textContent = 'Index failed';
+    setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
+    return false;
+  }
+  target.textContent = nextLabel;
+  return true;
+}
+
 export async function renderMyPositions(account, ids, snapshot) {
   const container = document.getElementById('pf-positions');
   if (!container) return;
@@ -1240,6 +1261,17 @@ export async function renderMyPositions(account, ids, snapshot) {
   container.textContent = '';
   const E = snapshot ? String(Number(snapshot.epoch) + 1) : '0';
   const rows = [];
+
+  // Live current epoch so the just-finished epoch can be checked on-chain,
+  // not against a possibly stale snapshot.
+  let finishedEpoch = null;
+  try {
+    const epochRaw = await ethCallTo(MARKET.nft, '0x76671808'); // currentEpoch()
+    const epochWords = decodeWords(epochRaw);
+    if (epochWords.length > 0) finishedEpoch = wordToBigInt(epochWords[0]) - 1n;
+  } catch (e) {
+    console.error('Error reading current epoch', e);
+  }
 
   // Build header row
   const head = document.createElement('div');
@@ -1315,6 +1347,7 @@ export async function renderMyPositions(account, ids, snapshot) {
     const row = document.createElement('div');
     row.className = isFresh ? 'pf-pos-row is-fresh' : 'pf-pos-row';
     row.dataset.id = id.toString();
+    row.dataset.agentId = agentId ?? '';
     if (isFresh) {
       row.title = freshTip(snapshot && snapshot.epoch);
     }
@@ -1371,13 +1404,55 @@ export async function renderMyPositions(account, ids, snapshot) {
     }
     if (!Number.isFinite(restakeAnts) || restakeAnts < 0) restakeAnts = 0;
 
+    // The just-finished epoch may hold rewards nobody has indexed yet: the
+    // platform keeper indexes pools some time after the boundary. Read the
+    // finished-epoch pending live so Claim/Restake can index it on click
+    // instead of waiting for the keeper.
+    // Sum the pending reward of the last two finished epochs: the click
+    // indexes up to two epochs, so the button shows the same amount the
+    // wallet will actually claim after indexing.
+    let finishedWei = 0n;
+    if (finishedEpoch != null && agentId != null) {
+      for (const ep of [finishedEpoch, finishedEpoch - 1n]) {
+        if (ep <= 0n) continue;
+        try {
+          const finRaw = await ethCallTo(MARKET.stakerRewards, SEL.pendingStakerReward + encUint(id) + encUint(ep));
+          const finWords = decodeWords(finRaw);
+          if (finWords.length > 0) finishedWei += wordToBigInt(finWords[0]);
+        } catch (e) {
+          console.error('Error reading finished-epoch reward for position', id, e);
+        }
+      }
+    }
+    const needsIndex = needsRewardIndex(finishedWei);
+    const finishedAnts = Number(finishedWei) / 1e18;
+    if (needsIndex) {
+      // The snapshot's indexed value can be stale; read it live so the button
+      // shows the amount the wallet will actually claim after indexing.
+      try {
+        const rewardRaw = await ethCallTo(MARKET.stakerRewards, SEL.restakePendingReward + encUint(id));
+        if (rewardRaw !== '0x') {
+          const freshIndexed = Number(wordToBigInt(decodeWords(rewardRaw)[0] || rewardRaw)) / 1e18;
+          if (Number.isFinite(freshIndexed) && freshIndexed >= 0) restakeAnts = freshIndexed;
+        }
+      } catch (e) {
+        console.error('Error reading live indexed reward for position', id, e);
+      }
+    }
+    row.dataset.needsIndex = needsIndex ? '1' : '0';
+
+    const claimableAnts = restakeAnts + finishedAnts;
+    const actionText = claimableAnts.toFixed(2);
+    const indexPrefix = needsIndex ? 'Index & ' : '';
+
     const restakeBtn = document.createElement('button');
     restakeBtn.className = 'pf-restake restake';
     restakeBtn.dataset.id = id.toString();
-    const restakeText = restakeAnts.toFixed(2);
-    restakeBtn.textContent = 'Restake ' + restakeText;
-    restakeBtn.title = 'Restake ' + restakeText + ' ANTS pending';
-    if (restakeAnts === 0) {
+    restakeBtn.textContent = indexPrefix + 'Restake ' + actionText;
+    restakeBtn.title = needsIndex
+      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to two finished epochs of pool rewards, then restake ' + actionText + ' ANTS.'
+      : 'Restake ' + actionText + ' ANTS pending';
+    if (claimableAnts === 0) {
       restakeBtn.disabled = true;
     }
     actions.appendChild(restakeBtn);
@@ -1387,10 +1462,11 @@ export async function renderMyPositions(account, ids, snapshot) {
     const claimBtn = document.createElement('button');
     claimBtn.className = 'claim';
     claimBtn.dataset.id = id.toString();
-    const claimText = restakeAnts.toFixed(2);
-    claimBtn.textContent = 'Claim ' + claimText;
-    claimBtn.title = 'Claim ' + claimText + ' ANTS to your wallet. While ANTS transfers are off, claimed ANTS can\'t be staked again or sent. To keep earning, use Restake.';
-    if (restakeAnts === 0) {
+    claimBtn.textContent = indexPrefix + 'Claim ' + actionText;
+    claimBtn.title = needsIndex
+      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to two finished epochs of pool rewards, then claim ' + actionText + ' ANTS to your wallet.'
+      : 'Claim ' + actionText + ' ANTS to your wallet. While ANTS transfers are off, claimed ANTS can\'t be staked again or sent. To keep earning, use Restake.';
+    if (claimableAnts === 0) {
       claimBtn.disabled = true;
     }
     actions.appendChild(claimBtn);
@@ -1480,6 +1556,7 @@ export async function renderMyPositions(account, ids, snapshot) {
             setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
             return;
           }
+          if (!(await indexPoolRewardsIfNeeded(target, rowEl, originalText, from, 'Restaking...'))) return;
           const data = '0x64d6abcd' + encUint(BigInt(posId)) + encUint(104n);
           const txHash = await walletRequest({
             method: 'eth_sendTransaction',
@@ -1529,6 +1606,7 @@ export async function renderMyPositions(account, ids, snapshot) {
             setTimeout(() => { target.textContent = originalText; target.disabled = false; }, 2000);
             return;
           }
+          if (!(await indexPoolRewardsIfNeeded(target, rowEl, originalText, from, 'Claiming...'))) return;
           const data = SEL.claimStakerRewards + encUint(BigInt(posId)) + encAddr(from);
           const txHash = await walletRequest({
             method: 'eth_sendTransaction',

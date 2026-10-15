@@ -36,6 +36,8 @@ export const SEL = {
   pendingIndexedStakerReward: '0x0b19b283', // pendingIndexedStakerReward(uint256)
   restakePendingReward: '0x0b19b283', // pendingIndexedStakerReward(uint256) - alias for portfolio Restake buttons
   claimStakerRewards: '0x5f94d18a', // claimStakerRewards(uint256,address)
+  pendingStakerReward: '0xdfb2bc2e', // pendingStakerReward(uint256,uint256)
+  indexPoolRewards: '0x4a40d139', // indexPoolRewards(uint256,uint256)
 };
 
 // Normalize input (BigInt / number / hex or decimal string) to BigInt.
@@ -166,6 +168,19 @@ export function encCreateListing({ nftCollection, nftId, currency, price, slopeM
 // Encode calldata for setApprovalForAll(address operator, bool approved)
 export function encSetApprovalForAll(operator, approved) {
   return SEL.setApprovalForAll + encAddr(operator) + encUint(approved ? 1n : 0n);
+}
+
+// Encode calldata for indexPoolRewards(uint256 agentId, uint256 maxEpochs).
+// Permissionless: moves finished-epoch pool rewards into the claimable bucket.
+export function encIndexPoolRewards(agentId, maxEpochs) {
+  return SEL.indexPoolRewards + encUint(agentId) + encUint(maxEpochs);
+}
+
+// True when the finished epoch still has rewards nobody indexed into the
+// claimable bucket. The platform keeper does this after each boundary, but
+// anyone can call indexPoolRewards, so the UI may do it on the next claim.
+export function needsRewardIndex(finishedEpochPendingWei) {
+  return finishedEpochPendingWei > 0n;
 }
 
 // Encode calldata for one-address calls (selector + one padded address word)
