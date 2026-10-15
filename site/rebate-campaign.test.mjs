@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   campaignParams,
-  authorizationTypedData,
-  CAMPAIGN_AUTHORIZATION_TYPE,
+  authorizationMessage,
   CLAIM_WINDOW_DAYS
 } from './rebate-campaign.mjs';
 
@@ -35,7 +34,6 @@ test('campaignParams: deadlines from epoch 27 boundaries, 48h+24h finalize buffe
   assert.equal(p.amountMicro, '20000000');
   assert.equal(p.amountUsdc, 20);
   assert.equal(p.payer, PAYER);
-  assert.equal(p.authorizationType, CAMPAIGN_AUTHORIZATION_TYPE);
 });
 
 test('campaignParams: contract bounds hold (finalize <= cancel + 30d, window >= 7d)', () => {
@@ -50,24 +48,18 @@ test('campaignParams: an offer for another epoch or a malformed offer throws', (
   assert.throws(() => campaignParams({ ...offer, pctBps: 0 }, 27), /valid rebate offer/);
 });
 
-test('authorizationTypedData: EIP-712 shape binds the payer signature to one campaign wallet', () => {
+test('authorizationMessage: canonical text binds the payer signature to one campaign wallet', () => {
   const p = campaignParams(offer, 27);
-  const td = authorizationTypedData({ claimsAddress: '0x1111111111111111111111111111111111111111', params: p, campaignWallet: WALLET });
-  assert.equal(td.primaryType, CAMPAIGN_AUTHORIZATION_TYPE);
-  assert.equal(td.domain.name, 'lants.eth');
-  assert.equal(td.domain.chainId, 8453);
-  assert.equal(td.domain.verifyingContract, '0x1111111111111111111111111111111111111111');
-  assert.deepEqual(
-    td.types.RebateCampaignAuthorization.map((f) => f.name),
-    ['chainId', 'epochId', 'poolId', 'campaignWallet', 'cancelDeadline', 'finalizeDeadline', 'claimWindow']
-  );
-  assert.deepEqual(td.message, {
-    chainId: 8453,
-    epochId: 27,
-    poolId: '52894',
-    campaignWallet: WALLET,
-    cancelDeadline: p.cancelDeadline,
-    finalizeDeadline: p.finalizeDeadline,
-    claimWindow: p.claimWindow
-  });
+  const m = authorizationMessage({ claimsAddress: '0x1111111111111111111111111111111111111111', params: p, campaignWallet: WALLET });
+  assert.equal(m, [
+    'lants.eth rebate authorization v1',
+    'chainId=8453',
+    'claims=0x1111111111111111111111111111111111111111',
+    'epochId=27',
+    'poolId=52894',
+    'campaignWallet=0x1199887766554433221100998877665544332211',
+    'cancelDeadline=' + p.cancelDeadline,
+    'finalizeDeadline=' + p.finalizeDeadline,
+    'claimWindow=' + p.claimWindow
+  ].join('\n'));
 });

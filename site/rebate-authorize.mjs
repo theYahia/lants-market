@@ -1,9 +1,10 @@
-// Publish the payer's EIP-712 authorization for one rebate campaign.
+// Publish the payer's authorization for one rebate campaign.
 //
-// The site's "Sign payer authorization" button only signs (the browser never
-// loads a secp256k1 implementation); this Node CLI recovers the signer with
-// viem and writes rebates/<epoch>-<pool>.campaign.json with the `wx` flag (an
-// existing file is never overwritten). The CI guard
+// The site's "Sign payer authorization" button only signs a canonical plain
+// message with personal_sign (no secp256k1 on-chain action, no funds move);
+// this Node CLI recovers the signer with viem and writes
+// rebates/<epoch>-<pool>.campaign.json with the `wx` flag (an existing file
+// is never overwritten). The CI guard
 // scripts/site/check_authorizations.mjs re-runs the same verification for every
 // published file on `npm test`, so the browser may trust the file's bindings.
 //
@@ -17,9 +18,9 @@
 // binding equals campaignParams(offer, epoch); without a valid signature
 // nothing is written.
 
-import { verifyTypedData } from 'viem';
+import { recoverMessageAddress } from 'viem';
 import { pathToFileURL } from 'node:url';
-import { campaignParams, authorizationTypedData, CHAIN_ID } from './rebate-campaign.mjs';
+import { campaignParams, authorizationMessage, CHAIN_ID } from './rebate-campaign.mjs';
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const SIGNATURE_RE = /^0x[0-9a-fA-F]{130}$/;
@@ -46,16 +47,11 @@ export async function verifyAuthorization({ offer, epoch, claimsAddress, auth })
   if (Number(auth.finalizeDeadline) !== params.finalizeDeadline) bad.push('finalizeDeadline');
   if (Number(auth.claimWindow) !== params.claimWindow) bad.push('claimWindow');
   if (bad.length) throw new Error('authorization does not match the offer: ' + bad.join(', '));
-  const typed = authorizationTypedData({ claimsAddress, params, campaignWallet });
-  const ok = await verifyTypedData({
-    address: params.payer,
-    domain: typed.domain,
-    types: typed.types,
-    primaryType: typed.primaryType,
-    message: typed.message,
-    signature: String(auth.signature)
-  });
-  if (!ok) throw new Error('signature does not recover to the offer payer');
+  const message = authorizationMessage({ claimsAddress, params, campaignWallet });
+  const recovered = await recoverMessageAddress({ message, signature: String(auth.signature) });
+  if (String(recovered).toLowerCase() !== String(params.payer).toLowerCase()) {
+    throw new Error('signature does not recover to the offer payer');
+  }
   return {
     payerAuthorization: {
       chainId: CHAIN_ID,

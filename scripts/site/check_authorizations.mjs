@@ -1,5 +1,5 @@
 // CI guard: re-verify every published payer authorization. For each
-// rebates/<epoch>-<pool>.campaign.json it rebuilds the EIP-712 typed data from
+// rebates/<epoch>-<pool>.campaign.json it rebuilds the canonical message from
 // site/offers.json and the claims address pinned in site/rebate-claims.json,
 // then re-runs the full check of site/rebate-authorize.mjs (bindings +
 // signature). A campaign file without a valid authorization fails `npm test`;

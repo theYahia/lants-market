@@ -249,7 +249,8 @@ Payouts always go to the buyer's address, never to the operator.
 
 The seller's main wallet never has to sign a transaction of this site. A campaign runs from a dedicated **campaign
 wallet**: a fresh embedded Privy wallet, a burner address, or a Safe. The only action of the `payer` address is
-**one EIP-712 signature** authorizing the campaign wallet — not a transaction, no funds move. Before every
+**one personal signature** (a canonical plain-text message: chain, claims contract, campaign wallet, epoch, pool,
+deadlines) authorizing the campaign wallet — not a transaction, no funds move. Before every
 signature the site shows the contract address (re-checked against the pinned runtime code hash), the function, the
 amount and the deadlines. Approvals are for the exact cap only and only to the pinned contract address, never
 unlimited. The campaign owner can be transferred 2-step to a Safe before Finalize. Losing the campaign wallet key

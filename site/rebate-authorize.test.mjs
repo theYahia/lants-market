@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { privateKeyToAccount } from 'viem/accounts';
-import { authorizationTypedData, campaignParams } from './rebate-campaign.mjs';
+import { authorizationMessage, campaignParams } from './rebate-campaign.mjs';
 import { checkAuthorizations } from '../scripts/site/check_authorizations.mjs';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
@@ -22,13 +22,8 @@ const OFFER = { type: 'rebate', pool: '11111', epochs: [28], pctBps: 300, capUsd
 const PARAMS = campaignParams(OFFER, 28);
 
 async function signAuth(account, { poolId = '11111', claimsAddress = CLAIMS, campaignWallet = CAMPAIGN_WALLET } = {}) {
-  const typed = authorizationTypedData({ claimsAddress, params: { ...PARAMS, poolId }, campaignWallet });
-  const signature = await account.signTypedData({
-    domain: typed.domain,
-    types: typed.types,
-    primaryType: typed.primaryType,
-    message: typed.message
-  });
+  const message = authorizationMessage({ claimsAddress, params: { ...PARAMS, poolId }, campaignWallet });
+  const signature = await account.signMessage({ message });
   return {
     payer: account.address,
     campaignWallet,

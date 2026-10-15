@@ -5,15 +5,13 @@
 // Lifecycle (plan §5): cancelDeadline = start of epoch N; finalizeDeadline =
 // end of epoch N + 48h objections + 24h buffer; claim window = 14 days.
 //
-// EIP-712 authorization: the single signature of the offer.payer address that
-// authorizes a dedicated campaign wallet to run the campaign. The contract does
-// not verify it (the payer's on-chain consent is setMerkleRoot); the site and
-// rebate-claims.json consumers do.
+// Payer authorization: one personal_sign over a canonical message (see
+// authorizationMessage). The contract does not verify it (the payer's on-chain
+// consent is setMerkleRoot); the site, the publish CLI and the CI guard do.
 
 import { validRebate } from './rebate.mjs';
 import { epochBoundary } from './epochs.mjs';
 
-export const CAMPAIGN_AUTHORIZATION_TYPE = 'RebateCampaignAuthorization';
 export const CHAIN_ID = 8453;
 export const CLAIM_WINDOW_DAYS = 14;
 export const OBJECTIONS_HOURS = 48;
@@ -46,43 +44,29 @@ export function campaignParams(offer, epoch) {
     cancelDeadline,
     finalizeDeadline,
     claimWindow,
-    claimWindowDays: CLAIM_WINDOW_DAYS,
-    authorizationType: CAMPAIGN_AUTHORIZATION_TYPE
+    claimWindowDays: CLAIM_WINDOW_DAYS
   };
 }
 
-// EIP-712 typed data for the payer's one signature. `params` comes from
-// campaignParams(); `campaignWallet` is the wallet that will create the campaign.
-export function authorizationTypedData({ claimsAddress, params, campaignWallet, chainId = CHAIN_ID }) {
-  return {
-    domain: {
-      name: 'lants.eth',
-      version: '1',
-      chainId,
-      verifyingContract: claimsAddress
-    },
-    types: {
-      RebateCampaignAuthorization: [
-        { name: 'chainId', type: 'uint256' },
-        { name: 'epochId', type: 'uint256' },
-        { name: 'poolId', type: 'string' },
-        { name: 'campaignWallet', type: 'address' },
-        { name: 'cancelDeadline', type: 'uint256' },
-        { name: 'finalizeDeadline', type: 'uint256' },
-        { name: 'claimWindow', type: 'uint256' }
-      ]
-    },
-    primaryType: CAMPAIGN_AUTHORIZATION_TYPE,
-    message: {
-      chainId,
-      epochId: params.epochId,
-      poolId: params.poolId,
-      campaignWallet,
-      cancelDeadline: params.cancelDeadline,
-      finalizeDeadline: params.finalizeDeadline,
-      claimWindow: params.claimWindow
-    }
-  };
+// Canonical message the payer signs with personal_sign. Plain text instead of
+// EIP-712: Rabby (and a few other wallets) hash typed data non-standardly, so
+// their signatures cannot be verified; a plain message works everywhere and
+// the signer reads exactly what they sign. Every binding is inside the
+// message — chainId, the claims contract, the campaign wallet, epoch, pool,
+// deadlines — so the signature cannot be replayed against another campaign or
+// contract. `params` comes from campaignParams().
+export function authorizationMessage({ claimsAddress, params, campaignWallet, chainId = CHAIN_ID }) {
+  return [
+    'lants.eth rebate authorization v1',
+    'chainId=' + chainId,
+    'claims=' + String(claimsAddress).toLowerCase(),
+    'epochId=' + params.epochId,
+    'poolId=' + params.poolId,
+    'campaignWallet=' + String(campaignWallet).toLowerCase(),
+    'cancelDeadline=' + params.cancelDeadline,
+    'finalizeDeadline=' + params.finalizeDeadline,
+    'claimWindow=' + params.claimWindow
+  ].join('\n');
 }
 
 // CLI (Node only; the module itself is browser-safe):

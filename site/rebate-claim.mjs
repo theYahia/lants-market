@@ -8,7 +8,8 @@
 // campaign epoch/pool/deadlines are compared against the published files, the
 // published merkle tree is re-verified locally (keccak of every leaf + proof
 // must reproduce its root), and the on-chain root must equal the tree root.
-// The payer EIP-712 authorization is verified by the publish CLI
+// The payer authorization (personal_sign over a canonical message) is verified
+// by the publish CLI
 // (site/rebate-authorize.mjs) and re-verified by the CI guard
 // (scripts/site/check_authorizations.mjs); this browser panel (no secp256k1
 // here) checks only its bindings.

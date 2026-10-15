@@ -8,6 +8,5 @@
   "cancelDeadline": 1792662861,
   "finalizeDeadline": 1793526861,
   "claimWindow": 1209600,
-  "claimWindowDays": 14,
-  "authorizationType": "RebateCampaignAuthorization"
+  "claimWindowDays": 14
 }

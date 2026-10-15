@@ -11,7 +11,7 @@ import {
   encIdData,
   encTransferOwnershipData
 } from './rebate-claims-abi.mjs';
-import { campaignParams, authorizationTypedData } from './rebate-campaign.mjs';
+import { campaignParams, authorizationMessage } from './rebate-campaign.mjs';
 import { simulate, USDC } from './rebate-claim-chain.mjs';
 import { walletRequest, ensureChain, waitReceipt, humanError, ensurePrivy } from './market-view.mjs';
 
@@ -208,8 +208,8 @@ export function renderActions(block, { offer, epoch, params, tree, campaignId, c
       async () => {
         const wallet = input.value.trim();
         if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) throw new Error('enter a valid campaign wallet');
-        const td = authorizationTypedData({ claimsAddress: config.address, params: campaignParams(offer, epoch), campaignWallet: wallet });
-        const signature = await walletRequest({ method: 'eth_signTypedData_v4', params: [account, JSON.stringify(td)] });
+        const message = authorizationMessage({ claimsAddress: config.address, params: campaignParams(offer, epoch), campaignWallet: wallet });
+        const signature = await walletRequest({ method: 'personal_sign', params: [message, account] });
         setMsg(msg, JSON.stringify({
           payer: offer.payer,
           campaignWallet: wallet,

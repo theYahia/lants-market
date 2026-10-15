@@ -10,7 +10,7 @@ seller only connects wallets. Contract facts and deadlines: [incentives.md](ince
 - Agree the terms with the seller: `pctBps`, `capUsdc` (**≤ 20**, D18), `capPerBuyerUsdc`,
   `minSpendUsdc`, optional `stakeGate`, and `payer` = the seller's main address.
 - The seller prepares a **campaign wallet** (fresh Privy wallet, burner or Safe). The payer only
-  signs one EIP-712 authorization — never a transaction; only the campaign wallet funds and runs
+  signs one personal authorization message — never a transaction; only the campaign wallet funds and runs
   the campaign.
 
 ## 1. Offer (PR)
@@ -22,7 +22,7 @@ seller only connects wallets. Contract facts and deadlines: [incentives.md](ince
 ## 2. Authorization (PR)
 
 - The seller opens the site → Rebate claims → **Sign payer authorization** (campaign wallet address,
-  main wallet signs EIP-712; nothing is sent) and returns the JSON.
+  main wallet signs a canonical plain-text message with personal_sign; nothing is sent) and returns the JSON.
 - `node site/rebate-authorize.mjs --offer offers/<seller>.json --epoch N --auth signed.json --claims <claims address> --out rebates`
 - PR: `rebates/<N>-<pool>.campaign.json`. The CI guard re-verifies the signature on every `npm test`;
   without a valid signature nothing is written.
