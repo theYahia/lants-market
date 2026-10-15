@@ -216,6 +216,29 @@ Most concrete first. Nothing here is decided before 22.10.
 
 ## Build log
 
+**15.10.2026 (evening).** First live rebate campaign is FUNDED — the full-cycle test announced in the Telegram
+incentives post. Offer: Apex (52894), epoch 28, 1% back, cap $1 (≤$0.2/buyer), payer `0x3d4C`. Campaign id **0**
+in `RebateClaims` (tx `0xb374…dc4242`, funded 1,000,000 micro-USDC, owner = payer, cancelDeadline 1792662861,
+finalizeDeadline 1793526861). Files: `offers/52894.json`, `rebates/28-52894.campaign-params.json`,
+`rebates/28-52894.campaign.json` (payerAuthorization + campaignId). Two fixes shipped along the way:
+(1) campaign lookup in the claim UI now enumerates `nextCampaignId()` via eth_call instead of an `eth_getLogs`
+scan (public RPCs cap log ranges hard); (2) the payer authorization moved from EIP-712 to a canonical
+`personal_sign` message (Rabby hashes typed data non-standardly; Snapshot made the same move) — the message
+carries chainId, claims contract, campaign wallet, epoch, pool, deadlines, so it cannot be replayed.
+Test timeline (nothing to forget):
+
+| When (UTC) | What |
+|---|---|
+| 22.10 09:54 | epoch 28 starts — the campaign collects buyers' spend |
+| 29.10 09:54 | epoch ends → run `node site/rebate-payout.mjs --epoch 28 --pool 52894 --offer offers/52894.json --out rebates`, PR tree (48 h objections) |
+| 01.11 09:54 (latest) | operator presses **Finalize** (0x3d4C) → claims open 14 days |
+| 15.11 09:54 | claim window closes → **Withdraw unclaimed** |
+| any day | owner: ENS `lants.eth` → `ipfs://bafybeidjk2zvxs6it5n3z575xxlauxzmdqid5ttj7wn3fpyh7w7tj6phxe` (one tx; the previous CIDs are superseded) |
+
+The Telegram alert bot posts when claims open and 48 h before they close. Note: `0x86bb` is the buyer-node wallet
+(USDC auto-sweeps into the deposit) — never use it as a campaign wallet; funding this campaign came from the payer
+itself (owner == payer is canonical).
+
 **09.10.2026.** The epoch-25 Open Forge offer is settled: **nothing to pay**. The offer was for new stakes only
 (`pays: new`) in pool 44694, and the last published snapshot of epoch 25
 (2026-10-08T00:12:29Z, block 52,314,479, CID `bafybeicqhuyjmupawuurcveqvscbb5pyzhlteq5p5d2sjnxhqjvdkyqjge`)
