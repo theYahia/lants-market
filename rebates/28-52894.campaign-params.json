@@ -1,0 +1,13 @@
+{
+  "chainId": 8453,
+  "epochId": 28,
+  "poolId": "52894",
+  "amountMicro": "1000000",
+  "amountUsdc": 1,
+  "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B",
+  "cancelDeadline": 1792662861,
+  "finalizeDeadline": 1793526861,
+  "claimWindow": 1209600,
+  "claimWindowDays": 14,
+  "authorizationType": "RebateCampaignAuthorization"
+}
