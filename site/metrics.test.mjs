@@ -139,3 +139,18 @@ test('unknown slash (PositionChangePending) returns null, not a free exit', () =
   assert.strictEqual(metrics.floorPrice(okPos), 13532.65);
   assert.ok(Math.abs(metrics.exitBurn(okPos) - 13532.65) < 1e-6);
 });
+
+test('lockCellFromLive: live max-lock read decides the LOCK cell', () => {
+  // Live read failed (null RPC) -> fall back to the snapshot-derived label.
+  assert.strictEqual(metrics.lockCellFromLive(null, 132, 28, 'max'), 'max');
+  assert.strictEqual(metrics.lockCellFromLive(null, 132, 28, '104w'), '104w');
+
+  // Live max-lock ON -> always 'max', regardless of the fallback label.
+  assert.strictEqual(metrics.lockCellFromLive(true, 132, 28, '104w'), 'max');
+  assert.strictEqual(metrics.lockCellFromLive(true, 0, 28, '0w'), 'max');
+
+  // Live max-lock OFF -> remaining weeks from stakeEndEpoch down to nextEpoch.
+  assert.strictEqual(metrics.lockCellFromLive(false, 132, 28, 'max'), '104w');
+  assert.strictEqual(metrics.lockCellFromLive(false, 28, 28, 'max'), '0w');
+  assert.strictEqual(metrics.lockCellFromLive(false, 20, 28, 'max'), '0w'); // clamped
+});

@@ -10,6 +10,10 @@ test('SEL.pendingStakerReward and SEL.indexPoolRewards match their signatures', 
   assert.equal(SEL.indexPoolRewards, sig('indexPoolRewards(uint256,uint256)'));
 });
 
+test('SEL.posMaxLockPower matches positionMaxLockPowerAtEpoch(uint256,uint256)', () => {
+  assert.equal(SEL.posMaxLockPower, sig('positionMaxLockPowerAtEpoch(uint256,uint256)'));
+});
+
 test('encIndexPoolRewards encodes selector plus two uint256 words', () => {
   const data = encIndexPoolRewards(52894n, 2n);
   assert.equal(data.slice(0, 10), SEL.indexPoolRewards);

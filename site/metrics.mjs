@@ -171,6 +171,18 @@ export function lockLabel(pos, currentEpoch) {
   return label;
 }
 
+/**
+ * Decide the portfolio LOCK cell from a live `positionMaxLockPowerAtEpoch` read.
+ * - `liveMaxLock === null` (read failed) -> return fallbackLabel unchanged;
+ * - `true` -> 'max';
+ * - `false` -> remaining weeks from stakeEndEpoch down to nextEpoch.
+ */
+export function lockCellFromLive(liveMaxLock, stakeEndEpoch, nextEpoch, fallbackLabel) {
+  if (liveMaxLock === null) return fallbackLabel;
+  if (liveMaxLock === true) return 'max';
+  return Math.max(0, Number(stakeEndEpoch) - Number(nextEpoch)) + 'w';
+}
+
 // Returns NaN (a number), not null, when slash is unknown: legacy callers do exitBurn(pos).toFixed(2) and NaN.toFixed(2) === 'NaN' (no crash, no false 'free exit'). New callers must use Number.isNaN().
 export function exitBurn(pos) { if (!pos || pos.slashBps == null) return Number.NaN; return (Number(pos.amount) / 1e18) * (Number(pos.slashBps) / 10000); }
 
@@ -185,4 +197,5 @@ export default {
   yieldPerEpoch,
   payback,
   lockLabel,
+  lockCellFromLive,
 };

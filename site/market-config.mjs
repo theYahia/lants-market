@@ -38,6 +38,7 @@ export const SEL = {
   claimStakerRewards: '0x5f94d18a', // claimStakerRewards(uint256,address)
   pendingStakerReward: '0xdfb2bc2e', // pendingStakerReward(uint256,uint256)
   indexPoolRewards: '0x4a40d139', // indexPoolRewards(uint256,uint256)
+  posMaxLockPower: '0xdb39a228', // positionMaxLockPowerAtEpoch(uint256,uint256)
 };
 
 // Normalize input (BigInt / number / hex or decimal string) to BigInt.

@@ -12,7 +12,7 @@ import {
   encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
 import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
-import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn } from './metrics.mjs';
+import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
@@ -863,7 +863,6 @@ export function initManagePosition() {
   const maxlockSel = '0xedcb5e4e';
   const maxlockoffSel = '0x8e7a6bc2';
   const positionsSel = '0x99fbab88';
-  const posMaxLockSel = '0xdb39a228';
   const currentEpochSel = '0x76671808';
   const pendingSel = '0xb19101a2';
   const stakeSel = '0xd95e60b9';
@@ -923,7 +922,7 @@ export function initManagePosition() {
       let maxLock = false;
       try {
         // next epoch, like the positions table: a fresh position has max-lock power only from its start epoch
-        const mlData = await ethCallTo(MANAGE_ADDR, posMaxLockSel + encUint(id) + encUint(currentEpoch + 1n));
+        const mlData = await ethCallTo(MANAGE_ADDR, SEL.posMaxLockPower + encUint(id) + encUint(currentEpoch + 1n));
         const mlWords = decodeWords(mlData);
         maxLock = mlWords.length > 0 && wordToBigInt(mlWords[0]) > 0n; // words have no 0x prefix: BigInt() threw and hid max-lock
       } catch { /* keep false */ }
@@ -1029,6 +1028,7 @@ export function initManagePosition() {
     }
     mfPosid.value = largeId.toString();
     await refreshCard();
+    await loadPublicMarket();
     setStatus(manageStatus, `Split done: #${smallId.toString()} is filled into "List a position" above, #${largeId.toString()} keeps the rest. Next: list #${smallId.toString()}, or enable max-lock on #${largeId.toString()}.`);
   });
 
@@ -1059,6 +1059,7 @@ export function initManagePosition() {
     const newId = mints[0];
     mfPosid.value = newId.toString();
     await refreshCard();
+    await loadPublicMarket();
     setStatus(manageStatus, `Moved to new position ${newId.toString()}`);
   });
 
@@ -1076,6 +1077,7 @@ export function initManagePosition() {
     );
     if (!receipt) return;
     await refreshCard();
+    await loadPublicMarket();
     setStatus(manageStatus, 'Max-lock enabled: power stays at amount x 104. Split and move are now disabled for this position.');
   });
 
@@ -1094,6 +1096,7 @@ export function initManagePosition() {
       );
       if (!receipt) return;
       await refreshCard();
+      await loadPublicMarket();
       setStatus(manageStatus, 'Max-lock disabled: a fresh 104-week countdown starts next epoch. Split and move are enabled again.');
     });
   }
@@ -1175,6 +1178,7 @@ export function initManagePosition() {
       const newId = mints[0];
       mfPosid.value = newId.toString();
       await refreshCard();
+      await loadPublicMarket();
       setStatus(brStatus, `Staked: new position #${newId.toString()}, filled into "Manage a position" above. Next: split off a part to sell, or enable max-lock.`);
     });
   }
@@ -1273,6 +1277,13 @@ export async function renderMyPositions(account, ids, snapshot) {
     console.error('Error reading current epoch', e);
   }
 
+  // Epoch the portfolio LOCK column targets (the next epoch), read live so a
+  // max-lock toggle on-chain shows up in the row immediately, without waiting
+  // for a fresh snapshot.
+  const nextEpochLive = finishedEpoch != null
+    ? Number(finishedEpoch + 2n)
+    : (snapshot ? Number(snapshot.epoch) + 1 : 0);
+
   // Build header row
   const head = document.createElement('div');
   head.className = 'pf-pos-head';
@@ -1285,6 +1296,7 @@ export async function renderMyPositions(account, ids, snapshot) {
   for (const id of ids) {
     let amount, lockWeeks, rewardText, exitText, exitTitle = '', isFresh = false, skip = false;
     let agentId = null;
+    let endEpoch = null;
 
     // a position newer than the snapshot (bought or split since the last run) is read from the chain below
     const pos = snapshot ? findPos(snapshot, id) : null;
@@ -1295,7 +1307,8 @@ export async function renderMyPositions(account, ids, snapshot) {
 
       agentId = String(pos.agentId);
       amount = Number(pos.amount) / 1e18;
-      lockWeeks = isMaxLock(pos, E) ? 'max' : Math.max(0, Number(pos.stakeEndEpoch) - Number(E)) + 'w';
+      endEpoch = Number(pos.stakeEndEpoch);
+      lockWeeks = isMaxLock(pos, E) ? 'max' : Math.max(0, endEpoch - Number(E)) + 'w';
 
       if (Number(pos.stakeStartEpoch) > Number(snapshot.epoch)) {
         rewardText = 'from e' + pos.stakeStartEpoch;
@@ -1331,9 +1344,13 @@ export async function renderMyPositions(account, ids, snapshot) {
 
         amount = Number(wordToBigInt(w[2])) / 1e18;
         agentId = String(wordToBigInt(w[1]));
+        const startEp = Number(wordToBigInt(w[4]));
         const endEp = Number(wordToBigInt(w[5]));
+        endEpoch = endEp;
         lockWeeks = Math.max(0, endEp - Number(E)) + 'w';
-        rewardText = '—';
+        // The position is newer than the snapshot: show which epoch its
+        // rewards start from instead of a placeholder dash.
+        rewardText = 'from e' + startEp;
         exitText = '—';
         exitTitle = 'Appears after the next snapshot';
         isFresh = true;
@@ -1341,6 +1358,20 @@ export async function renderMyPositions(account, ids, snapshot) {
         console.error('Error reading position', id, e);
         continue;
       }
+    }
+
+    // Live max-lock state read on-chain so the LOCK cell reflects a just
+    // toggled max-lock immediately, without waiting for a fresh snapshot.
+    let liveMaxLock = null;
+    try {
+      const mlRaw = await ethCallTo(MARKET.nft, SEL.posMaxLockPower + encUint(id) + encUint(BigInt(nextEpochLive)));
+      const mlWords = decodeWords(mlRaw);
+      if (mlWords.length > 0) liveMaxLock = wordToBigInt(mlWords[0]) > 0n;
+    } catch (e) {
+      console.error('Error reading live max-lock for position', id, e);
+    }
+    if (endEpoch != null) {
+      lockWeeks = lockCellFromLive(liveMaxLock, endEpoch, nextEpochLive, lockWeeks);
     }
 
     // Build row
