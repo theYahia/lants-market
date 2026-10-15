@@ -1,0 +1,14 @@
+{
+  "payerAuthorization": {
+    "chainId": 8453,
+    "claimsAddress": "0x66b0b672f8ac84d0172a00927a20f267ebbf39f1",
+    "payer": "0x3d4CCcfAA3B25997F4ab33f838558521259Eef1B",
+    "campaignWallet": "0x86bb4278389572d6ffc803d72661552be096e473",
+    "epochId": 28,
+    "poolId": "52894",
+    "cancelDeadline": 1792662861,
+    "finalizeDeadline": 1793526861,
+    "claimWindow": 1209600,
+    "signature": "0x8934625dced9ac3ee62592bc054e05184af341ce03073516f7f6c5e21eba34af66821208714bd34c10f0e2beb52204409aba3ebf7864a48e594061f45ec0e00b1c"
+  }
+}
