@@ -29,6 +29,32 @@ export async function pinMessage(messageId, deps = {}) {
   return j;
 }
 
+// Updates the text of an already-sent message in place (used to refresh the
+// pinned welcome post when its text changes). Returns the Telegram response.
+export async function editMessageText(messageId, text, deps = {}) {
+  const apiUrl = deps.apiUrl || process.env.TG_API_URL || DEFAULT_API_URL;
+  const token = deps.token || process.env.TG_BOT_TOKEN || '';
+  const chatId = deps.chatId || process.env.TG_CHAT_ID || '';
+  const doFetch = deps.fetch || fetch;
+
+  if (!token) throw new Error('telegram: TG_BOT_TOKEN is not set');
+  if (!chatId) throw new Error('telegram: TG_CHAT_ID is not set');
+
+  const url = `${apiUrl.replace(/\/+$/, '')}/bot${token}/editMessageText`;
+  const res = await doFetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, text })
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`telegram: HTTP ${res.status} ${body.slice(0, 200)}`);
+  }
+  const j = await res.json();
+  if (!j.ok) throw new Error(`telegram: ${j.description || 'unknown error'}`);
+  return j;
+}
+
 const DEFAULT_API_URL = 'https://api.telegram.org';
 const MAX_TRIES = 4;
 

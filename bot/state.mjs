@@ -14,7 +14,8 @@ export function defaultState() {
     rebates: {}, // "<epoch>-<pool>" -> { open: bool, warn48: bool }
     lastRebateCheck: 0, // epoch ms of the last successful rebate watch run
     welcomeMessageId: null, // message_id of the pinned welcome post
-    welcomePinned: null // message_id the welcome post is confirmed pinned as
+    welcomePinned: null, // message_id the welcome post is confirmed pinned as
+    welcomeTextHash: null // sha256 prefix of the welcome text last applied
   };
 }
 

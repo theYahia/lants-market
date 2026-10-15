@@ -1,5 +1,5 @@
-// The pinned welcome post: what this channel does, when, and where the full
-// picture lives (the Incentives tab on the site). Static text, sent once.
+// The pinned welcome post: what this channel does and when. Static text,
+// sent once and edited in place when it changes (state keeps its hash).
 
 export function welcomeText() {
   return [
@@ -11,12 +11,8 @@ export function welcomeText() {
     '• When a rebate claim window opens — one post with the deadline.',
     '• 48h before a rebate window closes — one last-chance reminder.',
     '',
-    '📊 Incentives',
+    'Claim everything on the site:',
     '',
-    'The full picture of active offers is on the Incentives tab of the site: seller staking rewards, USDC rebate campaigns and other offers.',
-    '',
-    'https://lants.eth.limo/#incentives',
-    '',
-    'This bot only watches lANTS rewards and rebate windows; third-party offers live on the site.'
+    'https://lants.eth.limo'
   ].join('\n');
 }

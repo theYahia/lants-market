@@ -8,10 +8,11 @@
 
 import process from 'node:process';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { decideEpochPost } from './epoch-check.mjs';
 import { checkRebates, loadLocalConfig, loadVerifiedConfig, OFFERS_URLS } from './rebate-check.mjs';
 import { loadState, saveState } from './state.mjs';
-import { sendMessage, pinMessage, sleep } from './telegram.mjs';
+import { sendMessage, editMessageText, pinMessage, sleep } from './telegram.mjs';
 import { welcomeText } from './welcome.mjs';
 
 const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
@@ -150,21 +151,39 @@ function startHealthServer() {
   server.listen(HEALTH_PORT, '127.0.0.1', () => log(`health server on 127.0.0.1:${HEALTH_PORT}`));
 }
 
-// Sends the welcome post once, then keeps it pinned. Idempotent across
-// restarts: the message id survives in state, the pin is retried if it failed.
+// Sends the welcome post once, keeps it pinned, and refreshes its text in
+// place when the welcome text changes. Idempotent across restarts: ids and
+// the text hash survive in state, the pin is retried if it failed.
+function welcomeHash() {
+  return crypto.createHash('sha256').update(welcomeText()).digest('hex').slice(0, 16);
+}
+
 async function ensureWelcomePin(state) {
+  const hash = welcomeHash();
   if (DRY_RUN) {
     if (!state.welcomeMessageId) log('DRY-RUN would send welcome:\n' + welcomeText());
+    else if (state.welcomeTextHash !== hash) log('DRY-RUN would edit welcome:\n' + welcomeText());
     return;
   }
   if (!state.welcomeMessageId) {
     try {
       const res = await sendMessage(welcomeText());
       state.welcomeMessageId = res.result.message_id;
+      state.welcomeTextHash = hash;
       saveState(STATE_FILE, state);
       log('sent welcome post (message_id ' + state.welcomeMessageId + ')');
     } catch (e) {
       log('welcome delivery failed: ' + e.message);
+      return;
+    }
+  } else if (state.welcomeTextHash !== hash) {
+    try {
+      await editMessageText(state.welcomeMessageId, welcomeText());
+      state.welcomeTextHash = hash;
+      saveState(STATE_FILE, state);
+      log('edited welcome post (message_id ' + state.welcomeMessageId + ')');
+    } catch (e) {
+      log('welcome edit failed (will retry on next restart): ' + e.message);
       return;
     }
   }

@@ -1,6 +1,6 @@
 import test, { after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendMessage, pinMessage } from './telegram.mjs';
+import { sendMessage, pinMessage, editMessageText } from './telegram.mjs';
 
 const calls = [];
 const originalFetch = globalThis.fetch;
@@ -100,4 +100,14 @@ test('pinMessage: pins the given message id in the chat', async () => {
 test('pinMessage: throws on API rejection', async () => {
   okFetch(() => ({ ok: true, json: async () => ({ ok: false, description: 'not enough rights' }) }));
   await assert.rejects(() => pinMessage(1, { token: 't', chatId: 'c' }), /not enough rights/);
+});
+
+test('editMessageText: updates the message in place', async () => {
+  okFetch();
+  const res = await editMessageText(7, 'new text', { token: '123:ABC', chatId: '@lants_alerts' });
+  assert.ok(res.ok);
+  assert.equal(calls[0].url, 'https://api.telegram.org/bot123:ABC/editMessageText');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.message_id, 7);
+  assert.equal(body.text, 'new text');
 });
