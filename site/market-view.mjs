@@ -14,6 +14,7 @@ import {
 import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
+import { closedPositionIdsForOwner } from './portfolio-state.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
 // pulled in via a static import at module load (a headless watchdog that does
@@ -1244,9 +1245,12 @@ export function initCancelHandler() {
 async function indexPoolRewardsIfNeeded(target, rowEl, originalText, from, nextLabel) {
   if (rowEl.dataset.needsIndex !== '1' || !rowEl.dataset.agentId) return true;
   target.textContent = 'Indexing...';
+  // The row decides the window (open rows: two epochs, matching historically;
+  // closed rows: a wider one), so the indexed amount equals the button amount.
+  const epochs = BigInt(rowEl.dataset.indexEpochs || String(OPEN_FINISHED_EPOCHS));
   const idxHash = await walletRequest({
     method: 'eth_sendTransaction',
-    params: [{ from, to: MARKET.stakerRewards, data: encIndexPoolRewards(BigInt(rowEl.dataset.agentId), 2n) }]
+    params: [{ from, to: MARKET.stakerRewards, data: encIndexPoolRewards(BigInt(rowEl.dataset.agentId), epochs) }]
   });
   const idxReceipt = await waitReceipt(idxHash);
   if (!idxReceipt || idxReceipt.status !== '0x1') {
@@ -1258,6 +1262,14 @@ async function indexPoolRewardsIfNeeded(target, rowEl, originalText, from, nextL
   return true;
 }
 
+// Finished epochs read per position for the Claim/Restake amount. Open rows read
+// two, matching the two-epoch index the click sends. Closed rows read a wider
+// window: their reward can sit unindexed for several epochs (keeper lag), and the
+// row must not vanish while it is still claimable. The click indexes the same
+// number of epochs, so the button amount stays equal to what the wallet claims.
+const OPEN_FINISHED_EPOCHS = 2;
+const CLOSED_FINISHED_EPOCHS = 8;
+
 export async function renderMyPositions(account, ids, snapshot) {
   const container = document.getElementById('pf-positions');
   if (!container) return;
@@ -1265,6 +1277,14 @@ export async function renderMyPositions(account, ids, snapshot) {
   container.textContent = '';
   const E = snapshot ? String(Number(snapshot.epoch) + 1) : '0';
   const rows = [];
+
+  // Closed positions (split / move / merge) are burned on-chain, so the live
+  // stakerPositionIds list never returns them. The snapshot names their last
+  // holder and holds the closed fields, so merge them after the open ids to keep
+  // their pending reward claimable from the portfolio.
+  const closedIds = closedPositionIdsForOwner(snapshot, account, snapshot ? snapshot.epoch : 0);
+  const closedSet = new Set(closedIds);
+  const allIds = [...ids.filter((id) => !closedSet.has(String(id))), ...closedIds.map((id) => BigInt(id))];
 
   // Live current epoch so the just-finished epoch can be checked on-chain,
   // not against a possibly stale snapshot.
@@ -1293,18 +1313,26 @@ export async function renderMyPositions(account, ids, snapshot) {
     head.appendChild(span);
   });
 
-  for (const id of ids) {
+  for (const id of allIds) {
     let amount, lockWeeks, rewardText, exitText, exitTitle = '', isFresh = false, skip = false;
     let agentId = null;
     let endEpoch = null;
+    let isClosed = closedSet.has(String(id));
 
     // a position newer than the snapshot (bought or split since the last run) is read from the chain below
     const pos = snapshot ? findPos(snapshot, id) : null;
-    if (pos) {
-
-      // Closed filter
-      if (pos.withdrawn || (Number(pos.closedAtEpoch) > 0 && Number(pos.closedAtEpoch) <= Number(snapshot.epoch))) continue;
-
+    if (isClosed) {
+      // Closed (split / moved / merged): the NFT is burned and the stake is gone,
+      // but the per-position pending reward survives. Keep the pool (the claim
+      // indexes it) and let Claim/Restake read the live reward below; amount,
+      // lock, reward and exit carry no meaning here.
+      if (!pos) continue;
+      agentId = String(pos.agentId);
+      amount = null;
+      lockWeeks = '\u2014';
+      rewardText = '\u2014';
+      exitText = '\u2014';
+    } else if (pos) {
       agentId = String(pos.agentId);
       amount = Number(pos.amount) / 1e18;
       endEpoch = Number(pos.stakeEndEpoch);
@@ -1334,16 +1362,16 @@ export async function renderMyPositions(account, ids, snapshot) {
         exitTitle = 'Exit locked until epoch ' + pos.exitOpensEpoch + '.';
       }
     } else {
-      // Chain fallback
+      // Chain fallback: only an id newer than the snapshot reaches here, and it
+      // is open by construction -- a closed id is burned, so it is returned by
+      // neither stakerPositionIds (live) nor an older snapshot.
       try {
         const raw = await ethCallTo(MARKET.nft, '0x99fbab88' + encUint(id));
         const w = decodeWords(raw);
-        const withdrawn = wordToBigInt(w[7]) !== 0n;
-        const closedAt = Number(wordToBigInt(w[6]));
-        if (withdrawn || (closedAt > 0 && closedAt <= Number(snapshot?.epoch || 0))) continue;
+        if (wordToBigInt(w[7]) !== 0n) continue; // withdrawn: nothing to claim
 
-        amount = Number(wordToBigInt(w[2])) / 1e18;
         agentId = String(wordToBigInt(w[1]));
+        amount = Number(wordToBigInt(w[2])) / 1e18;
         const startEp = Number(wordToBigInt(w[4]));
         const endEp = Number(wordToBigInt(w[5]));
         endEpoch = endEp;
@@ -1362,24 +1390,29 @@ export async function renderMyPositions(account, ids, snapshot) {
 
     // Live max-lock state read on-chain so the LOCK cell reflects a just
     // toggled max-lock immediately, without waiting for a fresh snapshot.
-    let liveMaxLock = null;
-    try {
-      const mlRaw = await ethCallTo(MARKET.nft, SEL.posMaxLockPower + encUint(id) + encUint(BigInt(nextEpochLive)));
-      const mlWords = decodeWords(mlRaw);
-      if (mlWords.length > 0) liveMaxLock = wordToBigInt(mlWords[0]) > 0n;
-    } catch (e) {
-      console.error('Error reading live max-lock for position', id, e);
-    }
-    if (endEpoch != null) {
-      lockWeeks = lockCellFromLive(liveMaxLock, endEpoch, nextEpochLive, lockWeeks);
+    // Skipped on a closed position: the read is meaningless there and may revert.
+    if (!isClosed) {
+      let liveMaxLock = null;
+      try {
+        const mlRaw = await ethCallTo(MARKET.nft, SEL.posMaxLockPower + encUint(id) + encUint(BigInt(nextEpochLive)));
+        const mlWords = decodeWords(mlRaw);
+        if (mlWords.length > 0) liveMaxLock = wordToBigInt(mlWords[0]) > 0n;
+      } catch (e) {
+        console.error('Error reading live max-lock for position', id, e);
+      }
+      if (endEpoch != null) {
+        lockWeeks = lockCellFromLive(liveMaxLock, endEpoch, nextEpochLive, lockWeeks);
+      }
     }
 
     // Build row
     const row = document.createElement('div');
-    row.className = isFresh ? 'pf-pos-row is-fresh' : 'pf-pos-row';
+    row.className = 'pf-pos-row' + (isFresh ? ' is-fresh' : '') + (isClosed ? ' is-closed' : '');
     row.dataset.id = id.toString();
     row.dataset.agentId = agentId ?? '';
-    if (isFresh) {
+    if (isClosed) {
+      row.title = 'Position closed (split/moved/merged); pending reward is still claimable.';
+    } else if (isFresh) {
       row.title = freshTip(snapshot && snapshot.epoch);
     }
 
@@ -1390,32 +1423,43 @@ export async function renderMyPositions(account, ids, snapshot) {
     if (agentId != null) poolCell.title = 'Seller pool ' + agentId;
     row.appendChild(poolCell);
 
-    row.appendChild(makeSpan('amount', amount.toFixed(2)));
-    const lockSpan = makeSpan('lock', String(lockWeeks));
-    if (isFresh) {
-      lockSpan.appendChild(freshNote(row.title));
-    }
-    row.appendChild(lockSpan);
-    row.appendChild(makeSpan('reward', rewardText));
+    if (isClosed) {
+      row.appendChild(makeSpan('amount', 'closed'));
+      row.appendChild(makeSpan('lock', '\u2014'));
+      row.appendChild(makeSpan('reward', '\u2014'));
+      row.appendChild(makeSpan('exit', '\u2014'));
+    } else {
+      row.appendChild(makeSpan('amount', amount.toFixed(2)));
+      const lockSpan = makeSpan('lock', String(lockWeeks));
+      if (isFresh) {
+        lockSpan.appendChild(freshNote(row.title));
+      }
+      row.appendChild(lockSpan);
+      row.appendChild(makeSpan('reward', rewardText));
 
-    const exitSpan = makeSpan('exit', exitText);
-    if (exitTitle) exitSpan.title = exitTitle;
-    row.appendChild(exitSpan);
+      const exitSpan = makeSpan('exit', exitText);
+      if (exitTitle) exitSpan.title = exitTitle;
+      row.appendChild(exitSpan);
+    }
 
     const actions = document.createElement('span');
     actions.className = 'pf-actions';
 
-    const listBtn = document.createElement('button');
-    listBtn.className = 'pf-list';
-    listBtn.dataset.id = id.toString();
-    listBtn.textContent = 'List';
-    actions.appendChild(listBtn);
+    // A closed position is burned: it can be claimed or restaked, never listed
+    // or managed.
+    if (!isClosed) {
+      const listBtn = document.createElement('button');
+      listBtn.className = 'pf-list';
+      listBtn.dataset.id = id.toString();
+      listBtn.textContent = 'List';
+      actions.appendChild(listBtn);
 
-    const manageBtn = document.createElement('button');
-    manageBtn.className = 'pf-manage';
-    manageBtn.dataset.id = id.toString();
-    manageBtn.textContent = 'Manage';
-    actions.appendChild(manageBtn);
+      const manageBtn = document.createElement('button');
+      manageBtn.className = 'pf-manage';
+      manageBtn.dataset.id = id.toString();
+      manageBtn.textContent = 'Manage';
+      actions.appendChild(manageBtn);
+    }
 
     // Restake button: shows the pending indexed staker reward, formatted in ANTS with two decimals.
     // Reads from the snapshot `pendingIndexedStakerReward` field when present, otherwise falls back
@@ -1435,16 +1479,16 @@ export async function renderMyPositions(account, ids, snapshot) {
     }
     if (!Number.isFinite(restakeAnts) || restakeAnts < 0) restakeAnts = 0;
 
-    // The just-finished epoch may hold rewards nobody has indexed yet: the
+    // The just-finished epochs may hold rewards nobody has indexed yet: the
     // platform keeper indexes pools some time after the boundary. Read the
     // finished-epoch pending live so Claim/Restake can index it on click
-    // instead of waiting for the keeper.
-    // Sum the pending reward of the last two finished epochs: the click
-    // indexes up to two epochs, so the button shows the same amount the
-    // wallet will actually claim after indexing.
+    // instead of waiting for the keeper. The click indexes the same number of
+    // epochs, so the button shows the amount the wallet will claim after it.
+    const scanEpochs = isClosed ? CLOSED_FINISHED_EPOCHS : OPEN_FINISHED_EPOCHS;
     let finishedWei = 0n;
     if (finishedEpoch != null && agentId != null) {
-      for (const ep of [finishedEpoch, finishedEpoch - 1n]) {
+      for (let k = 0; k < scanEpochs; k++) {
+        const ep = finishedEpoch - BigInt(k);
         if (ep <= 0n) continue;
         try {
           const finRaw = await ethCallTo(MARKET.stakerRewards, SEL.pendingStakerReward + encUint(id) + encUint(ep));
@@ -1471,6 +1515,7 @@ export async function renderMyPositions(account, ids, snapshot) {
       }
     }
     row.dataset.needsIndex = needsIndex ? '1' : '0';
+    row.dataset.indexEpochs = String(scanEpochs);
 
     const claimableAnts = restakeAnts + finishedAnts;
     const actionText = claimableAnts.toFixed(2);
@@ -1481,7 +1526,7 @@ export async function renderMyPositions(account, ids, snapshot) {
     restakeBtn.dataset.id = id.toString();
     restakeBtn.textContent = indexPrefix + 'Restake ' + actionText;
     restakeBtn.title = needsIndex
-      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to two finished epochs of pool rewards, then restake ' + actionText + ' ANTS.'
+      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to ' + scanEpochs + ' finished epochs of pool rewards, then restake ' + actionText + ' ANTS.'
       : 'Restake ' + actionText + ' ANTS pending';
     if (claimableAnts === 0) {
       restakeBtn.disabled = true;
@@ -1495,12 +1540,15 @@ export async function renderMyPositions(account, ids, snapshot) {
     claimBtn.dataset.id = id.toString();
     claimBtn.textContent = indexPrefix + 'Claim ' + actionText;
     claimBtn.title = needsIndex
-      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to two finished epochs of pool rewards, then claim ' + actionText + ' ANTS to your wallet.'
+      ? 'Rewards from the last finished epochs are not indexed yet. This sends two transactions: index up to ' + scanEpochs + ' finished epochs of pool rewards, then claim ' + actionText + ' ANTS to your wallet.'
       : 'Claim ' + actionText + ' ANTS to your wallet. While ANTS transfers are off, claimed ANTS can\'t be staked again or sent. To keep earning, use Restake.';
     if (claimableAnts === 0) {
       claimBtn.disabled = true;
     }
     actions.appendChild(claimBtn);
+
+    // A closed position with nothing to claim would only clutter the portfolio.
+    if (isClosed && claimableAnts === 0) continue;
 
     row.appendChild(actions);
     container.appendChild(row);

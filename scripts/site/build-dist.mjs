@@ -20,6 +20,7 @@ const FILES = [
   ['site/tips.mjs', 'dist/tips.mjs'],
   ['site/market-view.mjs', 'dist/market-view.mjs'],
   ['site/portfolio-fresh.mjs', 'dist/portfolio-fresh.mjs'],
+  ['site/portfolio-state.mjs', 'dist/portfolio-state.mjs'],
   ['site/market-buy.mjs', 'dist/market-buy.mjs'],
   ['site/fixtures/snapshot-e23.full.json', 'dist/fixtures/snapshot-e23.full.json'],
   ['site/vendor/mipd/utils.js', 'dist/vendor/mipd/utils.js'],

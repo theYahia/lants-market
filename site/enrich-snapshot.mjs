@@ -170,6 +170,11 @@ async function main() {
 
     enrichedPositions.push({
       id: p.id,
+      // positions() word 0 survives the burn, so a closed position still names its
+      // last holder here even though ownerOf(id) reverts. The portfolio uses it to
+      // find the closed positions of the connected wallet (they are absent from
+      // the live stakerPositionIds list).
+      owner: p.owner,
       agentId: p.agentId,
       amount: p.amount,
       slashBps,
