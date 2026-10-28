@@ -132,7 +132,7 @@ async function main(argv) {
   // are never re-detected and never lost. A trades outage must not erase the
   // known trade ids, or the next successful run reposts the whole history.
   state.last = toState(feed, state.last ? state.last.tradeIds : null);
-  if (antseedSnapshot) state.antseed = toAntseedState(antseedSnapshot);
+  if (antseedSnapshot) state.antseed = toAntseedState(antseedSnapshot, state.antseed);
   state.pending = pending;
 
   if (pending.length === 0) {
@@ -171,6 +171,12 @@ async function main(argv) {
     state.pending = state.pending.filter((e) => e.key !== post.key);
     state.emitted = markEmitted(state.emitted || [], post.key);
     state.lastPostKey = post.key;
+    // Advance the antseedstats post-baseline only for the events that actually
+    // went out; a capped run leaves the baseline untouched for the queue.
+    if (state.antseed && post.meta?.field) {
+      if (post.meta.field === 'max7d') state.antseed.max7d = post.meta.value;
+      else state.antseed.posted[post.meta.field] = post.meta.value;
+    }
     posted += 1;
     log(`posted ${res.id}: ${post.text}`);
   }

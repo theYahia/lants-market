@@ -105,34 +105,127 @@ test('diffAntseedStats reports new burn epochs', () => {
     burns: [{ epoch: 25, ants: 1500000 }],
   };
   const curr = {
-    settled24h: 100,
     settled7d: 100,
     settled30d: 100,
     stakedAnts: 100,
     stakedPct: 50,
+    burnedAnts: 7500000,
     burns: [{ epoch: 25, ants: 1500000 }, { epoch: 26, ants: 1500000 }],
   };
   const events = diffAntseedStats(prev, curr);
   const burn = events.find((e) => e.type === 'burn');
   assert.equal(burn.key, 'burn:26');
-  assert.equal(burn.text, `Burned: 1.5M ANTS (epoch 26) ${MID} data: antseedstats.com`);
+  assert.equal(burn.text, `ANTS burn: 1.5M (epoch 26) ${MID} total 7.5M ${MID} data: antseedstats.com`);
   assert.equal(events.length, 1);
 });
 
-test('diffAntseedStats posts settled/staked only past a ±5% move', () => {
-  const base = { settled7d: 12000, settled30d: 30000, stakedPct: 73, burns: [] };
-  const prev = { ...base, settled24h: 2398.58, stakedAnts: 1500000 };
-  const curr = { ...base, settled24h: 2600, stakedAnts: 1600000 };
+test('diffAntseedStats posts settled/staked past a move from the last posted value', () => {
+  const base = { settled30d: 30000, stakedPct: 73, burns: [] };
+  const prev = {
+    ...base,
+    settled7d: 12000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+  };
+  const curr = {
+    ...base,
+    settled7d: 12804.23,
+    settles7d: 27841,
+    sellers7d: 70,
+    stakedAnts: 1600000,
+    stakedPct: 74,
+  };
   const events = diffAntseedStats(prev, curr);
   const settled = events.find((e) => e.type === 'settled');
   const staked = events.find((e) => e.type === 'staked');
-  assert.equal(settled.key, 'settled:settled24h:2600');
-  assert.equal(settled.text, `Settled 24h: $2398.58 ${ARROW} $2600.00 (+8.4%) ${MID} data: antseedstats.com`);
-  assert.equal(staked.text, `Staked: 1.5M ${ARROW} 1.6M ANTS (+6.7%) ${MID} data: antseedstats.com`);
+  assert.equal(settled.key, 'settled:settled7d:12804.23');
+  assert.equal(settled.text, `AntSeed 7d settled: $12,804 (+6.7%) ${MID} 27,841 settlements ${MID} 70 sellers ${MID} data: antseedstats.com`);
+  assert.strictEqual(settled.field, 'settled7d');
+  assert.strictEqual(settled.value, 12804.23);
+  assert.equal(staked.text, `Staked: 1.6M ANTS (+6.7%) ${MID} 74% of stakable ${MID} data: antseedstats.com`);
+  assert.strictEqual(staked.field, 'stakedAnts');
+  assert.equal(staked.value, 1600000);
   assert.equal(events.length, 2);
+});
 
-  const small = diffAntseedStats(prev, { ...base, settled24h: 2400, stakedAnts: 1510000 });
-  assert.equal(small.length, 0);
+test('diffAntseedStats: a move under ±5% from the last posted value posts nothing', () => {
+  const prev = {
+    settled7d: 12000,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+  };
+  const curr = {
+    settled7d: 12200,
+    settled30d: 30200,
+    stakedAnts: 1510000,
+    burns: [],
+  };
+  assert.equal(diffAntseedStats(prev, curr).length, 0);
+});
+
+test('diffAntseedStats drops settled24h posts entirely', () => {
+  const prev = {
+    settled7d: 12000,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+  };
+  const curr = {
+    ...prev,
+    settled24h: 2600,
+  };
+  const events = diffAntseedStats(prev, curr);
+  assert.equal(events.find((e) => e.type === 'settled'), undefined);
+  assert.equal(events.length, 0);
+});
+
+test('diffAntseedStats: missing posted baseline is seeded and posts nothing', () => {
+  const prev = { settled7d: 100, settled30d: 100, stakedAnts: 100, burns: [] };
+  const curr = {
+    settled7d: 12804.23,
+    settled30d: 30000,
+    stakedAnts: 1600000,
+    burns: [],
+  };
+  assert.equal(diffAntseedStats(prev, curr).length, 0);
+});
+
+test('diffAntseedStats: a new settled7d high posts a record regardless of ±5%', () => {
+  const prev = {
+    settled7d: 12000,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+    max7d: 12000,
+  };
+  const curr = {
+    settled7d: 12400,
+    settles7d: 26000,
+    sellers7d: 68,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    burns: [],
+  };
+  const events = diffAntseedStats(prev, curr);
+  const rec = events.find((e) => e.type === 'record7d');
+  assert.equal(rec.key, 'record7d:12400');
+  assert.equal(rec.text, `AntSeed 7d settled hit a record: $12,400 ${MID} data: antseedstats.com`);
+  assert.strictEqual(rec.field, 'max7d');
+  assert.equal(rec.value, 12400);
+  assert.equal(events.filter((e) => e.type === 'settled').length, 0);
+});
+
+test('diffAntseedStats: no record when the high equals the stored max7d', () => {
+  const prev = {
+    settled7d: 12000,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+    max7d: 13000,
+  };
+  const curr = { settled7d: 12500, settled30d: 30000, stakedAnts: 1500000 };
+  assert.equal(diffAntseedStats(prev, curr).find((e) => e.type === 'record7d'), undefined);
 });
 
 test('diffAntseedStats cold start invents no events', () => {

@@ -67,12 +67,19 @@ export function parseNetworkSummary(json) {
   const epoch = isObject(json.data.epoch) && isInt(json.data.epoch.number) ? json.data.epoch.number : null;
   if (windows === null || epoch === null) return { ok: false, reason: 'schema' };
   const usd = (key) => (isObject(windows[key]) ? finiteNumber(windows[key].settled_usd) : null);
+  const count = (key, field) => (isObject(windows[key]) ? finiteNumber(windows[key][field]) : null);
   return {
     ok: true,
     network: {
       settled24h: usd('24h'),
       settled7d: usd('7d'),
       settled30d: usd('30d'),
+      settles24h: count('24h', 'settles'),
+      settles7d: count('7d', 'settles'),
+      settles30d: count('30d', 'settles'),
+      sellers24h: count('24h', 'sellers'),
+      sellers7d: count('7d', 'sellers'),
+      sellers30d: count('30d', 'sellers'),
       epoch,
     },
   };
@@ -229,22 +236,45 @@ export function toAntseedSnapshot(result) {
     settled24h: result.network ? result.network.settled24h : null,
     settled7d: result.network ? result.network.settled7d : null,
     settled30d: result.network ? result.network.settled30d : null,
+    settles24h: result.network ? result.network.settles24h : null,
+    settles7d: result.network ? result.network.settles7d : null,
+    settles30d: result.network ? result.network.settles30d : null,
+    sellers24h: result.network ? result.network.sellers24h : null,
+    sellers7d: result.network ? result.network.sellers7d : null,
+    sellers30d: result.network ? result.network.sellers30d : null,
     stakedAnts: result.supply ? result.supply.stakedAnts : null,
     stakedPct: result.supply ? result.supply.stakedPct : null,
+    burnedAnts: result.supply ? result.supply.burnedAnts : null,
     burns: result.supply ? result.supply.burns : [],
     epochs: result.epochs ? result.epochs : [],
   };
 }
 
-// Compact form persisted in state.json.
-export function toAntseedState(snapshot) {
+// Compact form persisted in state.json. `prev` carries the run-dependent
+// post-baselines (posted, max7d) that a fresh snapshot does not know about.
+export function toAntseedState(snapshot, prev = null) {
   return {
     settled24h: snapshot.settled24h,
     settled7d: snapshot.settled7d,
     settled30d: snapshot.settled30d,
+    settles7d: snapshot.settles7d,
+    sellers7d: snapshot.sellers7d,
+    settles30d: snapshot.settles30d,
+    sellers30d: snapshot.sellers30d,
     stakedAnts: snapshot.stakedAnts,
     stakedPct: snapshot.stakedPct,
+    burnedAnts: snapshot.burnedAnts,
     burns: snapshot.burns,
     maxCompletedEpoch: maxCompletedEpoch(snapshot.epochs),
+    // Continuous metrics post only past a move from the last POSTED value; a
+    // state without posted (old state / cold start) is seeded from the current
+    // snapshot with no post.
+    posted: prev?.posted ?? {
+      settled7d: snapshot.settled7d,
+      settled30d: snapshot.settled30d,
+      stakedAnts: snapshot.stakedAnts,
+    },
+    // All-time high of settled7d; a new high always posts (record key).
+    max7d: prev?.max7d ?? snapshot.settled7d,
   };
 }

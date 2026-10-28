@@ -41,7 +41,7 @@ export function enqueue(pending, events, emitted, nowMs = Date.now()) {
   for (const e of events) {
     if (done.has(e.key) || have.has(e.key)) continue;
     have.add(e.key);
-    next.push({ type: e.type, key: e.key, text: e.text, createdAt });
+    next.push({ type: e.type, key: e.key, text: e.text, createdAt, meta: e.meta ?? null });
   }
   return next;
 }

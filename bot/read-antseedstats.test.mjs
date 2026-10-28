@@ -27,13 +27,17 @@ const epoch28Fixture = load('antseedstats-epoch-28-2026-10-28.json');
 const modelsFixture = load('antseedstats-models-2026-10-28.json');
 const pricesFixture = load('antseedstats-prices-2026-10-28.json');
 
-test('parseNetworkSummary extracts settled windows and epoch', () => {
+test('parseNetworkSummary extracts settled windows, counts and epoch', () => {
   const res = parseNetworkSummary(networkFixture);
   assert.equal(res.ok, true);
   assert.equal(res.network.epoch, 28);
   assert.ok(Math.abs(res.network.settled24h - 2418.38) < 1e-6);
   assert.ok(Math.abs(res.network.settled7d - 12804.23) < 1e-6);
   assert.ok(Math.abs(res.network.settled30d - 30411.16) < 1e-6);
+  assert.equal(res.network.settles7d, 27841);
+  assert.equal(res.network.settles24h, 5288);
+  assert.equal(res.network.sellers7d, 70);
+  assert.equal(res.network.sellers30d, 88);
 });
 
 test('parseSupply extracts totals, stake partition and sorted burns', () => {
@@ -141,15 +145,50 @@ test('readAntseedStats soft-fails a section instead of aborting the run', async 
 
 test('toAntseedSnapshot and toAntseedState build diff + persist shapes', () => {
   const result = {
-    network: { settled24h: 1 },
-    supply: { stakedAnts: 2, stakedPct: 3, burns: [{ epoch: 22, ants: 1500000 }] },
+    network: {
+      settled24h: 1, settled7d: 2, settled30d: 3,
+      settles7d: 10, sellers7d: 2, settles30d: 30, sellers30d: 3,
+    },
+    supply: { stakedAnts: 2, stakedPct: 3, burnedAnts: 6, burns: [{ epoch: 22, ants: 1500000 }] },
     epochs: [{ epoch: 27, status: 'complete' }, { epoch: 28, status: 'current' }],
   };
   const snapshot = toAntseedSnapshot(result);
   assert.equal(snapshot.settled24h, 1);
+  assert.equal(snapshot.settled7d, 2);
+  assert.equal(snapshot.settles7d, 10);
+  assert.equal(snapshot.sellers7d, 2);
+  assert.equal(snapshot.settles30d, 30);
+  assert.equal(snapshot.sellers30d, 3);
   assert.equal(snapshot.stakedAnts, 2);
+  assert.equal(snapshot.burnedAnts, 6);
   assert.equal(snapshot.epochs.length, 2);
   const state = toAntseedState(snapshot);
   assert.deepEqual(state.burns, [{ epoch: 22, ants: 1500000 }]);
   assert.equal(state.maxCompletedEpoch, 27);
+  assert.equal(state.burnedAnts, 6);
+  assert.equal(state.settles7d, 10);
+  assert.equal(state.sellers7d, 2);
+  assert.deepEqual(state.posted, { settled7d: 2, settled30d: 3, stakedAnts: 2 });
+  assert.equal(state.max7d, 2);
+});
+
+test('toAntseedState preserves the posted baseline and max7d from prev', () => {
+  const snapshot = {
+    settled7d: 13000,
+    settled30d: 30000,
+    stakedAnts: 1600000,
+    settles7d: 1,
+    sellers7d: 1,
+    settles30d: 1,
+    sellers30d: 1,
+    burns: [],
+    epochs: [],
+  };
+  const prev = {
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+    max7d: 13000,
+  };
+  const state = toAntseedState(snapshot, prev);
+  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 });
+  assert.equal(state.max7d, 13000);
 });

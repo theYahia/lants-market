@@ -24,10 +24,25 @@ export function fmtAmount(v) {
   return n.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
 }
 
-function pct(from, to) {
+// Signed percent string "+8.4%" / "-5.0%".
+export function pct(from, to) {
   const p = ((to - from) / from) * 100;
   const sign = p < 0 ? '-' : '+';
   return sign + Math.abs(p).toFixed(1) + '%';
+}
+
+// Whole dollars with thousands separators: 12804.23 -> "$12,804".
+export function usdWhole(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '$0';
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+// 27841 -> "27,841" (settlement counts in antseedstats texts).
+function countLabel(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString('en-US');
 }
 
 export function fmtEmission(v) {
@@ -79,16 +94,24 @@ function trim(x) {
 }
 
 // antseedstats.com post types: every number carries the CC BY 4.0 attribution.
-export function burnText(b) {
-  return `Burned: ${fmtCompact(b.ants)} ANTS (epoch ${b.epoch}) ${MID} ${DATA_SRC}`;
+export function burnText(burn, totalBurned) {
+  return `ANTS burn: ${fmtCompact(burn.ants)} (epoch ${burn.epoch}) ${MID} total ${fmtCompact(totalBurned)} ${MID} ${DATA_SRC}`;
 }
 
-export function settledText(label, from, to) {
-  return `Settled ${label}: ${usd2(from)} \u2192 ${usd2(to)} (${pct(from, to)}) ${MID} ${DATA_SRC}`;
+// pctChange is a signed percent string like "+6.1%".
+export function settledText(label, value, pctChange, settles, sellers) {
+  return `AntSeed ${label} settled: ${usdWhole(value)} (${pctChange}) ${MID} ${countLabel(settles)} settlements ${MID} ${countLabel(sellers)} sellers ${MID} ${DATA_SRC}`;
 }
 
-export function stakedText(from, to) {
-  return `Staked: ${fmtCompact(from)} \u2192 ${fmtCompact(to)} ANTS (${pct(from, to)}) ${MID} ${DATA_SRC}`;
+// pctChange is a signed percent string like "+5.2%"; stakedPct is the raw
+// share of stakable ANTS (73.2107 -> "73% of stakable").
+export function stakedText(value, pctChange, stakedPct) {
+  const pctOf = Number.isFinite(Number(stakedPct)) ? Math.round(Number(stakedPct)) : 0;
+  return `Staked: ${fmtCompact(value)} ANTS (${pctChange}) ${MID} ${pctOf}% of stakable ${MID} ${DATA_SRC}`;
+}
+
+export function recordText(value) {
+  return `AntSeed 7d settled hit a record: ${usdWhole(value)} ${MID} ${DATA_SRC}`;
 }
 
 function usdCompact(v) {

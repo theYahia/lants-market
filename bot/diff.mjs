@@ -9,7 +9,7 @@
 //   epochstats -> (epoch)
 // No IO here; state.mjs applies the persisted dedup/queue.
 
-import { floorText, tradeText, newListingText, delistText, epochText, burnText, settledText, stakedText, epochStatsText } from './format.mjs';
+import { floorText, tradeText, newListingText, delistText, epochText, burnText, settledText, stakedText, epochStatsText, recordText, pct } from './format.mjs';
 import { maxCompletedEpoch } from './read-antseedstats.mjs';
 
 const asIdSet = (list) => new Set((list || []).map((v) => String(v)));
@@ -88,12 +88,15 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
 
 /**
  * antseedstats.com change-only diff. Discrete events (burn, enriched epoch
- * close) post as soon as they appear; continuous ones (settled, staked) post
- * past a ±5% move. prev is the compact persisted state (max completed epoch);
- * curr is the full snapshot.
+ * close) post as soon as they appear; continuous ones (settled 7d/30d, staked)
+ * post past a ±5% move from the last POSTED value (prev.posted) — never from
+ * the last run, so a failed post cannot swallow a real move. The 24h window is
+ * kept in the snapshot but never posted. A new settled7d all-time high always
+ * posts (record key), independently of the ±5% threshold. prev is the compact
+ * persisted state (toAntseedState shape); curr is the full snapshot.
  * @param {object|null} prev  toAntseedState shape
  * @param {object|null} curr  toAntseedSnapshot shape
- * @returns {Array<{type:string,key:string,text:string}>}
+ * @returns {Array<{type:string,key:string,text:string,meta?:{field:string,value:number}}>}
  */
 export function diffAntseedStats(prev, curr) {
   if (!prev || !curr) return [];
@@ -102,24 +105,60 @@ export function diffAntseedStats(prev, curr) {
   const prevBurns = new Set((prev.burns || []).map((b) => String(b.epoch)));
   for (const b of curr.burns || []) {
     if (prevBurns.has(String(b.epoch))) continue;
-    events.push({ type: 'burn', key: `burn:${b.epoch}`, text: burnText(b) });
+    events.push({
+      type: 'burn',
+      key: `burn:${b.epoch}`,
+      text: burnText(b, curr.burnedAnts),
+      meta: { field: null, value: null },
+    });
   }
 
-  for (const [field, label] of [['settled24h', '24h'], ['settled7d', '7d'], ['settled30d', '30d']]) {
-    if (changedBy(prev[field], curr[field])) {
-      events.push({
-        type: 'settled',
-        key: `settled:${field}:${curr[field]}`,
-        text: settledText(label, prev[field], curr[field]),
-      });
-    }
+  // Continuous baseline: the last POSTED values. A state without `posted` is
+  // seeded from the current snapshot so the upgrade run never announces a move
+  // from an unknown baseline.
+  const posted = prev.posted ?? {
+    settled7d: curr.settled7d,
+    settled30d: curr.settled30d,
+    stakedAnts: curr.stakedAnts,
+  };
+
+  for (const [field, label, settlesField, sellersField] of [
+    ['settled7d', '7d', 'settles7d', 'sellers7d'],
+    ['settled30d', '30d', 'settles30d', 'sellers30d'],
+  ]) {
+    if (!changedBy(posted[field], curr[field])) continue;
+    events.push({
+      type: 'settled',
+      field,
+      value: curr[field],
+      key: `settled:${field}:${curr[field]}`,
+      text: settledText(label, curr[field], pct(posted[field], curr[field]), curr[settlesField], curr[sellersField]),
+      meta: { field, value: curr[field] },
+    });
   }
 
-  if (changedBy(prev.stakedAnts, curr.stakedAnts)) {
+  if (changedBy(posted.stakedAnts, curr.stakedAnts)) {
     events.push({
       type: 'staked',
+      field: 'stakedAnts',
+      value: curr.stakedAnts,
       key: `staked:${curr.stakedAnts}`,
-      text: stakedText(prev.stakedAnts, curr.stakedAnts),
+      text: stakedText(curr.stakedAnts, pct(posted.stakedAnts, curr.stakedAnts), curr.stakedPct),
+      meta: { field: 'stakedAnts', value: curr.stakedAnts },
+    });
+  }
+
+  // All-time high of settled7d posts regardless of ±5%. Rounded to $100 for a
+  // stable dedup key across runs.
+  const max7d = prev.max7d ?? curr.settled7d;
+  if (curr.settled7d > max7d) {
+    events.push({
+      type: 'record7d',
+      field: 'max7d',
+      value: curr.settled7d,
+      key: `record7d:${Math.round(curr.settled7d / 100) * 100}`,
+      text: recordText(curr.settled7d),
+      meta: { field: 'max7d', value: curr.settled7d },
     });
   }
 

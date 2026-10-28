@@ -20,6 +20,19 @@ test('enqueue skips already emitted and already queued keys', () => {
   assert.equal(withEmitted[0].key, 'floor:0.13');
 });
 
+test('enqueue carries the meta field used to advance post baselines', () => {
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  const events = [
+    { type: 'settled', key: 'settled:settled7d:12804.23', text: 't', meta: { field: 'settled7d', value: 12804.23 } },
+    { type: 'record7d', key: 'record7d:12800', text: 'r', meta: { field: 'max7d', value: 13000 } },
+    { type: 'floor', key: 'floor:0.12', text: 'f' },
+  ];
+  const queued = enqueue([], events, [], now);
+  assert.deepEqual(queued[0].meta, { field: 'settled7d', value: 12804.23 });
+  assert.deepEqual(queued[1].meta, { field: 'max7d', value: 13000 });
+  assert.equal(queued[2].meta, null);
+});
+
 test('dropStale removes events older than 48h', () => {
   const now = Date.parse('2026-10-30T12:00:00Z');
   const pending = [
