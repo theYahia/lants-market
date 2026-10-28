@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Print pending posts without tweeting'
+        description: 'Print pending posts without tweeting or writing state'
         required: false
         type: boolean
         default: false
@@ -32,6 +32,7 @@ jobs:
           node-version: 20
 
       - name: Restore bot state
+        id: state-restore
         uses: actions/cache/restore@v4
         with:
           path: bot/state.json
@@ -45,10 +46,10 @@ jobs:
           X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
           X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: node bot/run.mjs
+        run: node bot/run.mjs 2>&1 | tee bot-run.log
 
       - name: Save bot state
-        if: always()
+        if: always() && hashFiles('bot/state.json') != ''
         uses: actions/cache/save@v4
         with:
           path: bot/state.json
@@ -56,4 +57,18 @@ jobs:
 
       - name: Summarize
         if: always()
-        run: echo "Twitter bot run finished with status ${{ job.status }}." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          {
+            echo "Twitter bot run finished with status ${{ job.status }}."
+            echo ""
+            echo "dry_run=${{ inputs.dry_run }}"
+            echo '```'
+            cat bot-run.log 2>/dev/null || echo "(no bot-run.log)"
+            echo '```'
+            echo ""
+            if [ -f bot/state.json ]; then
+              echo "state.json written ($(wc -c < bot/state.json) bytes)"
+            else
+              echo "state.json NOT written"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
