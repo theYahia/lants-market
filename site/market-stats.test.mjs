@@ -1,5 +1,5 @@
 // site/market-stats.test.mjs
-import { computeMarketStats, computeImpliedFromAsks, buyListingPriceFromData, ANTS_MAX_SUPPLY } from './market-stats.mjs';
+import { computeMarketStats, computeImpliedFromAsks, buyListingPriceFromData, seaportAsAskItems, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import assert from 'node:assert';
 
 const now = 1_000_000_000;
@@ -133,5 +133,19 @@ assert.strictEqual(buyListingPriceFromData(buyData), 1234567890n);
 assert.strictEqual(buyListingPriceFromData('0x' + '00'.repeat(64)), null);
 assert.strictEqual(buyListingPriceFromData('0x'), null);
 assert.strictEqual(buyListingPriceFromData(null), null);
+
+// Test 12: Seaport asks feed the same implied-price math, mixed with ours.
+const ourAsk = { listingId: 400, nftId: 'a', price: 10e6, isLive: true, chainAmount: 10n ** 18n };
+const seaAsks = seaportAsAskItems([
+  { id: 1, priceUsdc: 20, amount: 10 },
+  { id: 2, priceUsdc: 0, amount: 10 }, // dropped by validation earlier; defensive here
+  { id: 3, priceUsdc: 5, amount: 0 },
+]);
+assert.strictEqual(seaAsks.length, 1);
+const impl12 = computeImpliedFromAsks([ourAsk, ...seaAsks], [], { minted: 100 });
+assert.strictEqual(impl12.listedCount, 2);
+assert.strictEqual(impl12.impliedPricePerAnts, 30 / 11); // (10 + 20) / (1 + 10)
+assert.strictEqual(impl12.floorAskPerAnts, 2); // Seaport 20 USDC / 10 ANTS
+assert.ok(Math.abs(impl12.fdvUsd - (30 / 11) * ANTS_MAX_SUPPLY) < 1e-6);
 
 console.log('stats_ok=1');

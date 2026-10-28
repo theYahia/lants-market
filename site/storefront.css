@@ -1,5 +1,14 @@
 /* Storefront cards, toolbar and the #position deep page. */
 
+.metric-note {
+    display: block;
+    color: var(--muted);
+    font-size: var(--fs-10);
+    font-weight: 600;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+
 .sf-toolbar {
     display: flex;
     align-items: center;

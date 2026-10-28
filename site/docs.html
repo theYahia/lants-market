@@ -314,6 +314,20 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <p><strong>Sources.</strong> Pool sales come from the public API <code>antscan.co/api/sellers</code>, a third-party community site, not an on-chain source. Everything else is read directly from Base.</p>
 <p><strong>Cross-check.</strong> Every snapshot number is read on two independent RPCs (<code>base-rpc.publicnode.com</code> and <code>base-mainnet.public.blastapi.io</code>) at the same block and compared. If they disagree, the snapshot is not published.</p>
 <p><strong>Live reads.</strong> Listings, sales, My Portfolio and the MC / FDV figures do not come from the snapshot: your browser reads them directly from Base through public RPC endpoints.</p>
+<h2>Price sources</h2>
+<p>The header shows separate measures, each labelled by its source, not one "reconciled" number:</p>
+<table>
+<thead>
+<tr><th>Measure</th><th>What it is</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td>Implied Price/ANTS</td><td>Size-weighted VWAP of live asks per ANTS</td><td>lANTS lots here + Seaport feed</td></tr>
+<tr><td>Floor Ask/ANTS</td><td>Lowest live ask per ANTS</td><td>lANTS lots here + Seaport feed</td></tr>
+<tr><td>24h avg sale</td><td>Average executed sale price over 24h (second line under 24H Volume)</td><td>Seaport feed (antseedmarkets.com)</td></tr>
+</tbody>
+</table>
+<p>The network's announcement cites $0.094/ANTS as the <strong>average lANTS sale price at post time</strong>, not a floor and not an implied price. When no live asks are available the ask-derived tiles show an em dash; the 24h average is whatever the feed reports, or nothing when the feed is unavailable.</p>
+<p>Seaport lots come from the ecosystem front's public feed. A feed outage hides those lots and their asks; our own listings keep rendering.</p>
 <p><strong>Privacy.</strong> The page has no backend and does not collect user data. Transactions go through your wallet; reads go through public RPC endpoints.</p>
 <p>---</p>
 </section>

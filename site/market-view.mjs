@@ -11,8 +11,9 @@ import {
   cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS,
   encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
-import { computeMarketStats, computeImpliedFromAsks, ANTS_MAX_SUPPLY } from './market-stats.mjs';
+import { computeMarketStats, computeImpliedFromAsks, seaportAsAskItems, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { readListings, ethCallTo, getMinted, getMaxSupply } from './own-listings.mjs';
+import { fetchSeaportMarket } from './seaport-feed.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 import { closedPositionIdsForOwner } from './portfolio-state.mjs';
@@ -287,11 +288,49 @@ function setTile(id, text) {
   value.setAttribute('data-src', 'computed');
 }
 
-function updateTiles(items, snapshot) {
+// Small second line under a tile value (used for the 24h average sale price).
+function setTileNote(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let note = el.querySelector('.metric-note');
+  if (!text) {
+    if (note) note.remove();
+    return;
+  }
+  if (!note) {
+    note = document.createElement('small');
+    note.className = 'metric-note';
+    el.appendChild(note);
+  }
+  note.textContent = text;
+}
+
+// Seaport asks are a hard requirement for that source but should never hold
+// up our own tiles for longer than the feed timeout. Cache one read per minute.
+let seaportFeedCache = null;
+const EMPTY_SEAPORT_FEED = { ok: false, items: [], price: { avgPrice24h: null, floorAsk: null } };
+
+async function loadSeaportFeed() {
+  if (seaportFeedCache && Date.now() - seaportFeedCache.at < 60000) return seaportFeedCache.feed;
+  let feed;
+  try {
+    feed = await fetchSeaportMarket();
+  } catch (e) {
+    feed = EMPTY_SEAPORT_FEED;
+  }
+  seaportFeedCache = { at: Date.now(), feed };
+  return feed;
+}
+
+function updateTiles(items, snapshot, seaportFeed = EMPTY_SEAPORT_FEED) {
   updateSales(items, snapshot);
   const nowSec = Math.floor(Date.now() / 1000);
   const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, nowSec);
-  const impl = computeImpliedFromAsks(items || [], INTERNAL_LISTING_IDS, {
+
+  // One ask pool: our live listings plus validated Seaport orders.
+  const seaportAsks = seaportFeed && seaportFeed.ok ? seaportAsAskItems(seaportFeed.items) : [];
+  const asks = (items || []).concat(seaportAsks);
+  const impl = computeImpliedFromAsks(asks, INTERNAL_LISTING_IDS, {
     maxSupply: getMaxSupply() ?? ANTS_MAX_SUPPLY,
     minted: getMinted(),
     supplyCount: (snapshot && (snapshot.positions || snapshot.rows)) ? (snapshot.positions || snapshot.rows).length : null,
@@ -300,6 +339,11 @@ function updateTiles(items, snapshot) {
 
   // 24H volume (historical sales) - kept from computeMarketStats
   setTile('m-positions', s.volumeText);
+  const avg = seaportFeed?.price?.avgPrice24h;
+  setTileNote(
+    'm-positions',
+    Number.isFinite(avg) && avg > 0 ? '24h avg ' + USD_LIVE.format(avg) + '/ANTS' : ''
+  );
 
   // Implied price/ANTS, MC, FDV, LISTED/SUPPLY and FLOOR ASK from live asks.
   // Gate on at least one live external listing; otherwise a dash, not "n/a 0".
@@ -326,8 +370,8 @@ function fmtSupply(n) {
   if (n == null || !Number.isFinite(n)) return '—';
   return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 }
-function render(snapshot, items) {
-  updateTiles(items, snapshot);
+function render(snapshot, items, seaportFeed) {
+  updateTiles(items, snapshot, seaportFeed);
   const table = tableEl();
   table.textContent = '';
 
@@ -696,9 +740,16 @@ async function onConnect() {
       }
     }
 
-    const snapshot = await loadSnapshot();
-    const items = await readListings();
-    render(snapshot, items);
+    const [snapRes, itemsRes, feedRes] = await Promise.allSettled([
+      loadSnapshot(),
+      readListings(),
+      loadSeaportFeed(),
+    ]);
+    const snapshot = snapRes.status === 'fulfilled' ? snapRes.value : null;
+    const items = itemsRes.status === 'fulfilled' ? itemsRes.value : [];
+    const seaportFeed = feedRes.status === 'fulfilled' ? feedRes.value : EMPTY_SEAPORT_FEED;
+    if (!snapshot) throw new Error('snapshot unavailable');
+    render(snapshot, items, seaportFeed);
     if (connectedAccount) await renderMyPositions(connectedAccount, myIds, snapshot);
     await renderMyListingsPanel();
   } catch (e) {
@@ -727,9 +778,19 @@ export async function loadPublicMarket() {
   if (MARKET.market === ZERO) return;
   if (connectedAccount) return onConnect(); // re-read the wallet's positions after a buy, split or stake
   try {
-    const snapshot = await loadSnapshot();
-    const items = await readListings();
-    render(snapshot, items);
+    const [snapRes, itemsRes, feedRes] = await Promise.allSettled([
+      loadSnapshot(),
+      readListings(),
+      loadSeaportFeed(),
+    ]);
+    const snapshot = snapRes.status === 'fulfilled' ? snapRes.value : null;
+    const items = itemsRes.status === 'fulfilled' ? itemsRes.value : [];
+    const seaportFeed = feedRes.status === 'fulfilled' ? feedRes.value : EMPTY_SEAPORT_FEED;
+    if (!snapshot) {
+      updateTiles(items, null, seaportFeed);
+      throw new Error('snapshot unavailable');
+    }
+    render(snapshot, items, seaportFeed);
   } catch (e) {
     console.warn('public market load failed', e);
     const t = tableEl();

@@ -143,8 +143,7 @@ export function buyListingPriceFromData(logData) {
  *   amount fallback when a listing has no on-chain amount (fresh split).
  * @returns {Object} Implied valuation object.
  */
-export function computeImpliedFromAsks(items, internalIds, opts = {}) {
-  const maxSupply = opts.maxSupply ?? ANTS_MAX_SUPPLY;
+export function computeImpliedFromAsks(items, internalIds, opts = {}) {  const maxSupply = opts.maxSupply ?? ANTS_MAX_SUPPLY;
   const minted = opts.minted ?? null;
   const supplyCount = opts.supplyCount ?? minted;
   const snapshot = opts.snapshot ?? null;
@@ -196,4 +195,33 @@ export function computeImpliedFromAsks(items, internalIds, opts = {}) {
     mcUsd: minted != null ? impliedPricePerAnts * minted : null,
     fdvUsd: impliedPricePerAnts * maxSupply,
   };
+}
+
+/**
+ * Adapt validated Seaport feed lots to the shape computeImpliedFromAsks()
+ * expects. The feed is already filtered (listed, fulfillable, positive USD);
+ * amounts are converted with 6-decimal precision, which is enough for VWAP.
+ *
+ * @param {Array<Object>} items - normalized items from seaport-feed.mjs.
+ * @returns {Array<Object>} ask items.
+ */
+export function seaportAsAskItems(items) {
+  const out = [];
+  for (const item of items || []) {
+    const priceUsdc = Number(item?.priceUsdc);
+    const amount = Number(item?.amount);
+    if (!(priceUsdc > 0) || !(amount > 0)) continue;
+    const priceMicro = Math.round(priceUsdc * 1e6);
+    if (!(priceMicro > 0)) continue;
+    const amountWei = BigInt(Math.round(amount * 1e6)) * 10n ** 12n;
+    if (amountWei <= 0n) continue;
+    out.push({
+      listingId: 'seaport-' + item.id,
+      nftId: String(item.id),
+      price: priceMicro,
+      isLive: true,
+      chainAmount: amountWei,
+    });
+  }
+  return out;
 }
