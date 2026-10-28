@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env*
+!.env.example
 *.log
 foundry.lock
 site.png
@@ -20,3 +21,8 @@ scripts/site/*.png
 bot/state.json
 # rotated refresh token handed to the workflow via `gh secret set`
 bot/.rotated-token
+# temporary mint helpers (run once, then deleted)
+tmp-*.mjs
+# local-only agent workspace and thread media
+.kilo/
+lants-thread/

@@ -9,6 +9,12 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - Node scripts in `scripts/`; tests are `node --test site/*.test.mjs`.
 - viem exists in Node tests only. The browser has no viem/SDK: ABI encoding is hand-rolled.
 - Tests: `npm.cmd test` (PowerShell blocks `npm.ps1`). Build: `npm.cmd run build`.
+- Coverage: `npm.cmd run test:coverage` (node `--experimental-test-coverage`,
+  needs Node >= 20.12). DOM-builder tests use `jsdom` via `site/dom-test-helper.mjs`
+  (setupDom/teardown/stubWallet); it is NOT in the build manifest and never
+  reaches `dist/`. Modules with a top-level `init()` (storefront, incentives) are
+  dynamically imported AFTER `setupDom()`.
+- Bot tests: `npm.cmd run bot`. Bot dry run: `node bot/run.mjs --dry-run`.
 - After editing `site/docs/*.md`: `node scripts/site/build-docs.mjs`.
 - Local preview: `python -m http.server 8099` from `site/`.
 
@@ -39,6 +45,9 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - `site/seaport-abi.mjs`, `site/seaport-order.mjs`, `site/seaport-buy.mjs` —
   Seaport 1.6 fulfill: pinned selector/struct, fail-closed validation, exact approve.
 - `site/render.mjs` — legacy positions table used by List view; prefer not to modify.
+- `bot/` — `@sxsiant` automation: `read-feed.mjs` (shared feed parser + trades),
+  `diff.mjs` (change-only), `xapi.mjs` (OAuth refresh + tweet), `run.mjs` (`--dry-run`).
+  State is gitignored `bot/state.json`; CI uses `.github/workflows/twitter-bot.yml`.
 
 ## Invariants
 
@@ -47,13 +56,20 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - Seaport orders are signed off-chain: there is no on-chain fallback for discovery.
   If the feed fails, Seaport lots are hidden; our own lots keep rendering.
 - Buyer price is final in both sources. The 1% fee is seller-side only.
-- Header price measures stay separate: floor ask, implied price (VWAP of live asks
-  including Seaport), 24h average sale from the feed. `$0.094` is the network's
-  average-sales figure, not a floor or the implied price.
+- Header price measures stay separate: floor ask (lowest live ask), Avg Price
+  (24H) from the feed, and Implied MC/FDV = Avg Price (24H) × ANTS minted / max
+  supply. MC/FDV never use the ask VWAP: an inflated ask must not move the
+  headline valuation. MC/FDV are priced via locked lANTS, not liquid ANTS (ANTS
+  has no liquid DEX; the locked-position sale price is the only signal). MC uses
+  ANTS minted (totalSupply), not circulating supply. `$0.094` is the network's
+  average-sales figure, not a floor or a current price. LISTED/SUPPLY
+  denominator is live positions (feed `totalNfts`), not the snapshot ledger.
 - Seaport Buy goes only through `fulfillBasicOrder` (BasicOrderType 8,
-  fulfillerConduitKey `0x0`) and only after `validateOrder`. It is currently behind
-  `SEAPORT_BUY_ENABLED = false` in `site/market-config.mjs` until a Base-fork
-  fulfillment test is recorded.
+  fulfillerConduitKey `0x0`) and only after `validateOrder`. `SEAPORT_BUY_ENABLED`
+  is `true` in `site/market-config.mjs`, but the Base-fork fulfill transcript is
+  still not recorded (no forge/anvil on the machine): the flag is provisional and
+  the fulfill path remains guarded by validateOrder + on-chain checks + eth_call
+  simulate.
 - Files copied into `dist/` must be ASCII (Cyrillic is rejected; binary images are
   exempt). New JS modules stay ≤300 lines; `market-view.mjs` and `render.mjs` must
   not grow.
