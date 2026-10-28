@@ -126,39 +126,45 @@ async function loadStorefront() {
   loading = true;
   setBanner('');
 
-  const [snapshotRes, ownRes, feedRes, poolNames] = await Promise.allSettled([
-    loadSnapshot(),
-    readListings(),
-    fetchSeaportMarket(),
-    loadPoolNames(),
-  ]);
+  try {
+    const [snapshotRes, ownRes, feedRes, poolNames] = await Promise.allSettled([
+      loadSnapshot(),
+      readListings(),
+      fetchSeaportMarket(),
+      loadPoolNames(),
+    ]);
 
-  const snapshot = snapshotRes.status === 'fulfilled' ? snapshotRes.value : null;
-  const own = ownRes.status === 'fulfilled' ? ownRes.value : [];
-  const feed = feedRes.status === 'fulfilled' ? feedRes.value : { ok: false, reason: 'network' };
-  const names = poolNames.status === 'fulfilled' ? poolNames.value : {};
+    const snapshot = snapshotRes.status === 'fulfilled' ? snapshotRes.value : null;
+    const own = ownRes.status === 'fulfilled' ? ownRes.value : [];
+    const feed = feedRes.status === 'fulfilled' ? feedRes.value : { ok: false, reason: 'network' };
+    const names = poolNames.status === 'fulfilled' ? poolNames.value : {};
 
-  if (!snapshot) {
-    setBanner('Could not load the position snapshot. Refresh the page.');
-    ctx = { snapshot: null, lots: [], feedOk: false };
+    if (!snapshot) {
+      setBanner('Could not load the position snapshot. Refresh the page.');
+      ctx = { snapshot: null, lots: [], feedOk: false };
+      return;
+    }
+
+    if (!feed.ok) {
+      setBanner('Seaport listings unavailable — showing lANTS listings only.');
+    } else if (ownRes.status === 'rejected') {
+      setBanner('Could not read lANTS listings from Base — showing Seaport lots only.');
+    }
+
+    const listed = buildLots(own, feed.ok ? feed.items : [], snapshot, names);
+    const unlisted = buildUnlistedLots(snapshot, listed, names);
+    ctx = {
+      snapshot,
+      lots: [...listed, ...unlisted].map((lot) => enrich(lot, snapshot)),
+      feedOk: feed.ok,
+    };
+    renderGrid();
+  } catch (e) {
+    console.warn('storefront load failed', e);
+    setBanner('Could not build the position list. Refresh the page.');
+  } finally {
     loading = false;
-    return;
   }
-
-  if (!feed.ok) {
-    setBanner('Seaport listings unavailable — showing lANTS listings only.');
-  } else if (ownRes.status === 'rejected') {
-    setBanner('Could not read lANTS listings from Base — showing Seaport lots only.');
-  }
-
-  const listed = buildLots(own, feed.ok ? feed.items : [], snapshot, names);
-  const unlisted = buildUnlistedLots(snapshot, listed, names);
-  const all = [...listed, ...unlisted].map((lot) => enrich(lot, snapshot));
-
-  all.sort((a, b) => (a.perAntUsd == null) - (b.perAntUsd == null));
-  ctx = { snapshot, lots: all, feedOk: feed.ok };
-  renderGrid();
-  loading = false;
 }
 
 function initToolbar() {

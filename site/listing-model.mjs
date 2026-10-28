@@ -139,7 +139,13 @@ export function buildUnlistedLots(snapshot, existingLots, poolNames = {}) {
 
   for (const pos of snapshot?.positions || []) {
     if (!isActivePosition(pos, curEpoch)) continue;
-    if (BigInt(String(pos.amount)) <= DUST_WEI) continue; // dust is aggregated in List view
+    let amountWei;
+    try {
+      amountWei = BigInt(String(pos.amount));
+    } catch (e) {
+      continue; // malformed row: no amount, no card
+    }
+    if (amountWei <= DUST_WEI) continue; // dust is aggregated in List view
     if (have.has(String(pos.id))) continue;
     out.push(enrichLot({
       source: 'lants',
