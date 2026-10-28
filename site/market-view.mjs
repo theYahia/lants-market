@@ -11,7 +11,8 @@ import {
   cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS,
   encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
-import { computeMarketStats, computeImpliedFromAsks, buyListingPriceFromData, ANTS_MAX_SUPPLY } from './market-stats.mjs';
+import { computeMarketStats, computeImpliedFromAsks, ANTS_MAX_SUPPLY } from './market-stats.mjs';
+import { readListings, ethCallTo, getMinted, getMaxSupply } from './own-listings.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 import { closedPositionIdsForOwner } from './portfolio-state.mjs';
@@ -109,11 +110,6 @@ function setConnectedButton(account) {
 const tableEl = () => document.getElementById('market-list');
 
 const ZERO = '0x0000000000000000000000000000000000000000';
-const SELECTORS = {
-  listingsLength: SEL.listingsLength,
-  listings: SEL.listings,
-  listingPrice: SEL.listingPrice
-};
 
 // Live snapshot URLs: primary (data branch) first, IPNS fallback.
 const LIVE_URLS = [
@@ -121,51 +117,11 @@ const LIVE_URLS = [
   'https://ipfs.filebase.io/ipns/k51qzi5uqu5di86efhnadxw0k1sxnuo2tkcmegxcn2ra2r3exyfpv9htxhit6b/fixtures/snapshot-e23.live.json'
 ];
 
-// Number of 32-byte words in the listings(uint256) struct (measured by ABI).
-const WORDS_PER_LISTING = 11;
-
-// ANTS ERC-20 on Base: totalSupply() = ANTS minted so far, the base for the implied market cap of a lot.
-const ANTS_TOKEN = '0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263';
-const MAX_SUPPLY_SELECTOR = '0x32cb6b0c'; // MAX_SUPPLY(), derived from the verified ANTS ABI
-let MINTED = null; // ANTS minted, read once per page load in readListings()
-let MAX_SUPPLY = null; // ANTS MAX_SUPPLY(), read once per page load in readListings()
-
 // same format as the Implied FDV tile (market-stats.mjs): $1.19M, $10.4M
 const USD_COMPACT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
 function fmtUsd(n) {
   return Number.isFinite(n) ? USD_COMPACT.format(n) : '—';
 }
-
-async function ethCallTo(to, data) {
-  const READ_RPCS = [
-    'https://base-rpc.publicnode.com',
-    'https://base.drpc.org',
-    'https://mainnet.base.org'
-  ];
-  for (const rpc of READ_RPCS) {
-    try {
-      const response = await fetch(rpc, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_call',
-          params: [{ to, data }, 'latest']
-        })
-      });
-      if (!response.ok) continue;
-      const json = await response.json();
-      if (typeof json.result === 'string') {
-        return json.result;
-      }
-    } catch (_) {
-      // try next RPC
-    }
-  }
-  throw new Error('all public RPCs failed');
-}
-async function ethCall(data) { return ethCallTo(MARKET.market, data); }
 
 // Ensure the wallet is on the expected chain, switching (and adding if needed)
 // instead of bailing out with a 'wrong network' message.
@@ -219,7 +175,7 @@ export async function ensureChain() {
 // Load the snapshot honouring the ?data=frozen switch.
 // frozen -> local full fixture.
 // otherwise -> live URL, then local live fixture, then local full fixture.
-async function loadSnapshot() {
+export async function loadSnapshot() {
   let frozen = false;
   try {
     frozen = new URLSearchParams(window.location.search).get('data') === 'frozen';
@@ -252,191 +208,6 @@ async function loadSnapshot() {
     const res = await fetch('./fixtures/snapshot-e23.full.json');
     return await res.json();
   }
-}
-
-// BuyListing(uint256 indexed listingId, address indexed nftCollection, uint256 indexed nftId, address buyer, address currency, uint256 price, uint256 fee)
-const BUY_LISTING_TOPIC0 = '0x4df3ab58a4d7c1b893e008bf1c2ae97dc5350248466a12507651a1ae285f650c';
-
-// Fetch the actual paid prices of sold lots from BuyListing logs over a bounded
-// recent window, as listingId (decimal key) -> paid price (BigInt). Free public
-// RPCs cap the eth_getLogs range, so old sales can be missed; callers fall back
-// to listingPrice() when a sold lot is not present. The first RPC that answers
-// with a well-formed log array wins, so the common no-logs case costs one call.
-async function fetchBuyListingPrices() {
-  const LOG_RPCS = [
-    ['https://base-rpc.publicnode.com', 50000],
-    ['https://base.drpc.org', 10000],
-    ['https://mainnet.base.org', 10000]
-  ];
-  const out = new Map();
-  for (const [rpc, maxRange] of LOG_RPCS) {
-    try {
-      const latest = await fetchLatestBlock(rpc);
-      if (latest === null) continue;
-      const fromBlock = '0x' + BigInt(Math.max(0, Number(latest) - maxRange)).toString(16);
-      const result = await ethGetLogs(rpc, { fromBlock, toBlock: 'latest', topics: [BUY_LISTING_TOPIC0] });
-      if (!Array.isArray(result)) continue; // unhealthy response, try the next RPC
-      for (const log of result) {
-        const price = buyListingPriceFromData(log.data);
-        if (price === null) continue;
-        const listingId = log.topics && log.topics[1];
-        if (listingId) out.set(BigInt(listingId).toString(), price);
-      }
-      return out;
-    } catch (e) {
-      // try the next RPC
-    }
-  }
-  return out;
-}
-
-async function fetchLatestBlock(rpc) {
-  try {
-    const response = await fetch(rpc, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] })
-    });
-    if (!response.ok) return null;
-    const json = await response.json();
-    return typeof json.result === 'string' ? BigInt(json.result) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function ethGetLogs(rpc, params) {
-  const response = await fetch(rpc, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] })
-  });
-  if (!response.ok) throw new Error('bad status ' + response.status);
-  const json = await response.json();
-  if (json.error) throw new Error(json.error.message);
-  return json.result;
-}
-
-// Read *all* listings on-chain (live, sold and expired).
-async function readListings() {
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  if (MINTED == null) {
-    try { MINTED = Number(wordToBigInt(decodeWords(await ethCallTo(ANTS_TOKEN, '0x18160ddd'))[0])) / 1e18 || null; }
-    catch (e) { MINTED = null; } // MC then shows a dash; FDV only needs the max supply
-  }
-  if (MAX_SUPPLY == null) {
-    // MAX_SUPPLY() is read live from the token; fall back to the constant when the RPC fails.
-    try {
-      const words = decodeWords(await ethCallTo(ANTS_TOKEN, MAX_SUPPLY_SELECTOR));
-      MAX_SUPPLY = words.length > 0 ? Number(wordToBigInt(words[0])) / 1e18 || null : null;
-    } catch (e) { MAX_SUPPLY = null; }
-  }
-  const lenRaw = await ethCall(SELECTORS.listingsLength);
-  const n = Number(wordToBigInt(decodeWords(lenRaw)[0] || lenRaw));
-
-  // BuyListing logs over a bounded recent window: the actual paid price for
-  // sold lots lives only in the event, listingPrice() returns the base price
-  // once the lot expired. Bounded because free RPCs cap the scan range; a sold
-  // lot without a matching log falls back to listingPrice() below.
-  const paidPriceByListing = await fetchBuyListingPrices();
-
-  // lots are read in parallel: ~5 calls each, one by one took ~5 s for 6 lots
-  const readOne = async (i) => {
-    const raw = await ethCall(SELECTORS.listings + encUint(i));
-    const w = decodeWords(raw);
-    if (!w || w.length < WORDS_PER_LISTING) return null;
-
-    const listingId = i;
-    const seller = wordToAddr(w[0]);
-    const currency = wordToAddr(w[4]);
-    const nftId = wordToBigInt(w[3]);
-    const endTime = wordToBigInt(w[9]);
-    const soldTime = wordToBigInt(w[10]);
-    const slopeMax = wordToBigInt(w[5]);
-    const slopeDuration = wordToBigInt(w[7]);
-
-    // Live lots always read the (Dutch-auction) price - needed for every row.
-    // A sold lot may carry a slope discount that listingPrice() no longer
-    // reflects, so the BuyListing log is preferred when it exists.
-    let price = 0n;
-    let priceEstimated = false;
-    try {
-      if (soldTime !== 0n && paidPriceByListing.has(i.toString())) {
-        price = paidPriceByListing.get(i.toString());
-      } else {
-        const pRaw = await ethCall(SELECTORS.listingPrice + encUint(i));
-        price = wordToBigInt(decodeWords(pRaw)[0] || pRaw);
-        priceEstimated = soldTime !== 0n && (slopeMax !== 0n || slopeDuration !== 0n);
-      }
-    } catch (e) {
-      throw new Error(
-        'listingPrice failed for #' + i + ': ' +
-        (e && e.message ? e.message : e)
-      );
-    }
-
-    // A cancel (or a newer listing of the same NFT) bumps the seller's nonce; the old lot can no longer be bought.
-    let cancelled = false;
-    if (soldTime === 0n) {
-      try {
-        const nRaw = await ethCall('0x444c74aa' + encAddr(seller) + encAddr(MARKET.nft) + encUint(nftId)); // sellerNftNonce(address,address,uint256)
-        cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[1]); // listings(): 0 seller, 1 sellerNftNonce, 2 nftCollection, 3 nftId, 4 currency
-      } catch {
-        cancelled = false;
-      }
-    }
-    const isLive = (soldTime === 0n && endTime >= now && !cancelled);
-    let owner = null;
-    if (isLive) {
-      try {
-        const oRaw = await ethCallTo(MARKET.nft,
-          SEL.ownerOf + encUint(nftId));
-        owner = wordToAddr(decodeWords(oRaw)[0]);
-      } catch {
-        owner = null;
-      }
-    }
-    const ownerMismatch = isLive && (!owner || owner.toLowerCase() !== seller.toLowerCase());
-    // read the on-chain position for every listing (live and sold): the snapshot lacks fresh split positions
-    let chainAmount = null;
-    let chainClosed = false;
-    let chainStakeEnd = null;
-    try {
-      const pRaw = await ethCallTo(MARKET.nft,
-        '0x99fbab88' + encUint(nftId)); // positions(uint256)
-      const words = decodeWords(pRaw);
-      chainAmount = wordToBigInt(words[2]); // amount
-      chainStakeEnd = wordToBigInt(words[5]); // stakeEndEpoch
-      const closedAt = wordToBigInt(words[6]);
-      const withdrawn = wordToBigInt(words[7]);
-      chainClosed = closedAt > 0n || withdrawn > 0n;
-    } catch {
-      chainAmount = null;
-      chainClosed = false;
-      chainStakeEnd = null;
-    }
-    return {
-      listingId,
-      nftId,
-      seller,
-      currency,
-      price,
-      priceEstimated,
-      soldTime,
-      endTime,
-      isLive,
-      ownerMismatch,
-      chainAmount,
-      chainClosed,
-      chainStakeEnd,
-      cancelled
-    };
-  };
-  const out = (await Promise.all(Array.from({ length: n }, (_, k) => readOne(BigInt(k))))).filter(Boolean);
-
-  // ensure deterministic order
-  out.sort((a, b) => (a.listingId < b.listingId ? -1 : a.listingId > b.listingId ? 1 : 0));
-  return out;
 }
 
 // Find a position in the snapshot by its NFT id (snapshot ids are strings).
@@ -494,7 +265,7 @@ function updateSales(items, snapshot) {
     row.textContent = '#' + it.listingId + ' · pos ' + it.nftId + ' · ' + (amt != null ? amt.toFixed(2) + ' ANTS · ' : '') +
       Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC' + (it.priceEstimated ? ' (est.)' : '') + ' · ' +
       new Date(Number(it.soldTime) * 1000).toISOString().slice(0, 10) +
-      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * (MAX_SUPPLY ?? ANTS_MAX_SUPPLY)) : '') +
+      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * (getMaxSupply() ?? ANTS_MAX_SUPPLY)) : '') +
       (internal.has(String(it.listingId)) ? ' · internal' : '');
     list.appendChild(row);
   }
@@ -521,8 +292,8 @@ function updateTiles(items, snapshot) {
   const nowSec = Math.floor(Date.now() / 1000);
   const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, nowSec);
   const impl = computeImpliedFromAsks(items || [], INTERNAL_LISTING_IDS, {
-    maxSupply: MAX_SUPPLY ?? ANTS_MAX_SUPPLY,
-    minted: MINTED,
+    maxSupply: getMaxSupply() ?? ANTS_MAX_SUPPLY,
+    minted: getMinted(),
     supplyCount: (snapshot && (snapshot.positions || snapshot.rows)) ? (snapshot.positions || snapshot.rows).length : null,
     snapshot: snapshot || null
   });
@@ -650,11 +421,11 @@ function render(snapshot, items) {
     const usdcPrice = Number(formatUnits(item.price, MARKET.usdcDecimals));
     if (antsNumeric != null && antsNumeric > 0) {
       const unit = usdcPrice / antsNumeric;
-      unitPriceSpan.textContent = MINTED ? fmtUsd(unit * MINTED) : '—';
+      unitPriceSpan.textContent = getMinted() ? fmtUsd(unit * getMinted()) : '—';
       const fdvLine = document.createElement('small');
-      fdvLine.textContent = fmtUsd(unit * (MAX_SUPPLY ?? ANTS_MAX_SUPPLY)) + ' FDV';
+      fdvLine.textContent = fmtUsd(unit * (getMaxSupply() ?? ANTS_MAX_SUPPLY)) + ' FDV';
       unitPriceSpan.appendChild(fdvLine);
-      unitPriceSpan.title = unit.toFixed(4) + ' USDC per ANTS' + (MINTED ? ' · MC = x ' + (MINTED / 1e6).toFixed(2) + 'M minted' : '') + ' · FDV = x ' + fmtSupply(MAX_SUPPLY ?? ANTS_MAX_SUPPLY) + ' max supply';
+      unitPriceSpan.title = unit.toFixed(4) + ' USDC per ANTS' + (getMinted() ? ' · MC = x ' + (getMinted() / 1e6).toFixed(2) + 'M minted' : '') + ' · FDV = x ' + fmtSupply(getMaxSupply() ?? ANTS_MAX_SUPPLY) + ' max supply';
     } else {
       unitPriceSpan.textContent = '—';
     }
