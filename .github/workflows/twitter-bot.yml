@@ -40,6 +40,31 @@ jobs:
           restore-keys: |
             twitter-bot-state-${{ github.ref_name }}-
 
+      - name: Feed diagnostic
+        run: |
+          node -e '
+            const u = "https://antseedmarkets.com/api/lants-market?page=1&pageSize=24&sort=listedFirst";
+            fetch(u, { headers: { accept: "application/json" } })
+              .then((r) => r.text())
+              .then((t) => {
+                let j;
+                try { j = JSON.parse(t); } catch {
+                  console.log("not-json, first 800 chars:");
+                  console.log(t.slice(0, 800));
+                  return;
+                }
+                console.log("top-level keys:", Object.keys(j).join(","));
+                console.log("listedCount:", j.listedCount, typeof j.listedCount);
+                console.log("items isArray:", Array.isArray(j.items), "len:", j.items && j.items.length);
+                if (Array.isArray(j.items)) {
+                  j.items.slice(0, 5).forEach((it) => {
+                    console.log("item id=" + it.id + " listed=" + it.listed + " amount=" + JSON.stringify(it.amount) + " listing=" + JSON.stringify(it.listing));
+                  });
+                }
+              })
+              .catch((e) => console.log("FETCH-ERR:", e && e.message));
+          ' 2>&1 | tee feed-diag.log
+
       - name: Run bot
         env:
           X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
@@ -64,6 +89,10 @@ jobs:
             echo "dry_run=${{ inputs.dry_run }}"
             echo '```'
             cat bot-run.log 2>/dev/null || echo "(no bot-run.log)"
+            echo '```'
+            echo ""
+            echo '```'
+            cat feed-diag.log 2>/dev/null || echo "(no feed-diag.log)"
             echo '```'
             echo ""
             if [ -f bot/state.json ]; then
