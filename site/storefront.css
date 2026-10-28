@@ -89,6 +89,7 @@
 .sf-grid[hidden],
 .sf-banner[hidden],
 .sf-empty[hidden],
+#tabs[hidden],
 #all-list-view[hidden],
 .position-panel[hidden] {
     display: none;

@@ -371,6 +371,7 @@
       brand.addEventListener('click',function(e){e.preventDefault();go('#market');});
       pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var h=l.getAttribute('href');go(h==='#tabs'?'#market':h);});});
       window.addEventListener('popstate',function(){route(location.hash);});
+      window.addEventListener('hashchange',function(){route(location.hash);});
       var pfConnect=document.getElementById('pf-connect');
       if(pfConnect)pfConnect.addEventListener('click',function(){var c=document.getElementById('hdr-connect');if(c)c.click();});
       route(location.hash);
@@ -393,6 +394,7 @@
     <script type="module" src="./market-view.mjs"></script>
     <script type="module" src="./market-buy.mjs"></script>
     <script type="module" src="./storefront.mjs"></script>
+    <script type="module" src="./position-page.mjs"></script>
 <script type="module" src="./tips.mjs"></script>
 <script type="module" src="./incentives.mjs"></script>
 <script type="module" src="./rebate-claim.mjs"></script>

@@ -29,6 +29,7 @@ const FILES = [
   ['site/seaport-feed.mjs', 'dist/seaport-feed.mjs'],
   ['site/storefront.mjs', 'dist/storefront.mjs'],
   ['site/storefront-card.mjs', 'dist/storefront-card.mjs'],
+  ['site/position-page.mjs', 'dist/position-page.mjs'],
   ['site/fixtures/snapshot-e23.full.json', 'dist/fixtures/snapshot-e23.full.json'],
   ['site/vendor/mipd/utils.js', 'dist/vendor/mipd/utils.js'],
 ];
