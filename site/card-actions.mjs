@@ -2,11 +2,8 @@
 // Make offer and Share. Shared so both surfaces behave identically.
 
 import { SEAPORT_BUY_ENABLED } from './market-config.mjs';
-import { buyListing } from './market-buy.mjs';
-import { buySeaportOrder } from './seaport-buy.mjs';
-import { SEAPORT_MARKET_URL } from './storefront-card.mjs';
-
-const SHARE_BASE = 'https://lants.eth.limo/';
+import { buyListing as buyListingImpl } from './market-buy.mjs';
+import { buySeaportOrder as buySeaportOrderImpl } from './seaport-buy.mjs';
 
 function report(card, text, isError) {
   const msg = card?.querySelector('.sf-msg');
@@ -15,41 +12,50 @@ function report(card, text, isError) {
   msg.classList.toggle('is-error', !!isError);
 }
 
-async function copyShare(value) {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch (e) {
-    try {
-      const area = document.createElement('textarea');
-      area.value = value;
-      area.setAttribute('readonly', '');
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      const ok = document.execCommand('copy');
-      area.remove();
-      return ok;
-    } catch (e2) {
-      return false;
-    }
+// Copy text to the clipboard: async Clipboard API first, execCommand fallback.
+async function defaultCopy(text) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    await navigator.clipboard.writeText(text);
+    return;
   }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    if (typeof document.execCommand === 'function') document.execCommand('copy');
+    else throw new Error('no clipboard API');
+  } finally {
+    ta.remove();
+  }
+}
+
+function shareText(card, button) {
+  const tokenId = button.dataset.tokenId || card.dataset.tokenId || '';
+  const href = typeof window !== 'undefined' && window.location ? window.location.href : '';
+  const url = button.dataset.share || (href.split('#')[0] + '#position/' + tokenId);
+  return { tokenId, url };
 }
 
 /**
  * Wire card actions on a container that survives re-renders.
  *
  * @param {Element} container
- * @param {{onRefresh?:() => Promise<void>|void}} [opts]
+ * @param {{onRefresh?:() => Promise<void>|void, buyListing?:Function,
+ *          buySeaportOrder?:Function, copy?:Function}} [opts]
  */
 export function initCardActions(container, opts = {}) {
   if (!container) return;
   const pendingPrice = new Map();
   const refresh = opts.onRefresh || (() => {});
+  const buyListing = opts.buyListing || buyListingImpl;
+  const buySeaportOrder = opts.buySeaportOrder || buySeaportOrderImpl;
+  const copy = opts.copy || defaultCopy;
 
   container.addEventListener('click', async (ev) => {
-    const card = ev.target.closest('.sf-card');
+    const card = ev.target.closest('.sf-card, .sf-row');
     if (!card) return;
 
     const offer = ev.target.closest('.sf-offer');
@@ -65,12 +71,14 @@ export function initCardActions(container, opts = {}) {
     const share = ev.target.closest('.sf-share');
     if (share) {
       ev.preventDefault();
-      const ok = await copyShare(SHARE_BASE + '#position/' + share.dataset.tokenId);
-      const original = share.textContent;
-      share.textContent = ok ? 'Copied' : 'Copy failed';
-      setTimeout(() => {
-        share.textContent = original;
-      }, 1500);
+      const { tokenId, url } = shareText(card, share);
+      if (!tokenId) return;
+      try {
+        await copy(url);
+        report(card, 'Link copied');
+      } catch (e) {
+        report(card, 'Copy failed', true);
+      }
       return;
     }
 
@@ -106,16 +114,6 @@ export function initCardActions(container, opts = {}) {
     if (res.ok) {
       pendingPrice.delete(tokenId);
       await refresh();
-    } else if (res.reason && res.reason !== 'wallet' && res.reason !== 'chain') {
-      // The order no longer validates here: fall back to the source front.
-      const link = document.createElement('a');
-      link.className = 'sf-btn sf-btn-link';
-      link.href = SEAPORT_MARKET_URL;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      link.textContent = 'Buy on antseedmarkets.com';
-      buy.replaceWith(link);
-      return;
     }
     buy.disabled = false;
   });

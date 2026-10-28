@@ -3,32 +3,36 @@
 
 import { formatUnlock } from './position-yield.mjs';
 
-export const SEAPORT_MARKET_URL = 'https://antseedmarkets.com/markets';
 export const PROVIDER_URL = 'https://antseedpoints.com/sellers/';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const usd4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
 const amountFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
-function el(tag, className, text) {
+export function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
 }
 
-function stat(dt, dd, title) {
+function stat(dt, dd, tip) {
   const row = el('div', 'sf-stat');
-  row.appendChild(el('dt', null, dt));
+  const label = el('dt', null, dt);
+  if (tip) {
+    const info = el('span', 'info', 'ⓘ');
+    info.dataset.tip = tip;
+    label.appendChild(info);
+  }
+  row.appendChild(label);
   const value = el('dd', null);
   if (dd instanceof Node) value.appendChild(dd);
   else value.textContent = dd;
-  if (title) row.title = title;
   row.appendChild(value);
   return row;
 }
 
-function badge(text, kind) {
+export function badge(text, kind) {
   return el('span', `sf-badge sf-badge-${kind}`, text);
 }
 
@@ -50,11 +54,24 @@ export function providerNode(lot) {
   return a;
 }
 
-function buyNode(lot, opts) {
+// Buy button with our brand mark inline, used for our own lots and Seaport
+// orders alike so the action reads as ours everywhere.
+function makeBuy(text) {
+  const btn = el('button', 'sf-btn sf-buy');
+  const mark = el('img', 'sf-buy-logo');
+  mark.src = './antseed-mark.png';
+  mark.alt = '';
+  mark.setAttribute('aria-hidden', 'true');
+  btn.appendChild(mark);
+  btn.appendChild(document.createTextNode(text));
+  return btn;
+}
+
+export function buyNode(lot, opts) {
   if (lot.priceUsdc == null) return null;
 
   if (lot.source === 'lants' && lot.listingId != null) {
-    const btn = el('button', 'sf-btn sf-buy', 'Buy');
+    const btn = makeBuy('Buy');
     btn.type = 'button';
     btn.dataset.source = 'lants';
     btn.dataset.listingId = String(lot.listingId);
@@ -63,20 +80,13 @@ function buyNode(lot, opts) {
     return btn;
   }
 
-  if (lot.source === 'seaport') {
-    if (opts.seaportBuyEnabled) {
-      const btn = el('button', 'sf-btn sf-buy', 'Buy');
-      btn.type = 'button';
-      btn.dataset.source = 'seaport';
-      btn.dataset.tokenId = String(lot.tokenId);
-      btn.dataset.price = String(Math.round(lot.priceUsdc * 1e6));
-      return btn;
-    }
-    const a = el('a', 'sf-btn sf-btn-link', 'Buy on antseedmarkets.com');
-    a.href = SEAPORT_MARKET_URL;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    return a;
+  if (lot.source === 'seaport' && opts.seaportBuyEnabled) {
+    const btn = makeBuy('Buy');
+    btn.type = 'button';
+    btn.dataset.source = 'seaport';
+    btn.dataset.tokenId = String(lot.tokenId);
+    btn.dataset.price = String(Math.round(lot.priceUsdc * 1e6));
+    return btn;
   }
 
   return null;
@@ -100,10 +110,6 @@ export function buildCard(lot, opts = {}) {
   head.appendChild(providerNode(lot));
 
   const badges = el('div', 'sf-badges');
-  badges.appendChild(badge(lot.source === 'seaport' ? 'Seaport' : 'lants', lot.source));
-  for (const other of lot.alsoOn || []) {
-    badges.appendChild(badge(other === 'seaport' ? 'also on Seaport' : 'also on lants', 'alt'));
-  }
   const statusText = lot.status === 'unlisted' ? 'Not listed' : lot.status === 'pending' ? 'Pending' : 'Listed';
   badges.appendChild(badge(statusText, lot.status === 'listed' ? 'ok' : 'muted'));
   head.appendChild(badges);
@@ -113,21 +119,21 @@ export function buildCard(lot, opts = {}) {
   const idLink = el('a', 'sf-id-link', '#' + lot.tokenId);
   idLink.href = '#position/' + lot.tokenId;
   idRow.appendChild(idLink);
-  if (lot.source === 'seaport') idRow.appendChild(el('span', 'sf-attrib', 'Seaport order · listed on antseedmarkets.com'));
   card.appendChild(idRow);
 
   const stats = el('dl', 'sf-stats');
-  stats.appendChild(stat('Amount', amountFmt.format(lot.amountAnts) + ' ANTS'));
+  stats.appendChild(stat('Amount', amountFmt.format(lot.amountAnts) + ' ANTS', 'ANTS locked in this position.'));
   stats.appendChild(stat(
     'Lock',
-    lot.lockWeeks === 'max' ? 'max lock' : `${lot.lockWeeks ?? '—'}w · unlocks ${formatUnlock(lot.unlock)}`
+    lot.lockWeeks === 'max' ? 'max lock' : `${lot.lockWeeks ?? '—'}w · unlocks ${formatUnlock(lot.unlock)}`,
+    "Weeks left in the lock; 'max' keeps constant weight that never counts down."
   ));
-  stats.appendChild(stat('APR', lot.aprPct == null ? '—' : lot.aprPct.toFixed(1) + '%', 'Staking reward only; boost is separate.'));
-  stats.appendChild(stat('Reward', lot.antsPerEpoch == null ? '—' : `≈${lot.antsPerEpoch.toFixed(2)} ANTS/epoch`));
+  stats.appendChild(stat('APR', lot.aprPct == null ? '—' : lot.aprPct.toFixed(1) + '%', 'Annualised staker reward on this position. Boost is a separate badge.'));
+  stats.appendChild(stat('Reward', lot.antsPerEpoch == null ? '—' : `≈${lot.antsPerEpoch.toFixed(2)} ANTS/epoch`, 'Estimated staker reward for the current epoch, in ANTS. Boost is separate.'));
   stats.appendChild(stat(
     'Boost',
     lot.poolSharePct == null ? '—' : `${(lot.poolSharePct * 100).toFixed(2)}% of next-epoch weight`,
-    'Share of the provider pool weight; it raises buyer points, not holder ANTS.'
+    'Share of the provider pool weight; raises buyer points, not holder ANTS.'
   ));
   card.appendChild(stats);
 
@@ -141,15 +147,12 @@ export function buildCard(lot, opts = {}) {
   const buy = buyNode(lot, opts);
   if (buy) actions.appendChild(buy);
 
-  const offer = el('button', 'sf-btn sf-offer', 'Make offer');
-  offer.type = 'button';
-  offer.dataset.tokenId = String(lot.tokenId);
-  actions.appendChild(offer);
-
-  const share = el('button', 'sf-btn sf-share', 'Share');
-  share.type = 'button';
-  share.dataset.tokenId = String(lot.tokenId);
-  actions.appendChild(share);
+  if (lot.priceUsdc == null) {
+    const offer = el('button', 'sf-btn sf-offer', 'Make offer');
+    offer.type = 'button';
+    offer.dataset.tokenId = String(lot.tokenId);
+    actions.appendChild(offer);
+  }
 
   card.appendChild(actions);
   card.appendChild(el('div', 'sf-msg'));

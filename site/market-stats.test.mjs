@@ -17,6 +17,7 @@ const stats1 = computeMarketStats(items1, null, internalIds1, now);
 // 1 and 2 are within 24h (ages 1d and 2d -> both >1 day? day = 1 day. age 1d <= 1d yes, 2d <= 1d no)
 assert.strictEqual(stats1.volumeUsd, 100); // only listing 1 within 24h
 assert.strictEqual(stats1.volume7dUsd, 300); // 1 and 2 within 7d
+assert.strictEqual(stats1.totalVolumeUsd, 300); // 1 and 2 all-time (3 is internal)
 assert.strictEqual(stats1.externalSales30, 2); // 1 and 2 (3 is internal)
 assert.strictEqual(stats1.n, 2);
 // VWAP = (100 + 200) / (1 + 2) = 100 USDC per ANTS -> FDV = 100 * 1.04B
@@ -46,6 +47,7 @@ const internalIds3 = [5];
 const snapshot3 = { positions: [{ id: 'y', amount: 10e18 }] };
 const stats3 = computeMarketStats(items3, snapshot3, internalIds3, now);
 assert.strictEqual(stats3.volumeUsd, 7);
+assert.strictEqual(stats3.totalVolumeUsd, 7); // internal #5 excluded, all-time = 24h here
 // chainAmount 2e18 used for #5 is internal; #6 has no amount on-chain -> snapshot 10e18
 assert.strictEqual(stats3.fdvUsd, (7e6 / 1e6) / 10 * ANTS_MAX_SUPPLY);
 assert.strictEqual(stats3.n, 1);
@@ -60,6 +62,7 @@ assert.strictEqual(stats4.fdvUsd, 10 * 2e9); // 10 USDC per ANTS * 2B override
 // Test 5: no sales -> volume 0, fdv dash, n 0.
 const stats5 = computeMarketStats([], null, [], now);
 assert.strictEqual(stats5.volumeUsd, 0);
+assert.strictEqual(stats5.totalVolumeUsd, 0);
 assert.strictEqual(stats5.volumeText, '$0');
 assert.strictEqual(stats5.fdvUsd, null);
 assert.strictEqual(stats5.fdvText, '—');
@@ -147,5 +150,31 @@ assert.strictEqual(impl12.listedCount, 2);
 assert.strictEqual(impl12.impliedPricePerAnts, 30 / 11); // (10 + 20) / (1 + 10)
 assert.strictEqual(impl12.floorAskPerAnts, 2); // Seaport 20 USDC / 10 ANTS
 assert.ok(Math.abs(impl12.fdvUsd - (30 / 11) * ANTS_MAX_SUPPLY) < 1e-6);
+
+// Test 13: a native-market reference price (24h avg) drives MC/FDV, not the
+// ask VWAP, so an inflated ask cannot move the headline valuation.
+const asks13 = [
+  { listingId: 500, nftId: 'a', price: 10e6, isLive: true, chainAmount: 1e18 }, // 10 USDC / 1 ANTS
+  { listingId: 501, nftId: 'b', price: 400e6, isLive: true, chainAmount: 1e18 }, // 400 USDC / 1 ANTS
+];
+const impl13 = computeImpliedFromAsks(asks13, [], {
+  minted: 130e6,
+  maxSupply: ANTS_MAX_SUPPLY,
+  referencePrice: 0.101931,
+});
+assert.strictEqual(impl13.impliedPricePerAnts, 205); // VWAP still (10+400)/2
+assert.strictEqual(impl13.referencePrice, 0.101931);
+assert.ok(Math.abs(impl13.mcUsd - 0.101931 * 130e6) < 1e-6);
+assert.ok(Math.abs(impl13.fdvUsd - 0.101931 * ANTS_MAX_SUPPLY) < 1e-6);
+
+// Test 14: referencePrice still yields MC/FDV with an empty order book.
+const impl14 = computeImpliedFromAsks([], [], {
+  minted: 130e6,
+  maxSupply: ANTS_MAX_SUPPLY,
+  referencePrice: 0.101931,
+});
+assert.strictEqual(impl14.listedCount, 0);
+assert.strictEqual(impl14.impliedPricePerAnts, null);
+assert.ok(Math.abs(impl14.fdvUsd - 0.101931 * ANTS_MAX_SUPPLY) < 1e-6);
 
 console.log('stats_ok=1');

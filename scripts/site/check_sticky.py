@@ -2,7 +2,7 @@
 """Check that the .soon-panel aside stays sticky within the viewport.
 
 Mirrors scripts/site/check_privy.py: launch chromium at 1280x900, open the
-All positions tab, scroll down, then measure the last .soon-panel bounding box.
+Listings tab, scroll down, then measure the last .soon-panel bounding box.
 Prints sticky_ok=1 when its top is within the viewport, else sticky_ok=0.
 """
 import sys
@@ -21,12 +21,12 @@ def main() -> int:
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         page.goto(url)
 
-        # Open the "All positions" tab.
+        # Open the "Listings" tab.
         try:
-            page.get_by_role("tab", name="All positions").click()
+            page.get_by_role("tab", name="Listings").click()
         except Exception:
             try:
-                page.get_by_text("All positions", exact=False).first.click()
+                page.get_by_text("Listings", exact=False).first.click()
             except Exception:
                 pass
 

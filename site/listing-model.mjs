@@ -130,7 +130,7 @@ export function buildLots(ownListings, seaportItems, snapshot, poolNames = {}, o
 
 /**
  * Add a card for every active, non-dust position that has no lot. These are
- * "Not listed" lots: no price, Make offer and Share only.
+ * "Not listed" lots: no price, Make offer only.
  */
 export function buildUnlistedLots(snapshot, existingLots, poolNames = {}) {
   const curEpoch = Number(snapshot?.epoch || 0);

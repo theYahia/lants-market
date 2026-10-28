@@ -26,7 +26,7 @@ import { validateOrder, toBasicOrderParameters } from './seaport-order.mjs';
 const ORDER_ORIGIN = 'https://antseedmarkets.com';
 const ORDER_TIMEOUT_MS = 8000;
 
-async function fetchOrder(tokenId, timeoutMs = ORDER_TIMEOUT_MS) {
+async function fetchOrder(tokenId, fetchImpl = fetch, timeoutMs = ORDER_TIMEOUT_MS) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let timer = null;
   const timeout = new Promise((_, reject) => {
@@ -37,7 +37,7 @@ async function fetchOrder(tokenId, timeoutMs = ORDER_TIMEOUT_MS) {
   });
   try {
     const res = await Promise.race([
-      fetch(`${ORDER_ORIGIN}/api/lants/order/${encodeURIComponent(tokenId)}`, {
+      fetchImpl(`${ORDER_ORIGIN}/api/lants/order/${encodeURIComponent(tokenId)}`, {
         signal: controller ? controller.signal : undefined,
         headers: { accept: 'application/json' },
       }),
@@ -50,8 +50,8 @@ async function fetchOrder(tokenId, timeoutMs = ORDER_TIMEOUT_MS) {
   }
 }
 
-async function readWord(to, data) {
-  const raw = await ethCallTo(to, data);
+async function readWord(to, data, ethCall) {
+  const raw = await ethCall(to, data);
   return wordToBigInt(decodeWords(raw)[0] ?? '0x0');
 }
 
@@ -65,15 +65,25 @@ function reporter(statusEl) {
 
 /**
  * @param {Object} input - { tokenId, cardPriceMicro, confirmedPriceMicro, statusEl }
+ * @param {Object} [deps] - injectable wallet/chain/read helpers (defaults are the real ones)
  * @returns {Promise<{ok:boolean, needsConfirm?:boolean, priceMicro?:string, txHash?:string, reason?:string}>}
  */
-export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceMicro, statusEl }) {
+export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceMicro, statusEl }, deps = {}) {
+  const w = {
+    walletRequest,
+    ensureChain,
+    waitReceipt,
+    loadPublicMarket,
+    ethCallTo,
+    fetch,
+    ...deps,
+  };
   const say = reporter(statusEl);
 
   try {
     let accounts = [];
     try {
-      accounts = await walletRequest({ method: 'eth_accounts' });
+      accounts = await w.walletRequest({ method: 'eth_accounts' });
     } catch (e) {
       accounts = [];
     }
@@ -83,14 +93,14 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
     }
     const buyer = accounts[0];
 
-    if (!(await ensureChain())) {
+    if (!(await w.ensureChain())) {
       say('wrong network', true);
       return { ok: false, reason: 'chain' };
     }
 
     const now = Math.floor(Date.now() / 1000);
     say('Loading order...');
-    const order = await fetchOrder(tokenId);
+    const order = await fetchOrder(tokenId, w.fetch);
     if (Number(order.tokenId) !== Number(tokenId)) {
       say('The order endpoint returned another token.', true);
       return { ok: false, reason: 'token' };
@@ -99,7 +109,7 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
     const expected = { tokenId, now };
     const checked = validateOrder(order, expected);
     if (!checked.ok) {
-      say('This order can no longer be filled (' + checked.reason + '). Buy on antseedmarkets.com.', true);
+      say('This order can no longer be filled (' + checked.reason + ').', true);
       return { ok: false, reason: checked.reason };
     }
 
@@ -112,29 +122,33 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
     }
 
     say('Checking the order on Base...');
-    const owner = wordToAddr(decodeWords(await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(tokenId)))[0]);
+    const owner = wordToAddr(decodeWords(await w.ethCallTo(MARKET.nft, SEL.ownerOf + encUint(tokenId)))[0]);
     if (owner.toLowerCase() !== checked.offerer) {
-      say('The seller no longer owns this position. Buy on antseedmarkets.com.', true);
+      say('The seller no longer owns this position.', true);
       return { ok: false, reason: 'owner' };
     }
 
-    const approved = await readWord(
+    const approvedForAll = await readWord(
       MARKET.nft,
-      SEL.isApprovedForAll + encAddr(checked.offerer) + encAddr(SEAPORT_16)
+      SEL.isApprovedForAll + encAddr(checked.offerer) + encAddr(SEAPORT_16),
+      w.ethCallTo
     );
-    if (approved === 0n) {
-      say('The seller has not approved Seaport to transfer this position.', true);
+    const tokenApproved = wordToAddr(
+      decodeWords(await w.ethCallTo(MARKET.nft, SEL.getApproved + encUint(tokenId)))[0] ?? '0x0'
+    );
+    if (approvedForAll === 0n && tokenApproved.toLowerCase() !== SEAPORT_16.toLowerCase()) {
+      say('The seller has not approved the marketplace to transfer this position.', true);
       return { ok: false, reason: 'approval' };
     }
 
-    const counter = await readWord(SEAPORT_16, encGetCounter(checked.offerer));
+    const counter = await readWord(SEAPORT_16, encGetCounter(checked.offerer), w.ethCallTo);
     if (counter !== checked.counter) {
       say('The order was cancelled or replaced (counter changed).', true);
       return { ok: false, reason: 'counter' };
     }
 
     const status = decodeOrderStatus(
-      decodeWords(await ethCallTo(SEAPORT_16, encGetOrderStatus(checked.orderHash)))
+      decodeWords(await w.ethCallTo(SEAPORT_16, encGetOrderStatus(checked.orderHash)))
     );
     if (status.cancelled || (status.totalSize > 0n && status.totalFilled >= status.totalSize)) {
       say('The order was cancelled or already filled.', true);
@@ -143,16 +157,17 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
 
     const allowance = await readWord(
       MARKET.usdc,
-      SEL.allowance + encAddr(buyer) + encAddr(SEAPORT_16)
+      SEL.allowance + encAddr(buyer) + encAddr(SEAPORT_16),
+      w.ethCallTo
     );
     if (allowance < total) {
       say('Approving ' + formatUnits(total, MARKET.usdcDecimals) + ' USDC...');
       const approveData = SEL.approve + encAddr(SEAPORT_16) + encUint(total);
-      const approveHash = await walletRequest({
+      const approveHash = await w.walletRequest({
         method: 'eth_sendTransaction',
         params: [{ from: buyer, to: MARKET.usdc, data: approveData }],
       });
-      const approveReceipt = await waitReceipt(approveHash);
+      const approveReceipt = await w.waitReceipt(approveHash);
       if (!approveReceipt || approveReceipt.status !== '0x1') {
         say('The USDC approval failed.', true);
         return { ok: false, reason: 'approve' };
@@ -163,7 +178,7 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
 
     say('Simulating the purchase...');
     try {
-      await walletRequest({
+      await w.walletRequest({
         method: 'eth_call',
         params: [{ from: buyer, to: SEAPORT_16, data }, 'latest'],
       });
@@ -173,18 +188,18 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
     }
 
     say('Sending the transaction...');
-    const txHash = await walletRequest({
+    const txHash = await w.walletRequest({
       method: 'eth_sendTransaction',
       params: [{ from: buyer, to: SEAPORT_16, data }],
     });
     say('sent: ' + txHash);
-    const receipt = await waitReceipt(txHash);
+    const receipt = await w.waitReceipt(txHash);
     if (!receipt || receipt.status !== '0x1') {
       say('The purchase reverted.', true);
       return { ok: false, txHash };
     }
 
-    const newOwner = wordToAddr(decodeWords(await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(tokenId)))[0]);
+    const newOwner = wordToAddr(decodeWords(await w.ethCallTo(MARKET.nft, SEL.ownerOf + encUint(tokenId)))[0]);
     if (newOwner.toLowerCase() === buyer.toLowerCase()) {
       say('bought');
     } else {
@@ -192,7 +207,7 @@ export async function buySeaportOrder({ tokenId, cardPriceMicro, confirmedPriceM
     }
 
     try {
-      await loadPublicMarket();
+      await w.loadPublicMarket();
     } catch (e) {
       // the grid refreshes through the event below even if the table read fails
     }

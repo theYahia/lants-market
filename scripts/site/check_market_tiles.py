@@ -5,10 +5,12 @@ The script starts a temporary HTTP server that serves the `site/` directory,
 opens the page in a headless Chromium browser, waits for the metric tiles to be
 rendered, extracts their text values and reports a few signals.
 
-The header mirrors the native marketplace: Implied price/ANTS, 24H volume,
-Implied MC, Implied FDV, Listed/Supply and Floor Ask/ANTS. Metrics derived from
-live asks show em dash when there is no live external listing; the 24h volume
-is computed from sales (0 with no sales).
+The header mirrors the native marketplace: Avg Price (24H), total volume,
+Implied MC, Implied FDV, Listed/Supply and Floor Ask/ANTS. The Avg Price, MC and
+FDV tiles derive from the native feed's 24h average price and show an em dash
+without it; the ask-derived tiles (Listed/Supply, Floor Ask) show an em dash
+when there is no live external listing; the total volume is computed from all
+external sales (0 with no sales).
 
 Only six signal lines are printed to stdout, one per line:
     price_text=<text>
@@ -103,7 +105,7 @@ def main() -> None:
 
                 # Determine tiles_ok: with no live RPC data there are no live
                 # external listings, so ask-derived tiles show em dash and the
-                # 24h volume shows $0 (no historical sales in the fixture).
+                # total volume shows $0 (no external sales in the fixture).
                 if (
                     values["price_text"].strip() == "—"
                     and values["volume_text"].strip() == "$0"

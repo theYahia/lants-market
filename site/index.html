@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>lANTS Market</title>
+    <script>(function(){try{var t=localStorage.getItem('lants.theme');if(t==='vexy')document.documentElement.setAttribute('data-theme','vexy');}catch(e){}})();</script>
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="favicon.png">
     <link rel="stylesheet" href="app.css">
@@ -12,16 +13,33 @@
 <body>
     <div class="container">
         <header>
-            <a href="#tabs" class="brand" aria-label="Home: all positions" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
-                <img class="brand-mark" src="antseed-mark.png" alt="" width="30" height="30">
-                <span style="font-family:var(--font-mono);font-weight:900;font-size:20px;letter-spacing:1px;color:var(--accent);white-space:nowrap;">lANTS</span>
+            <a href="#tabs" class="brand" aria-label="Home: listings" style="display:inline-flex;align-items:center;text-decoration:none;">
+                <img class="brand-mark" src="antseed-mark.png" alt="lANTS" width="40" height="40">
             </a>
             <nav class="hdr-nav">
               <a class="hdr-link is-on" href="#tabs">Market</a>
               <a class="hdr-link" href="#portfolio">My Portfolio</a>
               <a class="hdr-link" href="#incentives">Incentives</a>
             </nav>
-            <button id="hdr-connect" style="padding:9px 18px;border:0;border-radius:10px;background:oklch(0.85 0.19 130);color:oklch(0.20 0.02 250);font-weight:700;font-size:13px;">Connect</button>
+            <div class="hdr-right">
+                <button id="hdr-connect">Connect</button>
+                <button id="theme-toggle" type="button" aria-haspopup="menu" aria-expanded="false">
+                    <span class="theme-swatch" aria-hidden="true"></span>
+                    <span>Theme</span>
+                </button>
+                <div id="theme-menu" role="menu" hidden>
+                    <button type="button" class="theme-opt" data-theme-opt="lants" role="menuitemradio" aria-checked="true">
+                        <span class="theme-swatch theme-swatch--lants" aria-hidden="true"></span>
+                        <span class="theme-opt-label">lANTS</span>
+                        <span class="theme-opt-check" aria-hidden="true">&#10003;</span>
+                    </button>
+                    <button type="button" class="theme-opt" data-theme-opt="vexy" role="menuitemradio" aria-checked="false">
+                        <span class="theme-swatch theme-swatch--vexy" aria-hidden="true"></span>
+                        <span class="theme-opt-label">Vexy</span>
+                        <span class="theme-opt-check" aria-hidden="true">&#10003;</span>
+                    </button>
+                </div>
+            </div>
             <div class="hdr-clean"></div>
         </header>
 
@@ -41,9 +59,6 @@
 </div>
             <div class="ms-id-text">
               <div class="ms-title">lANTS Market</div>
-              <div class="ms-sub">locked staking</div>
-              <div class="ms-sub">positions &middot; Base</div>
-              <div class="ms-sub">positions are splittable</div>
               <div class="ms-links">
                 <a class="ms-link" href="https://antseed.com/" target="_blank" rel="noopener" aria-label="AntSeed site">
                   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
@@ -57,33 +72,33 @@
             </div>
           </div>
 
+          <div class="metric-card" id="m-floor">
+            <div class="metric-label">Floor Ask/ANTS<span class="info" tabindex="0" data-tip="Lowest live ask per ANTS across all listings.">ⓘ</span></div>
+            <div class="metric-value">—</div>
+          </div>
+
           <div class="metric-card" id="m-price">
-            <div class="metric-label">Implied Price/ANTS<span class="info" tabindex="0" data-tip="Size-weighted average of live asks per ANTS: lANTS lots here plus Seaport lots from antseedmarkets.com.">ⓘ</span></div>
+            <div class="metric-label">Avg Price (24H)<span class="info" tabindex="0" data-tip="24h average sale price from the native market feed; the basis for Implied MC and Implied FDV.">ⓘ</span></div>
             <div class="metric-value">—</div>
           </div>
 
           <div class="metric-card" id="m-positions">
-            <div class="metric-label">24H Volume<span class="info" tabindex="0" data-tip="USDC volume of external lANTS sales in the last 24 hours; internal trades excluded. The second line is the Seaport feed's 24h average sale price - a different measure from the floor ask and the implied price.">ⓘ</span></div>
+            <div class="metric-label">Total Volume<span class="info" tabindex="0" data-tip="All-time USDC volume of external lANTS sales on the native marketplace; internal trades excluded.">ⓘ</span></div>
             <div class="metric-value">$0</div>
           </div>
 
+          <div class="metric-card" id="m-listed">
+            <div class="metric-label">Listed/Supply<span class="info" tabindex="0" data-tip="Live listings vs live lANTS positions (on-chain NFTs).">ⓘ</span></div>
+            <div class="metric-value">—</div>
+          </div>
+
           <div class="metric-card" id="m-mc">
-            <div class="metric-label">Implied MC<span class="info" tabindex="0" data-tip="Implied market cap = live price/ANTS x ANTS minted, read live from the token.">ⓘ</span></div>
+            <div class="metric-label">Implied MC<span class="info" tabindex="0" data-tip="Implied market cap = 24h average price/ANTS x ANTS minted, read live from the token.">ⓘ</span></div>
             <div class="metric-value">—</div>
           </div>
 
           <div class="metric-card" id="m-locked">
-            <div class="metric-label">Implied FDV<span class="info" tabindex="0" data-tip="Fully diluted value = live price/ANTS x max supply, read live from the ANTS token.">ⓘ</span></div>
-            <div class="metric-value">—</div>
-          </div>
-
-          <div class="metric-card" id="m-listed">
-            <div class="metric-label">Listed/Supply<span class="info" tabindex="0" data-tip="Live external listings on this market vs total lANTS positions.">ⓘ</span></div>
-            <div class="metric-value">—</div>
-          </div>
-
-          <div class="metric-card" id="m-floor">
-            <div class="metric-label">Floor Ask/ANTS<span class="info" tabindex="0" data-tip="Lowest live ask per ANTS across lANTS lots here and Seaport lots from antseedmarkets.com.">ⓘ</span></div>
+            <div class="metric-label">Implied FDV<span class="info" tabindex="0" data-tip="Fully diluted value = 24h average sale price/ANTS x max supply; priced via locked lANTS, not liquid ANTS.">ⓘ</span></div>
             <div class="metric-value">—</div>
           </div>
 
@@ -93,125 +108,86 @@
         </div>
 
         <div class="tabs" id="tabs">
-          <button class="tab is-active" data-tab="all">All positions</button>
-          <button class="tab" data-tab="listings">Listings</button>
+          <button class="tab is-active" data-tab="all">Listings</button>
+          <button class="tab" data-tab="listings">Offers</button>
         </div>
 
         <div id="position-panel" class="position-panel" hidden></div>
 
         <div class="panel is-open" data-panel="all">
             <div class="all-layout">
-                <section class="storefront" id="storefront" aria-label="Position cards">
-                    <div class="sf-toolbar" id="sf-toolbar">
-                      <div class="sf-controls">
-                        <label class="sf-field">Sort
-                          <select id="sf-sort">
-                            <option value="perAnt">$/ANTS</option>
-                            <option value="amount">Amount</option>
-                            <option value="apr">APR</option>
-                            <option value="unlock">Unlock</option>
-                          </select>
-                        </label>
-                        <label class="sf-field">Source
-                          <select id="sf-source">
-                            <option value="all">All sources</option>
-                            <option value="lants">lANTS</option>
-                            <option value="seaport">Seaport</option>
-                          </select>
-                        </label>
-                        <label class="sf-check"><input type="checkbox" id="sf-listed"> Listed only</label>
-                      </div>
-                      <div class="sf-views" role="group" aria-label="View">
-                        <button type="button" class="sf-view-btn is-on" data-view="grid" aria-pressed="true">Grid</button>
-                        <button type="button" class="sf-view-btn" data-view="list" aria-pressed="false">List</button>
-                      </div>
-                    </div>
-                    <div class="sf-banner" id="sf-banner" hidden></div>
-                    <div class="sf-grid" id="sf-grid"></div>
-                    <div class="sf-empty" id="sf-empty" hidden>No positions match these filters.</div>
-                </section>
-                <div id="all-list-view" hidden>
-                    <section class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>#<span class="info" tabindex="0" data-tip="Position id in the lANTS collection on Base.">ⓘ</span></th>
-                                    <th class="text-right">AMOUNT<span class="info" tabindex="0" data-tip="ANTS locked in this position.">ⓘ</span></th>
-                                    <th class="text-right">LOCK<span class="info" tabindex="0" data-tip="Weeks left in the lock; 'max' keeps constant weight that never counts down.">ⓘ</span></th>
-                                    <th class="text-right">REWARD<span class="info" tabindex="0" data-tip="Staker reward for the current epoch; grows with pool purchases, settles at epoch end.">ⓘ</span><span class="th-note" id="th-reward-note">live</span></th>
-                                    <th class="text-right">EXIT<span class="info" tabindex="0" data-tip="ANTS returned on early exit after the slash burn.">ⓘ</span><span class="th-note">net</span></th>
-                                </tr>
-                            </thead>
-                            <tbody id="rows">
-                                <!-- Rows populated by JavaScript -->
-                            </tbody>
-                        </table>
+                <div class="main-col">
+                    <section class="storefront" id="storefront" aria-label="Position cards">
+                        <div class="sf-toolbar" id="sf-toolbar">
+                          <div class="sf-controls">
+                            <label class="sf-check"><input type="checkbox" id="sf-listed" checked> Listed only</label>
+                          </div>
+                          <button type="button" class="sf-sell" id="sf-sell">+ Sell</button>
+                        </div>
+                        <div class="sf-banner" id="sf-banner" hidden></div>
+                        <div class="sf-grid" id="sf-grid"></div>
+                        <div class="sf-empty" id="sf-empty" hidden>No positions match these filters.</div>
                     </section>
-                    <aside class="side-panels">
-                        <section class="soon-panel" id="sales-panel">
-                            <h3>Sales</h3>
-                            <div class="soon-word">SOON</div>
-                            <p class="soon-note">No sales have happened yet.</p>
+                    <div id="all-list-view" hidden>
+                        <section class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#<span class="info" tabindex="0" data-tip="Position id in the lANTS collection on Base.">ⓘ</span></th>
+                                        <th class="text-right">AMOUNT<span class="info" tabindex="0" data-tip="ANTS locked in this position.">ⓘ</span></th>
+                                        <th class="text-right">LOCK<span class="info" tabindex="0" data-tip="Weeks left in the lock; 'max' keeps constant weight that never counts down.">ⓘ</span></th>
+                                        <th class="text-right">REWARD<span class="info" tabindex="0" data-tip="Staker reward for the current epoch; grows with pool purchases, settles at epoch end.">ⓘ</span><span class="th-note" id="th-reward-note">live</span></th>
+                                        <th class="text-right">EXIT<span class="info" tabindex="0" data-tip="ANTS returned on early exit after the slash burn.">ⓘ</span><span class="th-note">net</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rows">
+                                    <!-- Rows populated by JavaScript -->
+                                </tbody>
+                            </table>
                         </section>
-                        <section class="soon-panel">
-                            <h3>Discount vs Lock Size</h3>
-                            <div class="soon-word">SOON</div>
-                            <p class="soon-note">No discount-to-lock data to plot yet.</p>
-                        </section>
-                    </aside>
+                    </div>
                     <div class="cta-row">
                       <span class="cta-text">Not seeing anything you like?</span>
                       <a class="cta-btn" href="#offers">Make an offer</a>
                     </div>
                 </div>
+                <aside class="side-panels">
+                    <section class="soon-panel" id="sales-panel">
+                        <div class="soon-head">
+                            <h3>Sales</h3>
+                            <button class="panel-expand" id="sales-expand" type="button" aria-label="Expand Sales" aria-expanded="false">⤢</button>
+                        </div>
+                        <div class="soon-body" id="sales-body">
+                            <div class="soon-word">SOON</div>
+                            <p class="soon-note">No sales have happened yet.</p>
+                        </div>
+                    </section>
+                    <section class="soon-panel" id="discount-panel">
+                        <div class="soon-head">
+                            <h3>Discount vs Lock Size</h3>
+                        </div>
+                        <div class="soon-body" id="discount-body">
+                            <div class="soon-word">SOON</div>
+                            <p class="soon-note">No discount-to-lock data to plot yet.</p>
+                        </div>
+                    </section>
+                </aside>
                 <div class="snap-footer"></div>
             </div>
         </div>
 
         <div class="panel" data-panel="listings">
-            <div id="listings">
-                <!-- listings-clean -->
-                <div id="market-list">
-                    <div class="feed-empty" data-empty="listings">Loading listings from Base…</div>
+            <div class="offers-view">
+              <h2>Offers</h2>
+              <div class="offers-table">
+                <div class="offers-head">
+                  <span>Date</span><span>ID</span><span>Discount</span><span>Available Funds</span><span>NFT Size limit</span>
                 </div>
-                <form id="create-form">
-                  <div class="cf-title">List a position</div>
-<div class="cf-note">Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT. Claim now for non-transferable ANTS, or restake to mint a sellable position.</div>
-<div class="cf-note">Marketplace fee is 1%: the seller receives the price minus 1%.</div>
-                  <div class="cf-row cf-row-4">
-                    <label class="cf-field"><span>NFT id</span><input id="cf-nftid" type="number" min="0" step="1" placeholder="106"></label>
-                    <label class="cf-field"><span>Price (USDC)</span><input id="cf-price" type="number" min="0.01" step="0.01" placeholder="2.00"></label>
-                    <label class="cf-field"><span>Duration (days)</span><input id="cf-days" type="number" min="1" max="60" step="1" value="30"></label>
-                    <button id="cf-submit" type="button">Create listing</button>
-                  </div>
-                  <div id="cf-summary" class="cf-summary"></div>
-                  <div id="create-status" class="cf-status"></div>
-                </form>
-                <form id="manage-form">
-                  <div class="cf-title">Manage a position</div>
-                  <div class="cf-note">Split, move to another seller pool, or enable max-lock. New positions start at the next epoch and can't exit until then (PositionChangePending).</div>
-                  <div class="cf-grid">
-                    <label class="cf-field"><span>Position id</span><input id="mf-posid" type="number" min="0" step="1" placeholder="106"></label>
-                  </div>
-                  <div id="mf-card" class="cf-summary"></div>
-                  <div class="cf-actions">
-                    <div class="cf-row"><label class="cf-field"><span>Split amount (ANTS)</span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label><button id="mf-split-btn" type="button">Split</button></div>
-                    <div class="cf-row"><label class="cf-field"><span>Move to pool (agent id)</span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label><button id="mf-move-btn" type="button">Move</button></div>
-                    <div class="cf-row"><button id="mf-maxlock-btn" type="button">Enable max-lock</button><button id="mf-maxlockoff-btn" type="button" disabled>Disable max-lock</button><span class="cf-note mf-final">Final: a max-locked position can no longer be split or moved. Disabling starts a fresh 104-week countdown from the next epoch and makes the position movable again.</span></div>
-                  </div>
-                  <div id="manage-status" class="cf-status"></div>
-                  <div class="cf-title">Stake buyer reward</div>
-                  <div class="cf-note">Restake pending buyer rewards for an epoch into a seller pool (mints a new position). Callable by the buyer or its operator.</div>
-                  <div class="cf-grid cf-grid-4">
-                    <label class="cf-field"><span>Buyer address</span><input id="br-buyer" type="text" placeholder="0x…"></label>
-                    <label class="cf-field"><span>Epoch</span><input id="br-epoch" type="number" min="0" step="1" placeholder="23"></label>
-                    <label class="cf-field"><span>Pool (agent id)</span><input id="br-agent" type="number" min="0" step="1" placeholder="52894"></label>
-                    <label class="cf-field"><span>Stake epochs (1-104)</span><input id="br-epochs" type="number" min="1" max="104" step="1" value="104"></label>
-                  </div>
-                  <div id="br-summary" class="cf-summary"></div>
-                  <button id="br-submit" type="button">Stake buyer reward</button>
-                  <div id="br-status" class="cf-status"></div>
-                </form>
+                <div class="offers-empty">No offers yet.</div>
+              </div>
+              <div class="offers-cta">
+                <button type="button" class="ms-offer">Make Offer</button>
+              </div>
             </div>
         </div>
 
@@ -258,6 +234,50 @@
             <div data-panel="my-listings">
               <div class="feed-empty" data-empty="my-listings">You have no active listings yet. Connect your wallet to load your lots.</div>
             </div>
+          </section>
+
+          <section class="manage-forms" id="manage-forms">
+            <h3>List a position</h3>
+            <form id="create-form">
+              <div class="cf-note">Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT. Claim now for non-transferable ANTS, or restake to mint a sellable position.</div>
+              <div class="cf-note">Marketplace fee is 1%: the seller receives the price minus 1%.</div>
+              <div class="cf-row cf-row-4">
+                <label class="cf-field"><span>NFT id<span class="info" data-tip="The lANTS position (NFT) to sell. Filled automatically when you pick one from the portfolio or split a position.">ⓘ</span></span><input id="cf-nftid" type="number" min="0" step="1" placeholder="106"></label>
+                <label class="cf-field"><span>Price (USDC)<span class="info" data-tip="Total asking price in USDC for the whole position.">ⓘ</span></span><input id="cf-price" type="number" min="0.01" step="0.01" placeholder="2.00"></label>
+                <label class="cf-field"><span>Duration (days)<span class="info" data-tip="How long the listing stays open, 1 to 60 days.">ⓘ</span></span><input id="cf-days" type="number" min="1" max="60" step="1" value="30"></label>
+                <button id="cf-submit" type="button">Create listing</button>
+              </div>
+              <div id="cf-summary" class="cf-summary"></div>
+              <div id="create-status" class="cf-status"></div>
+            </form>
+          </section>
+
+          <section class="manage-forms" id="manage-section">
+            <h3>Manage a position</h3>
+            <form id="manage-form">
+              <div class="cf-note">Split, move to another seller pool, or enable max-lock. New positions start at the next epoch and can't exit until then (PositionChangePending).</div>
+              <div class="cf-grid">
+                <label class="cf-field"><span>Position id<span class="info" data-tip="The lANTS position (NFT) to manage.">ⓘ</span></span><input id="mf-posid" type="number" min="0" step="1" placeholder="106"></label>
+              </div>
+              <div id="mf-card" class="cf-summary"></div>
+              <div class="cf-actions">
+                <div class="cf-row"><label class="cf-field"><span>Split amount (ANTS)<span class="info" data-tip="Moves this many ANTS into a new position; the remainder stays in the original position.">ⓘ</span></span><input id="mf-split" type="number" min="0" step="0.0001" placeholder="1.00"></label><button id="mf-split-btn" type="button">Split</button></div>
+                <div class="cf-row"><label class="cf-field"><span>Move to pool (agent id)<span class="info" data-tip="Seller pool (agent id) to move the position into.">ⓘ</span></span><input id="mf-agent" type="number" min="0" step="1" placeholder="52894"></label><button id="mf-move-btn" type="button">Move</button></div>
+                <div class="cf-row"><button id="mf-maxlock-btn" type="button">Enable max-lock</button><button id="mf-maxlockoff-btn" type="button" disabled>Disable max-lock</button><span class="cf-note mf-final">Final: a max-locked position can no longer be split or moved. Disabling starts a fresh 104-week countdown from the next epoch and makes the position movable again.</span></div>
+              </div>
+              <div id="manage-status" class="cf-status"></div>
+              <div class="cf-title">Stake buyer reward</div>
+              <div class="cf-note">Restake pending buyer rewards for an epoch into a seller pool (mints a new position). Callable by the buyer or its operator.</div>
+              <div class="cf-grid cf-grid-4">
+                <label class="cf-field"><span>Buyer address<span class="info" data-tip="Wallet that earned the buyer reward for the epoch.">ⓘ</span></span><input id="br-buyer" type="text" placeholder="0x…"></label>
+                <label class="cf-field"><span>Epoch<span class="info" data-tip="Epoch whose pending buyer reward is restaked.">ⓘ</span></span><input id="br-epoch" type="number" min="0" step="1" placeholder="23"></label>
+                <label class="cf-field"><span>Pool (agent id)<span class="info" data-tip="Seller pool the reward is staked into.">ⓘ</span></span><input id="br-agent" type="number" min="0" step="1" placeholder="52894"></label>
+                <label class="cf-field"><span>Stake epochs (1-104)<span class="info" data-tip="Lock length for the newly staked reward; 104 is max lock.">ⓘ</span></span><input id="br-epochs" type="number" min="1" max="104" step="1" value="104"></label>
+              </div>
+              <div id="br-summary" class="cf-summary"></div>
+              <button id="br-submit" type="button">Stake buyer reward</button>
+              <div id="br-status" class="cf-status"></div>
+            </form>
           </section>
         </div>
 
@@ -306,12 +326,21 @@
         <div class="offer-summary">
           <div class="offer-row"><span>Discount</span><b id="offer-sum-discount">0.00 %</b></div>
           <div class="offer-row"><span>Budget</span><b id="offer-sum-budget">0 USDC</b></div>
-          <div class="offer-row offer-usd"><span></span><b id="offer-sum-usd">$0</b></div>
           <div class="offer-rule"></div>
           <div class="offer-row offer-max-row"><span>Max. purchase size: <i class="offer-info" aria-hidden="true">&#9432;</i></span><b id="offer-sum-max">0 ANTS</b></div>
         </div>
         <button class="offer-cta" id="offer-cta" type="button">Connect Wallet</button>
         <p class="offer-note">No offers contract is deployed for lANTS. This form is a preview only.</p>
+      </div>
+    </div>
+
+    <div class="offer-modal" role="dialog" aria-modal="true" aria-labelledby="select-nft-title" id="select-nft-modal" hidden>
+      <div class="offer-card">
+        <div class="offer-head">
+          <h2 id="select-nft-title">Select NFT</h2>
+          <button class="offer-x" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="select-nft-body" id="select-nft-body"></div>
       </div>
     </div>
 
@@ -353,8 +382,8 @@
         open('all');
         window.scrollTo(0,0);
       }
-      // Every view has an address: #market, #listings, #portfolio, #incentives,
-      // and #position/{id} for the deep page.
+      // Every view has an address: #market / #listings (Listings), #offers,
+      // #portfolio, #incentives, and #position/{id} for the deep page.
       function route(hash){
         var pm=String(hash||'').match(/^#position\/(\d+)$/);
         if(pm){
@@ -364,11 +393,11 @@
         }
         if(hash==='#portfolio'||hash==='#incentives'){showView(hash.slice(1));return;}
         showView('tabs');
-        if(hash==='#listings')open('listings');
+        if(hash==='#offers')open('listings');
       }
       function push(hash){if(location.hash!==hash)history.pushState(null,'',hash);}
       function go(hash){push(hash);route(hash);}
-      tabs.forEach(function(t){t.addEventListener('click',function(){push(t.dataset.tab==='listings'?'#listings':'#market');open(t.dataset.tab);});});
+      tabs.forEach(function(t){t.addEventListener('click',function(){push(t.dataset.tab==='listings'?'#offers':'#listings');open(t.dataset.tab);});});
       brand.addEventListener('click',function(e){e.preventDefault();go('#market');});
       pfLinks.forEach(function(l){l.addEventListener('click',function(e){e.preventDefault();var h=l.getAttribute('href');go(h==='#tabs'?'#market':h);});});
       window.addEventListener('popstate',function(){route(location.hash);});
@@ -391,8 +420,10 @@
       document.addEventListener('keydown',function(e){ if(e.key==='Escape' && offerModal.hidden===false){ closeOffer(); } });
     })();
     </script>
-    <script type="module" src="./render.mjs"></script>
-    <script type="module" src="./market-view.mjs"></script>
+<script type="module" src="./theme.mjs"></script>
+<script type="module" src="./render.mjs"></script>
+<script type="module" src="./market-view.mjs"></script>
+<script type="module" src="./side-panels.mjs"></script>
     <script type="module" src="./market-buy.mjs"></script>
     <script type="module" src="./storefront.mjs"></script>
     <script type="module" src="./position-page.mjs"></script>

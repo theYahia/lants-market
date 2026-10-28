@@ -1,4 +1,4 @@
-"""Guard: every view has an address (#market, #listings, #portfolio, #incentives), Back works, no empty Offers sub-tab.
+"""Guard: every view has an address (#market / #listings (Listings), #offers, #portfolio, #incentives), Back works, no empty Offers sub-tab.
 
 Prints nav_urls=1 or nav_urls=0 plus reason=<first failure>.
 """
@@ -37,12 +37,17 @@ def main():
             page.click('a.hdr-link[href="#tabs"]')
             expect(hash_() == "#market" and visible("#tabs"), "market click: " + hash_())
             page.click('.tab[data-tab="listings"]')
-            expect(hash_() == "#listings", "listings click: " + hash_())
-            page.goto(base + "?r=direct#listings", wait_until="domcontentloaded")
+            expect(hash_() == "#offers", "offers click: " + hash_())
+            page.goto(base + "?r=direct#offers", wait_until="domcontentloaded")
             page.wait_for_timeout(800)
             active = page.evaluate("""() => [document.querySelector('.tab[data-tab="listings"]')?.classList.contains('is-active'),
                 document.querySelector('.panel[data-panel="listings"]')?.classList.contains('is-open')]""")
-            expect(active == [True, True], f"direct #listings: {active}")
+            expect(active == [True, True], f"direct #offers: {active}")
+            page.goto(base + "?r=direct#listings", wait_until="domcontentloaded")
+            page.wait_for_timeout(800)
+            active_list = page.evaluate("""() => [document.querySelector('.tab[data-tab="all"]')?.classList.contains('is-active'),
+                document.querySelector('.panel[data-panel="all"]')?.classList.contains('is-open')]""")
+            expect(active_list == [True, True], f"direct #listings: {active_list}")
             expect(page.locator('.tab[data-tab="offers"], .panel[data-panel="offers"]').count() == 0, "empty Offers sub-tab still present")
             b.close()
     finally:

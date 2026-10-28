@@ -101,7 +101,7 @@ function sortPositions(positions, col, dir) {
 }
 
 function updateSortIndicators() {
-  const ths = document.querySelectorAll('table thead th');
+  const ths = document.querySelectorAll('#all-list-view table thead th');
   ths.forEach((th, idx) => {
     th.classList.remove('sort-asc', 'sort-desc');
     const existingArrow = th.querySelector('.sort-arrow');
@@ -120,7 +120,7 @@ function updateSortIndicators() {
 function setupSorting() {
   if (sortingInitialised) return;
   sortingInitialised = true;
-  const ths = document.querySelectorAll('table thead th');
+  const ths = document.querySelectorAll('#all-list-view table thead th');
   ths.forEach((th, idx) => {
     th.style.cursor = 'pointer';
     th.addEventListener('click', () => {
@@ -131,7 +131,7 @@ function setupSorting() {
         currentSortDir = 'asc';
       }
 
-      const tbody = document.querySelector('table tbody');
+      const tbody = document.getElementById('rows');
       const allRows = Array.from(tbody.querySelectorAll('tr'));
       const dustRow = allRows[allRows.length - 1];
       const positionRows = allRows.slice(0, -1);
@@ -237,7 +237,7 @@ function renderSnapshot(snapshot, opts = {}) {
   // ---------------------------------------------------------------------------
 
   // ---------- Rendering ----------
-  const tbody = document.querySelector('table tbody');
+  const tbody = document.getElementById('rows');
   // Clear any existing rows
   tbody.innerHTML = '';
   const rewardNote = document.getElementById('th-reward-note');

@@ -18,10 +18,10 @@ const snapshot = {
 const USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 const own = [
-  { listingId: 5, nftId: '1', price: 2000000n, isLive: true, seller: '0xAa', chainAmount: E18(10), currency: USDC },
-  { listingId: 6, nftId: '2', price: 3000000n, isLive: true, seller: '0xBb', chainAmount: E18(2), currency: USDC },
+  { listingId: 50, nftId: '1', price: 2000000n, isLive: true, seller: '0xAa', chainAmount: E18(10), currency: USDC },
+  { listingId: 60, nftId: '2', price: 3000000n, isLive: true, seller: '0xBb', chainAmount: E18(2), currency: USDC },
   { listingId: 0, nftId: '2', price: 500000n, isLive: true, seller: '0xCc', chainAmount: E18(2), currency: USDC },
-  { listingId: 7, nftId: '77', price: 1000000n, isLive: true, seller: '0xAa', currency: USDC },
+  { listingId: 70, nftId: '77', price: 1000000n, isLive: true, seller: '0xAa', currency: USDC },
 ];
 
 const seaport = [
@@ -44,12 +44,12 @@ test('buildLots joins positions, recomputes $/ANTS and drops unknown tokens', ()
   assert.deepEqual(one.alsoOn, ['lants']);
   assert.equal(one.status, 'listed');
 
-  // listing 0 is internal and must not count; the real lot is #6 at 3 USDC.
+  // listing 0 is internal and must not count; the real lot is #60 at 3 USDC.
   const two = lots.find((l) => l.tokenId === 2);
   assert.equal(two.priceUsdc, 3);
   assert.equal(two.perAntUsd, 1.5);
   assert.equal(two.provider, 'Open Forge');
-  assert.equal(two.listingId, 6);
+  assert.equal(two.listingId, 60);
   assert.equal(two.currency, USDC);
   assert.deepEqual(two.alsoOn, []);
 });
@@ -85,9 +85,9 @@ test('own listings with a transferred NFT or a closed position are dropped', () 
     positions: [{ id: '9', agentId: '10', amount: E18(2), stakeStartEpoch: '20', stakeEndEpoch: '30' }],
   };
   const base = { nftId: '9', isLive: true, price: 2000000n, chainAmount: E18(2), currency: USDC };
-  assert.equal(buildLots([{ ...base, listingId: 1, ownerMismatch: true }], [], snap, poolNames).length, 0);
-  assert.equal(buildLots([{ ...base, listingId: 2, chainClosed: true }], [], snap, poolNames).length, 0);
-  const ok = buildLots([{ ...base, listingId: 3 }], [], snap, poolNames);
+  assert.equal(buildLots([{ ...base, listingId: 51, ownerMismatch: true }], [], snap, poolNames).length, 0);
+  assert.equal(buildLots([{ ...base, listingId: 52, chainClosed: true }], [], snap, poolNames).length, 0);
+  const ok = buildLots([{ ...base, listingId: 53 }], [], snap, poolNames);
   assert.equal(ok.length, 1);
   assert.equal(ok[0].currency, USDC);
 });

@@ -34,8 +34,8 @@ MAX_TIP_LENGTH = 90
 
 # (icon selector, expected column/label prefix)
 ICONS = [
-    ("#m-price .metric-label .info", "Implied Price/ANTS"),
-    ("#m-positions .metric-label .info", "24H Volume"),
+    ("#m-price .metric-label .info", "Avg Price (24H)"),
+    ("#m-positions .metric-label .info", "Total Volume"),
     ("#m-mc .metric-label .info", "Implied MC"),
     ("#m-locked .metric-label .info", "Implied FDV"),
     ("#m-listed .metric-label .info", "Listed/Supply"),

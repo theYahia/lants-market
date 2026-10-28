@@ -259,20 +259,20 @@ price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
 </tbody>
 </table>
 <p>When all conditions hold, the buyer pays <code>price</code> in USDC. The seller receives <code>price - fee</code>, the fee recipient receives <code>fee</code>, and the NFT is transferred from seller to buyer in the same transaction.</p>
-<h2>Aggregated Seaport lots</h2>
-<p>The storefront also shows active orders from the ecosystem front (antseedmarkets.com) in the same grid as our own lots, sorted by price per ANTS. The source badge says where an order lives.</p>
+<h2>Aggregated listings</h2>
+<p>The storefront shows our own listings and aggregated orders from the ecosystem front as one marketplace, sorted by price per ANTS. The order source is not surfaced in the UI: the buyer just sees a position and a price.</p>
 <table>
 <thead>
-<tr><th>Source</th><th>Fee</th><th>Where the order lives</th></tr>
+<tr><th>Kind</th><th>Fee</th><th>Where the order lives</th></tr>
 </thead>
 <tbody>
-<tr><td>lANTS (this market)</td><td>1% paid by the seller</td><td>VexyMarketplace on Base</td></tr>
-<tr><td>Seaport</td><td>0% platform fee</td><td>Seaport 1.6, signed off-chain</td></tr>
+<tr><td>Own listing</td><td>1% paid by the seller</td><td>VexyMarketplace on Base</td></tr>
+<tr><td>Aggregated order</td><td>0% platform fee</td><td>Seaport 1.6, signed off-chain</td></tr>
 </tbody>
 </table>
 <p>The buyer price is final in both cases: the 1% is deducted from the seller's proceeds, not added to the buyer's price. Only the seller-facing copy in the list form mentions it.</p>
-<p>Seaport lots come from the front's public feed. That feed is the <strong>only discovery source</strong>: Seaport orders are signed off-chain, so nothing can be recovered from chain logs. The chain is used only to verify an order (<code>getOrderStatus</code>, <code>getCounter</code>, <code>ownerOf</code>, <code>isApprovedForAll</code>). If the feed is unavailable, Seaport lots are hidden with a banner and our own lots keep rendering.</p>
-<p>Buying a Seaport lot calls <code>fulfillBasicOrder</code> on Seaport 1.6 with no platform fee. Only orders that pass every check are offered with a Buy button here; anything else links out to antseedmarkets.com. While <code>SEAPORT_BUY_ENABLED</code> is false in <code>market-config.mjs</code>, every Seaport card links out.</p>
+<p>Aggregated orders come from the ecosystem front's public feed. That feed is the <strong>only discovery source</strong>: the orders are signed off-chain, so nothing can be recovered from chain logs. The chain is used only to verify an order (<code>getOrderStatus</code>, <code>getCounter</code>, <code>ownerOf</code>, <code>isApprovedForAll</code>, <code>getApproved</code>). A seller can authorize Seaport either operator-wide (<code>isApprovedForAll</code>) or for one token (<code>getApproved</code>); both are accepted before a Buy. If the feed is unavailable, the aggregated lots are hidden with a banner and our own lots keep rendering.</p>
+<p>Buying an aggregated order calls <code>fulfillBasicOrder</code> on Seaport 1.6 with no platform fee. Only orders that pass every check are offered with a Buy button here. <code>SEAPORT_BUY_ENABLED</code> in <code>market-config.mjs</code> gates the whole buy path; it is <code>true</code>, but the Base-fork fulfill transcript is still not recorded.</p>
 <h2>MC / FDV on each lot</h2>
 <p>The table shows what a lot's price implies for ANTS as a whole:</p>
 <pre><code>price per ANTS = price / ANTS in the position
@@ -330,20 +330,23 @@ positionReward = poolReward * positionWeight / poolWeight</code></pre>
 <p><strong>Sources.</strong> Pool sales come from the public API <code>antscan.co/api/sellers</code>, a third-party community site, not an on-chain source. Everything else is read directly from Base.</p>
 <p><strong>Cross-check.</strong> Every snapshot number is read on two independent RPCs (<code>base-rpc.publicnode.com</code> and <code>base-mainnet.public.blastapi.io</code>) at the same block and compared. If they disagree, the snapshot is not published.</p>
 <p><strong>Live reads.</strong> Listings, sales, My Portfolio and the MC / FDV figures do not come from the snapshot: your browser reads them directly from Base through public RPC endpoints.</p>
-<h2>Price sources</h2>
-<p>The header shows separate measures, each labelled by its source, not one "reconciled" number:</p>
+<h2>Price measures</h2>
+<p>The header shows separate measures, each computed from its own inputs, not one "reconciled" number:</p>
 <table>
 <thead>
-<tr><th>Measure</th><th>What it is</th><th>Source</th></tr>
+<tr><th>Measure</th><th>What it is</th><th>Origin</th></tr>
 </thead>
 <tbody>
-<tr><td>Implied Price/ANTS</td><td>Size-weighted VWAP of live asks per ANTS</td><td>lANTS lots here + Seaport feed</td></tr>
-<tr><td>Floor Ask/ANTS</td><td>Lowest live ask per ANTS</td><td>lANTS lots here + Seaport feed</td></tr>
-<tr><td>24h avg sale</td><td>Average executed sale price over 24h (second line under 24H Volume)</td><td>Seaport feed (antseedmarkets.com)</td></tr>
+<tr><td>Avg Price (24H)</td><td>Average executed sale price over 24h</td><td>market feed</td></tr>
+<tr><td>Implied MC</td><td>Avg price (24H) x ANTS minted, read live from the token</td><td>token + feed</td></tr>
+<tr><td>Implied FDV</td><td>Avg price (24H) x max supply (1.04B), read live from the token</td><td>token + feed</td></tr>
+<tr><td>Floor Ask/ANTS</td><td>Lowest live ask per ANTS</td><td>all listings</td></tr>
+<tr><td>Listed/Supply</td><td>Live listings vs live lANTS positions (on-chain NFTs)</td><td>feed + chain</td></tr>
 </tbody>
 </table>
-<p>The network's announcement cites $0.094/ANTS as the <strong>average lANTS sale price at post time</strong>, not a floor and not an implied price. When no live asks are available the ask-derived tiles show an em dash; the 24h average is whatever the feed reports, or nothing when the feed is unavailable.</p>
-<p>Seaport lots come from the ecosystem front's public feed. A feed outage hides those lots and their asks; our own listings keep rendering.</p>
+<p>The network's announcement cites $0.094/ANTS as the <strong>average lANTS sale price at post time</strong>, not a floor and not an implied price. Implied MC/FDV use the feed's 24h average sale price; the ask-derived tiles (Floor Ask, Listed/Supply) show an em dash when no live asks are available.</p>
+<p>Implied MC and FDV are priced through <strong>lANTS (locked positions)</strong>, not liquid ANTS: locked positions trade at a discount (lock-up + slash risk), and ANTS has no liquid DEX market, so the locked-position sale price is the only market signal. MC uses ANTS minted (<code>totalSupply</code>), not circulating supply — the standard simplification for a staking token without a separate liquid market.</p>
+<p>Aggregated lots come from the ecosystem front's public feed. A feed outage hides those lots and their asks; our own listings keep rendering.</p>
 <p><strong>Privacy.</strong> The page has no backend and does not collect user data. Transactions go through your wallet; reads go through public RPC endpoints.</p>
 <p>---</p>
 </section>

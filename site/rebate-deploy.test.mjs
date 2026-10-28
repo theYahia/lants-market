@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { keccak256 } from 'viem';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { artifactHashes, constructorArgsHex, patchImmutableEmbeds } from './rebate-deploy.mjs';
 
@@ -40,8 +40,14 @@ test('patchImmutableEmbeds: patches exactly-32-byte zero runs only', () => {
   assert.equal(patchImmutableEmbeds('0xaa' + '00'.repeat(32) + '11' + '00'.repeat(32), val), '0xaa' + val + '11' + val);
 });
 
-test('expectedRuntimeHash: real artifact equals the on-chain verified hash', () => {
+// The on-chain verified hash check needs the compiled artifact, which only
+// exists after `forge build`; without it the check is skipped, not failed.
+test('expectedRuntimeHash: real artifact equals the on-chain verified hash', (t) => {
   const artifactPath = fileURLToPath(new URL('../contracts/out/RebateClaims.sol/RebateClaims.json', import.meta.url));
+  if (!existsSync(artifactPath)) {
+    t.skip('needs forge build (contracts/out/RebateClaims.sol/RebateClaims.json missing)');
+    return;
+  }
   const artifact = JSON.parse(readFileSync(artifactPath, 'utf8'));
   const h = artifactHashes(artifact);
   assert.equal(h.runtimeCodeHash, '0x72d5436c926730cf543566525fb802b113ff331d78c77347cd72eb0efe9659c6');

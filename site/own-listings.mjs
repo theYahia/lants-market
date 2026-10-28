@@ -41,7 +41,37 @@ export function getMaxSupply() {
   return maxSupply;
 }
 
-export async function ethCallTo(to, data) {
+// Pure decoder of one listings(uint256) struct (11 words) into a listing.
+// Only the fields stored in the struct are derived here; the reads that need
+// the chain (price, cancellation, owner, position state) keep their defaults
+// and the caller fills them from additional eth_calls.
+export function decodeListing(words, { listingId }) {
+  const w = Array.isArray(words) ? words : [];
+  if (w.length < WORDS_PER_LISTING) return null;
+  const soldTime = wordToBigInt(w[10]);
+  const slopeMax = wordToBigInt(w[5]);
+  const slopeDuration = wordToBigInt(w[7]);
+  return {
+    listingId,
+    seller: wordToAddr(w[0]),
+    currency: wordToAddr(w[4]),
+    nftId: wordToBigInt(w[3]),
+    endTime: wordToBigInt(w[9]),
+    soldTime,
+    slopeMax,
+    slopeDuration,
+    price: 0n,
+    priceEstimated: soldTime !== 0n && (slopeMax !== 0n || slopeDuration !== 0n),
+    cancelled: false,
+    isLive: false,
+    ownerMismatch: false,
+    chainAmount: null,
+    chainClosed: false,
+    chainStakeEnd: null,
+  };
+}
+
+export async function ethCallTo(to, data, fetchImpl = fetch) {
   const READ_RPCS = [
     'https://base-rpc.publicnode.com',
     'https://base.drpc.org',
@@ -49,7 +79,7 @@ export async function ethCallTo(to, data) {
   ];
   for (const rpc of READ_RPCS) {
     try {
-      const response = await fetch(rpc, {
+      const response = await fetchImpl(rpc, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -69,13 +99,13 @@ export async function ethCallTo(to, data) {
   throw new Error('all public RPCs failed');
 }
 
-async function ethCall(data) {
-  return ethCallTo(MARKET.market, data);
+async function ethCall(data, fetchImpl) {
+  return ethCallTo(MARKET.market, data, fetchImpl);
 }
 
-async function fetchLatestBlock(rpc) {
+async function fetchLatestBlock(rpc, fetchImpl) {
   try {
-    const response = await fetch(rpc, {
+    const response = await fetchImpl(rpc, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
@@ -88,8 +118,8 @@ async function fetchLatestBlock(rpc) {
   }
 }
 
-async function ethGetLogs(rpc, params) {
-  const response = await fetch(rpc, {
+async function ethGetLogs(rpc, params, fetchImpl) {
+  const response = await fetchImpl(rpc, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }),
@@ -104,7 +134,7 @@ async function ethGetLogs(rpc, params) {
 // recent window, as listingId (decimal key) -> paid price (BigInt). Free public
 // RPCs cap the eth_getLogs range, so old sales can be missed; callers fall back
 // to listingPrice() when a sold lot is not present.
-async function fetchBuyListingPrices() {
+async function fetchBuyListingPrices(fetchImpl) {
   const LOG_RPCS = [
     ['https://base-rpc.publicnode.com', 50000],
     ['https://base.drpc.org', 10000],
@@ -113,10 +143,10 @@ async function fetchBuyListingPrices() {
   const out = new Map();
   for (const [rpc, maxRange] of LOG_RPCS) {
     try {
-      const latest = await fetchLatestBlock(rpc);
+      const latest = await fetchLatestBlock(rpc, fetchImpl);
       if (latest === null) continue;
       const fromBlock = '0x' + BigInt(Math.max(0, Number(latest) - maxRange)).toString(16);
-      const result = await ethGetLogs(rpc, { fromBlock, toBlock: 'latest', topics: [BUY_LISTING_TOPIC0] });
+      const result = await ethGetLogs(rpc, { fromBlock, toBlock: 'latest', topics: [BUY_LISTING_TOPIC0] }, fetchImpl);
       if (!Array.isArray(result)) continue;
       for (const log of result) {
         const price = buyListingPriceFromData(log.data);
@@ -132,17 +162,17 @@ async function fetchBuyListingPrices() {
   return out;
 }
 
-async function readSupply() {
+async function readSupply(fetchImpl) {
   if (minted == null) {
     try {
-      minted = Number(wordToBigInt(decodeWords(await ethCallTo(ANTS_TOKEN, '0x18160ddd'))[0])) / 1e18 || null;
+      minted = Number(wordToBigInt(decodeWords(await ethCallTo(ANTS_TOKEN, '0x18160ddd', fetchImpl))[0])) / 1e18 || null;
     } catch (e) {
       minted = null;
     }
   }
   if (maxSupply == null) {
     try {
-      const words = decodeWords(await ethCallTo(ANTS_TOKEN, MAX_SUPPLY_SELECTOR));
+      const words = decodeWords(await ethCallTo(ANTS_TOKEN, MAX_SUPPLY_SELECTOR, fetchImpl));
       maxSupply = words.length > 0 ? Number(wordToBigInt(words[0])) / 1e18 || null : null;
     } catch (e) {
       maxSupply = null;
@@ -150,100 +180,75 @@ async function readSupply() {
   }
 }
 
-async function readAllListings() {
+async function readAllListings(fetchImpl) {
   const now = BigInt(Math.floor(Date.now() / 1000));
-  await readSupply();
+  await readSupply(fetchImpl);
 
-  const lenRaw = await ethCall(SELECTORS.listingsLength);
+  const lenRaw = await ethCall(SELECTORS.listingsLength, fetchImpl);
   const n = Number(wordToBigInt(decodeWords(lenRaw)[0] || lenRaw));
 
-  const paidPriceByListing = await fetchBuyListingPrices();
+  const paidPriceByListing = await fetchBuyListingPrices(fetchImpl);
 
   const readOne = async (i) => {
-    const raw = await ethCall(SELECTORS.listings + encUint(i));
+    const raw = await ethCall(SELECTORS.listings + encUint(i), fetchImpl);
     const w = decodeWords(raw);
-    if (!w || w.length < WORDS_PER_LISTING) return null;
-
-    const listingId = i;
-    const seller = wordToAddr(w[0]);
-    const currency = wordToAddr(w[4]);
-    const nftId = wordToBigInt(w[3]);
-    const endTime = wordToBigInt(w[9]);
-    const soldTime = wordToBigInt(w[10]);
-    const slopeMax = wordToBigInt(w[5]);
-    const slopeDuration = wordToBigInt(w[7]);
+    const decoded = decodeListing(w, { listingId: i });
+    if (!decoded) return null;
 
     let price = 0n;
     let priceEstimated = false;
     try {
-      if (soldTime !== 0n && paidPriceByListing.has(i.toString())) {
+      if (decoded.soldTime !== 0n && paidPriceByListing.has(i.toString())) {
         price = paidPriceByListing.get(i.toString());
       } else {
-        const pRaw = await ethCall(SELECTORS.listingPrice + encUint(i));
+        const pRaw = await ethCall(SELECTORS.listingPrice + encUint(i), fetchImpl);
         price = wordToBigInt(decodeWords(pRaw)[0] || pRaw);
-        priceEstimated = soldTime !== 0n && (slopeMax !== 0n || slopeDuration !== 0n);
+        priceEstimated = decoded.soldTime !== 0n && (decoded.slopeMax !== 0n || decoded.slopeDuration !== 0n);
       }
     } catch (e) {
       throw new Error(
         'listingPrice failed for #' + i + ': ' + (e && e.message ? e.message : e)
       );
     }
+    decoded.price = price;
+    decoded.priceEstimated = priceEstimated;
 
-    let cancelled = false;
-    if (soldTime === 0n) {
+    if (decoded.soldTime === 0n) {
       try {
-        const nRaw = await ethCall('0x444c74aa' + encAddr(seller) + encAddr(MARKET.nft) + encUint(nftId));
-        cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[1]);
+        const nRaw = await ethCall('0x444c74aa' + encAddr(decoded.seller) + encAddr(MARKET.nft) + encUint(decoded.nftId), fetchImpl);
+        decoded.cancelled = wordToBigInt(decodeWords(nRaw)[0]) !== wordToBigInt(w[1]);
       } catch (e) {
-        cancelled = false;
+        decoded.cancelled = false;
       }
     }
 
-    const isLive = soldTime === 0n && endTime >= now && !cancelled;
+    decoded.isLive = decoded.soldTime === 0n && decoded.endTime >= now && !decoded.cancelled;
     let owner = null;
-    if (isLive) {
+    if (decoded.isLive) {
       try {
-        const oRaw = await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(nftId));
+        const oRaw = await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(decoded.nftId), fetchImpl);
         owner = wordToAddr(decodeWords(oRaw)[0]);
       } catch (e) {
         owner = null;
       }
     }
-    const ownerMismatch = isLive && (!owner || owner.toLowerCase() !== seller.toLowerCase());
+    decoded.ownerMismatch = decoded.isLive && (!owner || owner.toLowerCase() !== decoded.seller.toLowerCase());
 
-    let chainAmount = null;
-    let chainClosed = false;
-    let chainStakeEnd = null;
     try {
-      const pRaw = await ethCallTo(MARKET.nft, '0x99fbab88' + encUint(nftId)); // positions(uint256)
+      const pRaw = await ethCallTo(MARKET.nft, '0x99fbab88' + encUint(decoded.nftId), fetchImpl); // positions(uint256)
       const words = decodeWords(pRaw);
-      chainAmount = wordToBigInt(words[2]);
-      chainStakeEnd = wordToBigInt(words[5]);
+      decoded.chainAmount = wordToBigInt(words[2]);
+      decoded.chainStakeEnd = wordToBigInt(words[5]);
       const closedAt = wordToBigInt(words[6]);
       const withdrawn = wordToBigInt(words[7]);
-      chainClosed = closedAt > 0n || withdrawn > 0n;
+      decoded.chainClosed = closedAt > 0n || withdrawn > 0n;
     } catch (e) {
-      chainAmount = null;
-      chainClosed = false;
-      chainStakeEnd = null;
+      decoded.chainAmount = null;
+      decoded.chainClosed = false;
+      decoded.chainStakeEnd = null;
     }
 
-    return {
-      listingId,
-      nftId,
-      seller,
-      currency,
-      price,
-      priceEstimated,
-      soldTime,
-      endTime,
-      isLive,
-      ownerMismatch,
-      chainAmount,
-      chainClosed,
-      chainStakeEnd,
-      cancelled,
-    };
+    return decoded;
   };
 
   const out = (await Promise.all(Array.from({ length: n }, (_, k) => readOne(BigInt(k))))).filter(Boolean);
@@ -255,9 +260,10 @@ async function readAllListings() {
 // read; the next call after it settles always re-reads the chain.
 let inFlight = null;
 
-export async function readListings() {
+export async function readListings(opts = {}) {
+  const fetchImpl = opts.fetchImpl || fetch;
   if (!inFlight) {
-    inFlight = readAllListings().finally(() => {
+    inFlight = readAllListings(fetchImpl).finally(() => {
       inFlight = null;
     });
   }

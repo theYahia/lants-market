@@ -133,7 +133,7 @@ function historySection(vm) {
   const list = el('div', 'pp-history');
   for (const row of vm.history) {
     const line = el('div', 'pp-history-row');
-    line.appendChild(el('span', null, row.when.toISOString().slice(0, 10) + ' · ' + row.kind));
+    line.appendChild(el('span', null, row.when.toISOString().slice(0, 10)));
     const right = el('span');
     right.textContent = usd.format(row.priceUsdc);
     if (row.txHash) {

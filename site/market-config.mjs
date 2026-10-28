@@ -25,6 +25,7 @@ export const SEL = {
   allowance:      '0xdd62ed3e', // allowance(address,address)
   approve:        '0x095ea7b3', // approve(address,uint256)
   ownerOf:        '0x6352211e', // ownerOf(uint256)
+  getApproved:    '0x081812fc', // getApproved(uint256)
   isApprovedForAll: '0xe985e9c5', // isApprovedForAll(address,address)
   balanceOf:      '0x70a08231', // balanceOf(address)
   // cast sig "cancelNftListings(address,uint256)"
@@ -195,11 +196,13 @@ export function encAddressPlusTwoNumbers(selector, address, num1, num2) {
 }
 
 // Seaport aggregation: buy through the canonical Seaport 1.6 contract.
-// Disabled until a Base-fork end-to-end fulfill run is recorded (see handoff);
-// while false, Seaport cards link out to antseedmarkets.com instead.
-export const SEAPORT_BUY_ENABLED = false;
+// Fulfill is guarded by validateOrder + on-chain owner/approval/counter/status
+// checks + an eth_call simulation before the real send. The Base-fork
+// end-to-end fulfill run is not yet recorded (no forge/anvil on the machine);
+// treat this flag as provisional until that transcript lands.
+export const SEAPORT_BUY_ENABLED = true;
 
 // Listing ids of trades between our own wallets. They are marked internal on the market and never count toward
 // volume, price per ANTS or implied FDV. Add an id here in a commit after an internal trade; a lot bought by
 // an outside wallet is a real external sale and is NOT added.
-export const INTERNAL_LISTING_IDS = [0]; // 0: first trade, 25.09, operator -> our own buyer wallet (tx 0x33ed01b7...)
+export const INTERNAL_LISTING_IDS = [0, 1, 2, 3, 4, 5]; // 0: first trade 25.09 (tx 0x33ed01b7...); 1-5: 2026-10-01 own-wallet trades

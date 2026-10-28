@@ -79,9 +79,9 @@ def main():
             page = browser.new_page()
             page.goto(url, wait_until="domcontentloaded")
 
-            # Open the "All positions" tab if a tab control exists.
+            # Open the "Listings" tab if a tab control exists.
             try:
-                page.get_by_text("All positions", exact=False).first.click(timeout=2000)
+                page.get_by_text("Listings", exact=False).first.click(timeout=2000)
             except Exception:
                 pass
 

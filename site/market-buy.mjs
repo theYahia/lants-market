@@ -34,10 +34,11 @@ function setMessage(row, text, isError = false) {
  * Buy one of our own listings. Returns { ok, txHash } and reports progress
  * through the caller's status callback.
  */
-export async function buyListing({ id, price, currency }, report = () => {}) {
+export async function buyListing({ id, price, currency }, report = () => {}, deps = {}) {
+  const w = { walletRequest, ensureChain, waitReceipt, loadPublicMarket, ...deps };
   let accounts = [];
   try {
-    accounts = await walletRequest({ method: "eth_accounts" });
+    accounts = await w.walletRequest({ method: "eth_accounts" });
   } catch (e) {
     report(humanError(e), true);
     return { ok: false };
@@ -50,7 +51,7 @@ export async function buyListing({ id, price, currency }, report = () => {}) {
   const from = accounts[0];
 
   try {
-    if (!(await ensureChain())) {
+    if (!(await w.ensureChain())) {
       report("wrong network", true);
       return { ok: false };
     }
@@ -62,7 +63,7 @@ export async function buyListing({ id, price, currency }, report = () => {}) {
   let needApprove = false;
   try {
     const callData = SEL.allowance + encAddr(from) + encAddr(MARKET.market);
-    const raw = await walletRequest({
+    const raw = await w.walletRequest({
       method: "eth_call",
       params: [{ to: currency, data: callData }, "latest"],
     });
@@ -77,12 +78,12 @@ export async function buyListing({ id, price, currency }, report = () => {}) {
   if (needApprove) {
     try {
       const approveData = SEL.approve + encAddr(MARKET.market) + encUint(price);
-      const approveHash = await walletRequest({
+      const approveHash = await w.walletRequest({
         method: "eth_sendTransaction",
         params: [{ from, to: currency, data: approveData }],
       });
       report(`approve sent: ${approveHash}`);
-      const aRcpt = await waitReceipt(approveHash);
+      const aRcpt = await w.waitReceipt(approveHash);
       if (!aRcpt || aRcpt.status !== "0x1") {
         report("approve failed", true);
         return { ok: false };
@@ -95,15 +96,15 @@ export async function buyListing({ id, price, currency }, report = () => {}) {
 
   try {
     const buyData = SEL.buyListing + encUint(id);
-    const txHash = await walletRequest({
+    const txHash = await w.walletRequest({
       method: "eth_sendTransaction",
       params: [{ from, to: MARKET.market, data: buyData }],
     });
     report(`buy sent: ${txHash}`);
-    const rcpt = await waitReceipt(txHash);
+    const rcpt = await w.waitReceipt(txHash);
     if (rcpt && rcpt.status === "0x1") {
       report("bought");
-      await loadPublicMarket();
+      await w.loadPublicMarket();
       await afterBuy();
       return { ok: true, txHash };
     }

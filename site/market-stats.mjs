@@ -49,6 +49,7 @@ export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupp
 
   let volumeUsd = 0;      // sales in the last 24h
   let volume7dUsd = 0;    // sales in the last 7 days (kept for future use)
+  let totalVolumeUsd = 0; // all-time external volume
   let externalSales30 = 0;
   let vwapUsd = 0;        // sum of USDC paid (30d, external)
   let vwapAnts = 0;       // sum of ANTS sold (30d, external)
@@ -61,6 +62,7 @@ export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupp
     if (isInternal) continue; // ignore internal sales
 
     const usdc = Number(item.price) / 1e6; // price is in micro-USDC
+    totalVolumeUsd += usdc;
     const ageSec = nowSec - soldTime;
 
     if (ageSec <= VOLUME_DAYS * SECS_IN_DAY) {
@@ -107,6 +109,7 @@ export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupp
   return {
     volumeUsd,
     volume7dUsd,
+    totalVolumeUsd,
     fdvUsd,
     externalSales30,
     n,
@@ -139,6 +142,8 @@ export function buyListingPriceFromData(logData) {
  * @param {number|null} [opts.minted] - ANTS minted (totalSupply); null when unknown.
  * @param {number|null} [opts.supplyCount] - Total position count (LISTED/SUPPLY
  *   denominator); defaults to `minted` when omitted.
+ * @param {number|null} [opts.referencePrice] - Native-market 24h average sale
+ *   price used for MC/FDV; falls back to the ask VWAP when omitted.
  * @param {Object|null} [opts.snapshot] - Snapshot with positions, used as the
  *   amount fallback when a listing has no on-chain amount (fresh split).
  * @returns {Object} Implied valuation object.
@@ -146,6 +151,7 @@ export function buyListingPriceFromData(logData) {
 export function computeImpliedFromAsks(items, internalIds, opts = {}) {  const maxSupply = opts.maxSupply ?? ANTS_MAX_SUPPLY;
   const minted = opts.minted ?? null;
   const supplyCount = opts.supplyCount ?? minted;
+  const referencePrice = opts.referencePrice ?? null;
   const snapshot = opts.snapshot ?? null;
   const internalIdSet = new Set((internalIds || []).map(String));
 
@@ -175,25 +181,18 @@ export function computeImpliedFromAsks(items, internalIds, opts = {}) {  const m
     listedCount += 1;
   }
 
-  if (listedCount === 0) {
-    return {
-      impliedPricePerAnts: null,
-      floorAskPerAnts: null,
-      listedCount: 0,
-      supplyCount,
-      mcUsd: null,
-      fdvUsd: null,
-    };
-  }
-
-  const impliedPricePerAnts = sumUsdc / sumAnts; // VWAP of live asks
+  const impliedPricePerAnts = listedCount > 0 ? sumUsdc / sumAnts : null; // VWAP of live asks
+  // MC/FDV use the native-market 24h average sale price when available; the
+  // ask VWAP is only a fallback for callers that do not pass a reference price.
+  const valuationPrice = referencePrice ?? impliedPricePerAnts;
   return {
     impliedPricePerAnts,
     floorAskPerAnts,
     listedCount,
     supplyCount,
-    mcUsd: minted != null ? impliedPricePerAnts * minted : null,
-    fdvUsd: impliedPricePerAnts * maxSupply,
+    referencePrice,
+    mcUsd: minted != null && valuationPrice != null ? valuationPrice * minted : null,
+    fdvUsd: valuationPrice != null ? valuationPrice * maxSupply : null,
   };
 }
 

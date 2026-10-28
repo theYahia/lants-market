@@ -4,6 +4,7 @@
 let selectedProvider = null;
 let connectedAccount = null;
 let myIds = []; // ids of the connected wallet's positions (filled in onConnect)
+let pendingSellConnect = false; // + Sell clicked while disconnected: open the dialog after connect
 export const walletRequest = (args) => (selectedProvider ?? window.ethereum).request(args);
 
 import {
@@ -260,34 +261,6 @@ function makeSpan(field, value) {
   return s;
 }
 
-// Sales panel: sold lots read from the chain. Internal trades are listed, labelled, and kept out of volume/FDV.
-function updateSales(items, snapshot) {
-  const panel = document.getElementById('sales-panel');
-  if (!panel) return;
-  const sold = (items || []).filter((it) => it.soldTime && it.soldTime !== 0n)
-    .sort((a, b) => Number(b.soldTime - a.soldTime));
-  if (!sold.length) return;
-  const internal = new Set(INTERNAL_LISTING_IDS.map(String));
-  const list = document.createElement('div');
-  list.className = 'sales-list';
-  for (const it of sold.slice(0, 5)) {
-    const pos = snapshot ? findPos(snapshot, it.nftId) : null;
-    const amt = it.chainAmount != null ? Number(it.chainAmount) / 1e18 : (pos ? Number(pos.amount) / 1e18 : null);
-    const row = document.createElement('div');
-    row.className = 'sale-row';
-    row.textContent = '#' + it.listingId + ' · pos ' + it.nftId + ' · ' + (amt != null ? amt.toFixed(2) + ' ANTS · ' : '') +
-      Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC' + (it.priceEstimated ? ' (est.)' : '') + ' · ' +
-      new Date(Number(it.soldTime) * 1000).toISOString().slice(0, 10) +
-      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * (getMaxSupply() ?? ANTS_MAX_SUPPLY)) : '') +
-      (internal.has(String(it.listingId)) ? ' · internal' : '');
-    list.appendChild(row);
-  }
-  const old = panel.querySelector('.soon-word') || panel.querySelector('.sales-list');
-  if (old) old.replaceWith(list);
-  const note = panel.querySelector('.soon-note');
-  if (note) note.textContent = 'internal = our own wallets, not in volume';
-}
-
 const USD_LIVE = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
 
 // set a metric tile value and mark it computed
@@ -335,43 +308,56 @@ async function loadSeaportFeed() {
 }
 
 function updateTiles(items, snapshot, seaportFeed = EMPTY_SEAPORT_FEED) {
-  updateSales(items, snapshot);
   const nowSec = Math.floor(Date.now() / 1000);
   const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, nowSec);
 
   // One ask pool: our live listings plus validated Seaport orders.
   const seaportAsks = seaportFeed && seaportFeed.ok ? seaportAsAskItems(seaportFeed.items) : [];
   const asks = (items || []).concat(seaportAsks);
+
+  // The native market's 24h average sale price is the reference price that
+  // drives Avg Price (24H), Implied MC and Implied FDV. Without it those tiles
+  // show a dash rather than a distorted ask VWAP.
+  const referencePrice = Number.isFinite(seaportFeed?.price?.avgPrice24h) && seaportFeed.price.avgPrice24h > 0
+    ? seaportFeed.price.avgPrice24h
+    : null;
+
+  // LISTED/SUPPLY denominator is the live position count (on-chain NFTs). The
+  // feed reports it as totalNfts; when the feed is down, fall back to the open
+  // positions in the snapshot (never the full ledger, which includes closed).
+  const openSnapshotCount = snapshot && snapshot.positions
+    ? snapshot.positions.filter((p) => Number(p.closedAtEpoch ?? 0) <= 0).length
+    : null;
+  const supplyCount = Number.isFinite(seaportFeed?.totalNfts) && seaportFeed.totalNfts > 0
+    ? seaportFeed.totalNfts
+    : (openSnapshotCount ? openSnapshotCount : null);
+
   const impl = computeImpliedFromAsks(asks, INTERNAL_LISTING_IDS, {
     maxSupply: getMaxSupply() ?? ANTS_MAX_SUPPLY,
     minted: getMinted(),
-    supplyCount: (snapshot && (snapshot.positions || snapshot.rows)) ? (snapshot.positions || snapshot.rows).length : null,
+    supplyCount,
+    referencePrice,
     snapshot: snapshot || null
   });
 
-  // 24H volume (historical sales) - kept from computeMarketStats
-  setTile('m-positions', s.volumeText);
-  const avg = seaportFeed?.price?.avgPrice24h;
-  setTileNote(
-    'm-positions',
-    Number.isFinite(avg) && avg > 0 ? '24h avg ' + USD_LIVE.format(avg) + '/ANTS' : ''
-  );
+  // Total volume: all-time external sales (internal trades excluded).
+  setTile('m-positions', fmtUsd(s.totalVolumeUsd));
+  setTileNote('m-positions', '');
 
-  // Implied price/ANTS, MC, FDV, LISTED/SUPPLY and FLOOR ASK from live asks.
-  // Gate on at least one live external listing; otherwise a dash, not "n/a 0".
+  // Avg price (24H), Implied MC and Implied FDV come from the reference price.
+  const hasReference = impl.referencePrice != null;
+  setTile('m-price', hasReference ? USD_LIVE.format(impl.referencePrice) + ' /ANTS' : '—');
+  setTile('m-mc', hasReference && impl.mcUsd != null ? fmtUsd(impl.mcUsd) : '—');
+  setTile('m-locked', hasReference && impl.fdvUsd != null ? fmtUsd(impl.fdvUsd) : '—');
+
+  // LISTED/SUPPLY and FLOOR ASK derive from live asks; otherwise a dash.
   if (impl.listedCount > 0) {
-    setTile('m-price', USD_LIVE.format(impl.impliedPricePerAnts) + ' /ANTS');
-    setTile('m-mc', fmtUsd(impl.mcUsd));
-    setTile('m-locked', fmtUsd(impl.fdvUsd));
-    const supply = impl.supplyCount != null
+    const listed = impl.supplyCount != null
       ? impl.listedCount + ' / ' + fmtSupply(impl.supplyCount)
       : String(impl.listedCount);
-    setTile('m-listed', supply);
-    setTile('m-floor', USD_LIVE.format(impl.floorAskPerAnts) + ' /ANTS');
+    setTile('m-listed', listed);
+    setTile('m-floor', impl.floorAskPerAnts != null ? USD_LIVE.format(impl.floorAskPerAnts) + ' /ANTS' : '—');
   } else {
-    setTile('m-price', '—');
-    setTile('m-mc', '—');
-    setTile('m-locked', '—');
     setTile('m-listed', '—');
     setTile('m-floor', '—');
   }
@@ -385,6 +371,8 @@ function fmtSupply(n) {
 function render(snapshot, items, seaportFeed) {
   updateTiles(items, snapshot, seaportFeed);
   const table = tableEl();
+  if (!table) return;
+  const soldItems = (items || []).filter((it) => it.soldTime && it.soldTime !== 0n);
   table.textContent = '';
 
   // Header row
@@ -392,14 +380,14 @@ function render(snapshot, items, seaportFeed) {
   head.className = 'market-head';
   
   const headers = [
-    { label: 'LOT', tip: 'Marketplace lot id; buy or cancel this listing.' },
+    { label: 'LOT', tip: 'Marketplace lot id of the settled sale.' },
     { label: 'POSITION', tip: 'lANTS position id backing this lot on Base.' },
-    { label: 'PRICE', tip: 'Asking price in the listing currency.' },
-    { label: 'ANTS', tip: 'ANTS locked in the listed position.' },
+    { label: 'PRICE', tip: 'Settled sale price in the listing currency.' },
+    { label: 'ANTS', tip: 'ANTS locked in the sold position.' },
     { label: 'MC / FDV', tip: 'At this lot price per ANTS: market cap = x ANTS minted so far, fully diluted value = x max supply (read live from the ANTS token).' },
     { label: 'LOCK', tip: "Weeks left in the lock; 'max' never counts down." },
     { label: 'EXIT', tip: 'ANTS returned on early exit after the slash burn.', note: 'net' },
-    { label: 'STATUS', tip: 'live can be bought; sold, internal = between our own wallets, not in volume.' },
+    { label: 'STATUS', tip: 'sold; internal = between our own wallets, not in volume.' },
     { label: '', tip: '' },
   ];
   for (let i = 0; i < headers.length; i++) {
@@ -422,10 +410,10 @@ function render(snapshot, items, seaportFeed) {
   }
   table.appendChild(head);
 
-  if (!items.length) {
+  if (!soldItems.length) {
     const empty = document.createElement('div');
     empty.className = 'market-empty';
-    empty.textContent = 'No active listings yet.';
+    empty.textContent = 'No sales yet.';
     table.appendChild(empty);
     return;
   }
@@ -434,7 +422,7 @@ function render(snapshot, items, seaportFeed) {
   // Cancel is offered only to the connected seller (Privy or injected wallet).
   const me = (connectedAccount || '').toLowerCase();
 
-  for (const item of items) {
+  for (const item of soldItems) {
     const pos = findPos(snapshot, item.nftId);
     const row = document.createElement('div');
     row.className = 'market-row';
@@ -569,10 +557,7 @@ function render(snapshot, items, seaportFeed) {
 
   // Caveats
   const caveats = [
-    'Listing contents shown as of purchase and may change before the sale.',
-    'Only one active listing per NFT.',
-    "Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT.",
-    'A listing on a closed, split, moved or transferred position is invalid and cannot be bought.'
+    'Sales settled on the native marketplace. Internal = between our own wallets.'
   ];
   for (const caveatText of caveats) {
     const caveat = document.createElement('div');
@@ -653,11 +638,11 @@ async function onConnect() {
   const table = tableEl();
 
   if (!(selectedProvider ?? window.ethereum)) {
-    table.textContent = 'no wallet';
+    if (table) table.textContent = 'no wallet';
     return;
   }
   if (MARKET.market === ZERO) {
-    table.textContent = 'market not deployed yet';
+    if (table) table.textContent = 'market not deployed yet';
     return;
   }
 
@@ -666,7 +651,7 @@ async function onConnect() {
 
     const onChain = await ensureChain();
     if (!onChain) {
-      table.textContent = 'wrong network';
+      if (table) table.textContent = 'wrong network';
       return;
     }
 
@@ -752,6 +737,13 @@ async function onConnect() {
       }
     }
 
+    // A + Sell click that had to connect first: now that myIds is known,
+    // open the Select-NFT dialog (list or the honest empty state).
+    if (pendingSellConnect) {
+      pendingSellConnect = false;
+      openSelectNftModal();
+    }
+
     const [snapRes, itemsRes, feedRes] = await Promise.allSettled([
       loadSnapshot(),
       readListings(),
@@ -766,7 +758,7 @@ async function onConnect() {
     await renderMyListingsPanel();
   } catch (e) {
     // surface any eth_call / connect error, never stay silent
-    table.textContent =
+    if (table) table.textContent =
       'error: ' + (e && e.message ? e.message : String(e));
   }
 }
@@ -806,7 +798,7 @@ export async function loadPublicMarket() {
   } catch (e) {
     console.warn('public market load failed', e);
     const t = tableEl();
-    if (t && !t.querySelector('.market-row')) t.textContent = 'Could not load listings from the Base RPCs. Refresh the page.';
+    if (t && !t.querySelector('.market-row')) t.textContent = 'Could not load sales from the Base RPCs. Refresh the page.';
   }
 }
 
@@ -1551,15 +1543,6 @@ export async function renderMyPositions(account, ids, snapshot) {
     browse.textContent = 'Browse listings';
     empty.appendChild(browse);
 
-    empty.appendChild(document.createTextNode(' \u00b7 '));
-
-    const stake = document.createElement('a');
-    stake.href = 'https://antseed.com/';
-    stake.target = '_blank';
-    stake.rel = 'noopener';
-    stake.textContent = 'Stake on AntSeed';
-    empty.appendChild(stake);
-
     container.appendChild(empty);
   }
 
@@ -1571,7 +1554,6 @@ export async function renderMyPositions(account, ids, snapshot) {
       if (target.classList.contains('pf-browse')) {
         e.preventDefault();
         document.querySelector('a.hdr-link[href="#tabs"]')?.click();
-        document.querySelector('.tab[data-tab="listings"]')?.click();
       } else if (target.classList.contains('pf-list') || target.classList.contains('pf-manage')) {
         const id = target.dataset.id;
         const fieldId = target.classList.contains('pf-list') ? '#cf-nftid' : '#mf-posid';
@@ -1581,8 +1563,6 @@ export async function renderMyPositions(account, ids, snapshot) {
           inp.value = id;
           inp.dispatchEvent(new Event('input', { bubbles: true }));
         }
-        document.querySelector('a.hdr-link[href="#tabs"]')?.click();
-        document.querySelector('.tab[data-tab="listings"]')?.click();
         document.querySelector(formId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else if (target.classList.contains('restake')) {
         const rowEl = target.closest('.pf-pos-row');
@@ -1788,7 +1768,6 @@ export function initOfferForm() {
 
   const sumDiscount = document.getElementById('offer-sum-discount');
   const sumBudget = document.getElementById('offer-sum-budget');
-  const sumUsd = document.getElementById('offer-sum-usd');
   const sumMax = document.getElementById('offer-sum-max');
 
   // Recompute the summary line from the two inputs.
@@ -1800,7 +1779,6 @@ export function initOfferForm() {
 
     if (sumDiscount) sumDiscount.textContent = d.toFixed(2) + ' %';
     if (sumBudget) sumBudget.textContent = b + ' USDC';
-    if (sumUsd) sumUsd.textContent = '$' + b;
     if (sumMax) sumMax.textContent = maxSize + ' ANTS';
   };
 
@@ -1839,6 +1817,76 @@ export function initOfferForm() {
   setInterval(updateCta, 500);
 }
 
+// "+ Sell": open a Select-NFT dialog over the wallet's active positions. With
+// no positions the dialog shows an honest empty state instead of the form.
+function openSelectNftModal() {
+  const modal = document.getElementById('select-nft-modal');
+  const body = document.getElementById('select-nft-body');
+  if (!modal || !body) return;
+
+  const goPortfolio = () => {
+    if (location.hash !== '#portfolio') location.hash = '#portfolio';
+  };
+
+  body.textContent = '';
+  if (!myIds.length) {
+    const title = document.createElement('p');
+    title.className = 'select-nft-empty-title';
+    title.textContent = "You don't currently own any qualifying NFTs";
+    const sub = document.createElement('p');
+    sub.className = 'select-nft-empty-sub';
+    sub.textContent = 'Get some NFTs in your wallet in order to start selling.';
+    body.appendChild(title);
+    body.appendChild(sub);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'select-nft-list';
+    for (const id of myIds) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'select-nft-item';
+      item.textContent = '#' + String(id);
+      item.addEventListener('click', () => {
+        modal.hidden = true;
+        const inp = document.getElementById('cf-nftid');
+        if (inp) {
+          inp.value = String(id);
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        goPortfolio();
+        const form = document.getElementById('create-form');
+        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      list.appendChild(item);
+    }
+    body.appendChild(list);
+  }
+  modal.hidden = false;
+}
+
+export function initSellButton() {
+  const btn = document.getElementById('sf-sell');
+  if (!btn) return;
+  const modal = document.getElementById('select-nft-modal');
+  const closeModal = () => { if (modal) modal.hidden = true; };
+
+  btn.addEventListener('click', () => {
+    if (connectedAccount) {
+      openSelectNftModal();
+    } else {
+      pendingSellConnect = true;
+      ensurePrivy();
+    }
+  });
+
+  const x = modal && modal.querySelector('.offer-x');
+  if (x) x.addEventListener('click', closeModal);
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && modal.hidden === false) closeModal();
+  });
+}
+
 // auto-init if button already in DOM
 if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initMarketView();
@@ -1846,6 +1894,7 @@ if (typeof document !== 'undefined' && document.getElementById('hdr-connect')) {
   initCancelHandler();
   initManagePosition();
   initOfferForm();
+  initSellButton();
   updateTiles([], null);
   loadPublicMarket();
 }

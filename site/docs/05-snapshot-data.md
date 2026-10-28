@@ -12,24 +12,32 @@ Pool weights are read with `poolWeightAtEpoch(agentId, epoch)` for every pool wi
 
 **Live reads.** Listings, sales, My Portfolio and the MC / FDV figures do not come from the snapshot: your browser reads them directly from Base through public RPC endpoints.
 
-## Price sources
+## Price measures
 
-The header shows separate measures, each labelled by its source, not one
+The header shows separate measures, each computed from its own inputs, not one
 "reconciled" number:
 
-| Measure | What it is | Source |
+| Measure | What it is | Origin |
 |---|---|---|
-| Implied Price/ANTS | Size-weighted VWAP of live asks per ANTS | lANTS lots here + Seaport feed |
-| Floor Ask/ANTS | Lowest live ask per ANTS | lANTS lots here + Seaport feed |
-| 24h avg sale | Average executed sale price over 24h (second line under 24H Volume) | Seaport feed (antseedmarkets.com) |
+| Avg Price (24H) | Average executed sale price over 24h | market feed |
+| Implied MC | Avg price (24H) x ANTS minted, read live from the token | token + feed |
+| Implied FDV | Avg price (24H) x max supply (1.04B), read live from the token | token + feed |
+| Floor Ask/ANTS | Lowest live ask per ANTS | all listings |
+| Listed/Supply | Live listings vs live lANTS positions (on-chain NFTs) | feed + chain |
 
 The network's announcement cites $0.094/ANTS as the **average lANTS sale price
-at post time**, not a floor and not an implied price. When no live asks are
-available the ask-derived tiles show an em dash; the 24h average is whatever
-the feed reports, or nothing when the feed is unavailable.
+at post time**, not a floor and not an implied price. Implied MC/FDV use the
+feed's 24h average sale price; the ask-derived tiles (Floor Ask, Listed/Supply)
+show an em dash when no live asks are available.
 
-Seaport lots come from the ecosystem front's public feed. A feed outage hides
-those lots and their asks; our own listings keep rendering.
+Implied MC and FDV are priced through **lANTS (locked positions)**, not liquid
+ANTS: locked positions trade at a discount (lock-up + slash risk), and ANTS has
+no liquid DEX market, so the locked-position sale price is the only market
+signal. MC uses ANTS minted (`totalSupply`), not circulating supply — the
+standard simplification for a staking token without a separate liquid market.
+
+Aggregated lots come from the ecosystem front's public feed. A feed outage
+hides those lots and their asks; our own listings keep rendering.
 
 **Privacy.** The page has no backend and does not collect user data. Transactions go through your wallet; reads go through public RPC endpoints.
 

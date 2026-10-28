@@ -6,6 +6,8 @@
   "scripts": {
     "build": "node scripts/site/build-dist.mjs",
     "test": "node --test site/*.test.mjs && node scripts/site/check_authorizations.mjs",
+    "test:coverage": "node --test --experimental-test-coverage site/*.test.mjs",
+    "bot": "node --test bot/read-feed.test.mjs bot/read-antseedstats.test.mjs bot/diff.test.mjs bot/format.test.mjs bot/state.test.mjs bot/token-store.test.mjs bot/xapi.test.mjs",
     "probe:state": "node scripts/probes/net-state.cjs",
     "probe:sellers": "node scripts/probes/seller-rank.cjs"
   },
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "ipfs-car": "^3.1.0"
+    "ipfs-car": "^3.1.0",
+    "jsdom": "^30.1.3"
   }
 }
