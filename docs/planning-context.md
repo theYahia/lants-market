@@ -15,13 +15,16 @@ Pointers to the detailed files (do not duplicate them here):
 ## 1. Current state
 
 - Header (6 tiles: Implied Price/ANTS, 24H Volume, Implied MC, Implied FDV,
-  Listed/Supply, Floor Ask/ANTS) ships from live external asks (VWAP), `MAX_SUPPLY`
-  read live, sold-lot prices from `BuyListing` logs. Tiles show «—»: 0 live listings
-  of our own.
-- Default «All positions» view is still a raw ~235-row table — the card-storefront
-  rework is the next UX step.
-- `npm test` 119/120 (one pre-existing rebate-deploy failure needs `forge build`),
-  `npm run build` OK.
+  Listed/Supply, Floor Ask/ANTS) ships from live asks (VWAP), `MAX_SUPPLY` read
+  live, sold-lot prices from `BuyListing` logs. Seaport asks are included; the
+  24H Volume tile carries the Seaport feed's 24h average sale as a second line.
+- **Implemented 28.10** (see `notes/handoff.md`): card storefront is the default
+  «All positions» view (Grid/List keeps the table), `#position/{id}` deep page,
+  Seaport feed aggregation and a validated `fulfillBasicOrder` path. Seaport Buy
+  is behind `SEAPORT_BUY_ENABLED = false` until a Base-fork fulfill test.
+- `npm test` 147/148 (pre-existing rebate-deploy failure needs `forge build`),
+  `npm run build` OK (335 files). 13 commits are ready to push; deploy has not
+  been triggered.
 - Deploy is CI-only (`.github/workflows/snapshot.yml`), manual trigger 2 clicks.
 - Community/business state: owner runs a TG group with 2 interested providers; a
   "bribes" announcement to providers is already out. Incentives/bribes + `RebateClaims`
@@ -141,6 +144,11 @@ growth feeds the Seaport liquidity we aggregate anyway.
    trees on the page.
 
 ## 6. Agreed direction & prioritized next steps
+
+**Status 28.10.2026:** items 1–4 below are implemented in code (storefront, deep
+page, header reconciliation, Seaport aggregation + fulfill). Item 5 (bribe proof
+page) remains. Seaport execution still needs a fork test before it is enabled;
+see `notes/handoff.md` for the commit list, validation status and next steps.
 
 1. **Card storefront for «All positions»** — provider name + link, lock days + unlock
    date, APR% + «≈X ANTS/epoch» (staking reward only; boost is a separate badge, per §3),
