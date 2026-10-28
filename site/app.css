@@ -316,7 +316,8 @@ td.badge-deal::before {
 /* New market strip styles */
 .market-strip{
   display:grid;
-  grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+  grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr)) minmax(0,1fr);
+  grid-template-rows:auto auto;
   align-items:stretch;
   background:var(--surface);
   border:1px solid var(--line);
@@ -324,6 +325,8 @@ td.badge-deal::before {
   overflow:hidden;
   margin-bottom:14px;
 }
+.market-strip .ms-id{grid-column:1;grid-row:1 / span 2;}
+.market-strip .ms-action{grid-column:5;grid-row:1 / span 2;}
 .ms-id{
   display:flex;
   gap:14px;
@@ -371,13 +374,24 @@ td.badge-deal::before {
   font-weight:700;
 }
 
+@media (max-width:900px){
+  .market-strip{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:auto auto auto;}
+  .market-strip .ms-id{grid-column:1 / -1;grid-row:auto;border-bottom:1px solid var(--line);}
+  .market-strip .ms-action{grid-column:1 / -1;grid-row:auto;border-left:0;border-top:1px solid var(--line);}
+  .market-strip .metric-label{white-space:normal;}
+  .market-strip .metric-card:nth-child(3n+2){border-left:0;}
+}
+
 @media (max-width:480px){
   .market-strip{grid-template-columns:minmax(0,1fr);}
+  .market-strip .ms-id{grid-column:auto;grid-row:auto;border-bottom:1px solid var(--line);}
+  .market-strip .ms-action{grid-column:auto;grid-row:auto;}
   .market-strip .metric-card{
     border-left:0;
     border-top:1px solid var(--line);
   }
   .market-strip .metric-label{white-space:normal;}
+  .ms-id{border-bottom:1px solid var(--line);}
 }
 
 /* Action button in market strip */

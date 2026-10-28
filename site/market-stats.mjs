@@ -1,7 +1,8 @@
 // site/market-stats.mjs
 
 /**
- * Maximum supply of ANTS token.
+ * Fallback maximum supply of ANTS. MAX_SUPPLY() is read live from the token
+ * by market-view.mjs; this constant is used when the RPC read fails.
  * @type {number}
  */
 export const ANTS_MAX_SUPPLY = 1.04e9;
@@ -21,71 +22,72 @@ function findPos(snapshot, nftId) {
   return null;
 }
 
+// Resolve the sale amount (in wei) for an item: the on-chain amount is read
+// live and is authoritative; the snapshot is only a fallback for a position
+// whose chain read failed.
+function resolveAmountWei(item, snapshot) {
+  return item.chainAmount ?? item.amount ?? findPos(snapshot, item.nftId)?.amount ?? null;
+}
+
 /**
- * Compute market statistics.
+ * Compute historical market statistics from completed sales.
  *
  * @param {Array<Object>} items - List of sale items.
  * @param {Object} snapshot - Snapshot containing positions.
  * @param {Array<string|number>} internalIds - Listing IDs considered internal.
  * @param {number} nowSec - Current timestamp in seconds.
+ * @param {number} [maxSupply=ANTS_MAX_SUPPLY] - Resolved ANTS max supply.
  * @returns {Object} Statistics object.
  */
-export function computeMarketStats(items, snapshot, internalIds, nowSec) {
+export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupply = ANTS_MAX_SUPPLY) {
   const SECS_IN_DAY = 86400;
-  const VOLUME_DAYS = 7;
+  const VOLUME_DAYS = 1;   // 24h volume, matching the native marketplace header
   const FDV_DAYS = 30;
 
   // Compare IDs as strings to handle BigInt listingIds
-  const internalIdSet = new Set(internalIds.map(String));
+  const internalIdSet = new Set((internalIds || []).map(String));
 
-  let volumeUsd = 0;
+  let volumeUsd = 0;      // sales in the last 24h
+  let volume7dUsd = 0;    // sales in the last 7 days (kept for future use)
   let externalSales30 = 0;
-  const pricePerAnts = [];
+  let vwapUsd = 0;        // sum of USDC paid (30d, external)
+  let vwapAnts = 0;       // sum of ANTS sold (30d, external)
 
-  for (const item of items) {
+  for (const item of items || []) {
     const soldTime = Number(item.soldTime);
     if (soldTime <= 0) continue; // not sold
 
     const isInternal = internalIdSet.has(String(item.listingId));
     if (isInternal) continue; // ignore internal sales
 
-    const usdc = Number(item.price) / 1e6; // price is in micro‑USDC
+    const usdc = Number(item.price) / 1e6; // price is in micro-USDC
     const ageSec = nowSec - soldTime;
 
-    // Volume: sales in the last 7 days (add regardless of amount)
     if (ageSec <= VOLUME_DAYS * SECS_IN_DAY) {
       volumeUsd += usdc;
     }
+    if (ageSec <= 7 * SECS_IN_DAY) {
+      volume7dUsd += usdc;
+    }
 
-    // Resolve amount (wei) from possible fields
-    const amountWei =
-      item.amount ??
-      item.chainAmount ??
-      findPos(snapshot, item.nftId)?.amount;
-
-    // For FDV we need a known, non‑zero amount
-    if (amountWei) {
+    // For FDV we need a known, non-zero amount
+    const amountWei = resolveAmountWei(item, snapshot);
+    if (amountWei && ageSec <= FDV_DAYS * SECS_IN_DAY) {
       const amount = Number(amountWei) / 1e18; // convert wei to token amount
-      if (amount !== 0 && ageSec <= FDV_DAYS * SECS_IN_DAY) {
+      if (amount !== 0) {
         externalSales30 += 1;
-        pricePerAnts.push(usdc / amount);
+        vwapUsd += usdc;
+        vwapAnts += amount;
       }
     }
   }
 
-  // Compute FDV using median price per ANTS
-  let fdvUsd = null;
-  if (pricePerAnts.length >= 3) {
-    pricePerAnts.sort((a, b) => a - b);
-    const mid = Math.floor(pricePerAnts.length / 2);
-    const median =
-      pricePerAnts.length % 2 === 0
-        ? (pricePerAnts[mid - 1] + pricePerAnts[mid]) / 2
-        : pricePerAnts[mid];
-    fdvUsd = median * ANTS_MAX_SUPPLY;
-  }
+  // FDV uses the size-weighted VWAP over external sales in the last 30 days:
+  // total USDC paid / total ANTS sold, scaled to the full supply.
+  const fdvUsd = vwapAnts > 0 ? (vwapUsd / vwapAnts) * maxSupply : null;
+  const n = externalSales30;
 
-  // Human‑readable formatting
+  // Human-readable formatting
   const volumeText = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -104,9 +106,94 @@ export function computeMarketStats(items, snapshot, internalIds, nowSec) {
 
   return {
     volumeUsd,
+    volume7dUsd,
     fdvUsd,
     externalSales30,
+    n,
     volumeText,
     fdvText,
+  };
+}
+
+// BuyListing(uint256 indexed listingId, address indexed nftCollection,
+// uint256 indexed nftId, address buyer, address currency, uint256 price,
+// uint256 fee) emits the non-indexed payload as buyer(32) currency(32)
+// price(32) fee(32); the paid price is the third 32-byte word.
+export function buyListingPriceFromData(logData) {
+  const data = String(logData || '').replace(/^0x/, '');
+  if (data.length < 256) return null; // buyer(32) currency(32) price(32) fee(32)
+  return BigInt('0x' + data.slice(128, 192));
+}
+
+/**
+ * Compute implied valuation metrics from live external asks.
+ *
+ * Live listings only (sold/expired/cancelled are excluded by the caller's
+ * readiness flags), external only, and rows with a zero/unknown amount are
+ * skipped so dust cannot move the whole header.
+ *
+ * @param {Array<Object>} items - Listing items from readListings().
+ * @param {Array<string|number>} internalIds - Listing IDs considered internal.
+ * @param {Object} [opts] - Resolved token values.
+ * @param {number} [opts.maxSupply] - ANTS max supply (defaults to the constant).
+ * @param {number|null} [opts.minted] - ANTS minted (totalSupply); null when unknown.
+ * @param {number|null} [opts.supplyCount] - Total position count (LISTED/SUPPLY
+ *   denominator); defaults to `minted` when omitted.
+ * @param {Object|null} [opts.snapshot] - Snapshot with positions, used as the
+ *   amount fallback when a listing has no on-chain amount (fresh split).
+ * @returns {Object} Implied valuation object.
+ */
+export function computeImpliedFromAsks(items, internalIds, opts = {}) {
+  const maxSupply = opts.maxSupply ?? ANTS_MAX_SUPPLY;
+  const minted = opts.minted ?? null;
+  const supplyCount = opts.supplyCount ?? minted;
+  const snapshot = opts.snapshot ?? null;
+  const internalIdSet = new Set((internalIds || []).map(String));
+
+  let sumUsdc = 0;            // total USDC asked, live external lots
+  let sumAnts = 0;            // total ANTS offered, live external lots
+  let floorAskPerAnts = null; // lowest per-ANTS ask
+  let listedCount = 0;
+
+  for (const item of items || []) {
+    if (!item.isLive) continue; // sold / expired / cancelled excluded
+    if (internalIdSet.has(String(item.listingId))) continue; // internal only
+
+    const amountWei = resolveAmountWei(item, snapshot);
+    if (amountWei === null) continue; // unknown amount
+    const amount = Number(amountWei) / 1e18;
+    if (!(amount > 0)) continue; // dust / zero-amount rows excluded
+
+    const usdc = Number(item.price) / 1e6; // micro-USDC
+    if (!(usdc > 0)) continue;
+
+    const perAnts = usdc / amount;
+    sumUsdc += usdc;
+    sumAnts += amount;
+    if (floorAskPerAnts === null || perAnts < floorAskPerAnts) {
+      floorAskPerAnts = perAnts;
+    }
+    listedCount += 1;
+  }
+
+  if (listedCount === 0) {
+    return {
+      impliedPricePerAnts: null,
+      floorAskPerAnts: null,
+      listedCount: 0,
+      supplyCount,
+      mcUsd: null,
+      fdvUsd: null,
+    };
+  }
+
+  const impliedPricePerAnts = sumUsdc / sumAnts; // VWAP of live asks
+  return {
+    impliedPricePerAnts,
+    floorAskPerAnts,
+    listedCount,
+    supplyCount,
+    mcUsd: minted != null ? impliedPricePerAnts * minted : null,
+    fdvUsd: impliedPricePerAnts * maxSupply,
   };
 }

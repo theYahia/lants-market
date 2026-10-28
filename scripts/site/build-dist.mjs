@@ -79,7 +79,7 @@ for (const [src] of FILES) {
   }
 }
 for (const [src, dest] of FILES) {
-  const destPath = join(DIST_ROOT, dest.replace(/^dist\//, ''));
+  const destPath = join(DIST_ROOT, dest.replace(/^dist[\\/]/, ''));
   copyFileSync(src, destPath);
 }
 
@@ -87,7 +87,7 @@ for (const [src, dest] of FILES) {
 const LOCAL_REF_RE = /(?:from\s*|import\s*\(\s*|src=|href=)['"]\.\/([A-Za-z0-9_-]+\.(?:mjs|css))['"]/g;
 const distNames = new Set(readdirSync(DIST_ROOT));
 for (const [, dest] of FILES) {
-  const rel = dest.replace(/^dist\//, '');
+  const rel = dest.replace(/^dist[\\/]/, '');
   if (!/\.(mjs|html)$/.test(rel)) continue;
   const txt = readFileSync(join(DIST_ROOT, rel), 'utf8');
   for (const m of txt.matchAll(LOCAL_REF_RE)) {
@@ -125,7 +125,7 @@ if (statSync(liveSrc, { throwIfNoEntry: false })?.isFile()) {
 
 // 3. Checks for existence and non-emptiness of files
 for (const [, dest] of FILES) {
-  const destPath = join(DIST_ROOT, dest.replace(/^dist\//, ''));
+  const destPath = join(DIST_ROOT, dest.replace(/^dist[\\/]/, ''));
   if (!statSync(destPath, { throwIfNoEntry: false })?.isFile())
     fail('file missing: ' + destPath);
   if (statSync(destPath).size === 0) fail('file empty: ' + destPath);
@@ -211,7 +211,7 @@ checkForbiddenUrls(render, 'render.mjs');
 const cyrillicRegex = /[\u0400-\u04FF]/;
 // Every file that the builder copies to dist/ is checked for Cyrillic.
 for (const [, dest] of FILES) {
-  const destPath = join(DIST_ROOT, dest.replace(/^dist\//, ''));
+  const destPath = join(DIST_ROOT, dest.replace(/^dist[\\/]/, ''));
   const content = readFileSync(destPath, 'utf8');
   if (cyrillicRegex.test(content))
     fail(`${dest}: Cyrillic character found`);
@@ -266,7 +266,7 @@ copyPrivyTree(privySrcRoot);
 // 7. Report
 let total = 0;
 for (const [, dest] of FILES) {
-  const destPath = join(DIST_ROOT, dest.replace(/^dist\//, ''));
+  const destPath = join(DIST_ROOT, dest.replace(/^dist[\\/]/, ''));
   const size = statSync(destPath).size;
   total += size;
   console.log(`OK ${dest} ${size} bytes`);

@@ -11,7 +11,7 @@ import {
   cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS,
   encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
-import { computeMarketStats, ANTS_MAX_SUPPLY } from './market-stats.mjs';
+import { computeMarketStats, computeImpliedFromAsks, buyListingPriceFromData, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 import { closedPositionIdsForOwner } from './portfolio-state.mjs';
@@ -126,7 +126,9 @@ const WORDS_PER_LISTING = 11;
 
 // ANTS ERC-20 on Base: totalSupply() = ANTS minted so far, the base for the implied market cap of a lot.
 const ANTS_TOKEN = '0xa87EE81b2C0Bc659307ca2D9ffdC38514DD85263';
+const MAX_SUPPLY_SELECTOR = '0x32cb6b0c'; // MAX_SUPPLY(), derived from the verified ANTS ABI
 let MINTED = null; // ANTS minted, read once per page load in readListings()
+let MAX_SUPPLY = null; // ANTS MAX_SUPPLY(), read once per page load in readListings()
 
 // same format as the Implied FDV tile (market-stats.mjs): $1.19M, $10.4M
 const USD_COMPACT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
@@ -252,16 +254,91 @@ async function loadSnapshot() {
   }
 }
 
+// BuyListing(uint256 indexed listingId, address indexed nftCollection, uint256 indexed nftId, address buyer, address currency, uint256 price, uint256 fee)
+const BUY_LISTING_TOPIC0 = '0x4df3ab58a4d7c1b893e008bf1c2ae97dc5350248466a12507651a1ae285f650c';
+
+// Fetch the actual paid prices of sold lots from BuyListing logs over a bounded
+// recent window, as listingId (decimal key) -> paid price (BigInt). Free public
+// RPCs cap the eth_getLogs range, so old sales can be missed; callers fall back
+// to listingPrice() when a sold lot is not present. The first RPC that answers
+// with a well-formed log array wins, so the common no-logs case costs one call.
+async function fetchBuyListingPrices() {
+  const LOG_RPCS = [
+    ['https://base-rpc.publicnode.com', 50000],
+    ['https://base.drpc.org', 10000],
+    ['https://mainnet.base.org', 10000]
+  ];
+  const out = new Map();
+  for (const [rpc, maxRange] of LOG_RPCS) {
+    try {
+      const latest = await fetchLatestBlock(rpc);
+      if (latest === null) continue;
+      const fromBlock = '0x' + BigInt(Math.max(0, Number(latest) - maxRange)).toString(16);
+      const result = await ethGetLogs(rpc, { fromBlock, toBlock: 'latest', topics: [BUY_LISTING_TOPIC0] });
+      if (!Array.isArray(result)) continue; // unhealthy response, try the next RPC
+      for (const log of result) {
+        const price = buyListingPriceFromData(log.data);
+        if (price === null) continue;
+        const listingId = log.topics && log.topics[1];
+        if (listingId) out.set(BigInt(listingId).toString(), price);
+      }
+      return out;
+    } catch (e) {
+      // try the next RPC
+    }
+  }
+  return out;
+}
+
+async function fetchLatestBlock(rpc) {
+  try {
+    const response = await fetch(rpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] })
+    });
+    if (!response.ok) return null;
+    const json = await response.json();
+    return typeof json.result === 'string' ? BigInt(json.result) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function ethGetLogs(rpc, params) {
+  const response = await fetch(rpc, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] })
+  });
+  if (!response.ok) throw new Error('bad status ' + response.status);
+  const json = await response.json();
+  if (json.error) throw new Error(json.error.message);
+  return json.result;
+}
+
 // Read *all* listings on-chain (live, sold and expired).
 async function readListings() {
   const now = BigInt(Math.floor(Date.now() / 1000));
   if (MINTED == null) {
     try { MINTED = Number(wordToBigInt(decodeWords(await ethCallTo(ANTS_TOKEN, '0x18160ddd'))[0])) / 1e18 || null; }
-    catch (e) { MINTED = null; } // MC then shows a dash; FDV only needs the fixed max supply
+    catch (e) { MINTED = null; } // MC then shows a dash; FDV only needs the max supply
   }
-
+  if (MAX_SUPPLY == null) {
+    // MAX_SUPPLY() is read live from the token; fall back to the constant when the RPC fails.
+    try {
+      const words = decodeWords(await ethCallTo(ANTS_TOKEN, MAX_SUPPLY_SELECTOR));
+      MAX_SUPPLY = words.length > 0 ? Number(wordToBigInt(words[0])) / 1e18 || null : null;
+    } catch (e) { MAX_SUPPLY = null; }
+  }
   const lenRaw = await ethCall(SELECTORS.listingsLength);
   const n = Number(wordToBigInt(decodeWords(lenRaw)[0] || lenRaw));
+
+  // BuyListing logs over a bounded recent window: the actual paid price for
+  // sold lots lives only in the event, listingPrice() returns the base price
+  // once the lot expired. Bounded because free RPCs cap the scan range; a sold
+  // lot without a matching log falls back to listingPrice() below.
+  const paidPriceByListing = await fetchBuyListingPrices();
 
   // lots are read in parallel: ~5 calls each, one by one took ~5 s for 6 lots
   const readOne = async (i) => {
@@ -275,12 +352,22 @@ async function readListings() {
     const nftId = wordToBigInt(w[3]);
     const endTime = wordToBigInt(w[9]);
     const soldTime = wordToBigInt(w[10]);
+    const slopeMax = wordToBigInt(w[5]);
+    const slopeDuration = wordToBigInt(w[7]);
 
-    // fetch the (Dutch-auction) price - needed for every row
+    // Live lots always read the (Dutch-auction) price - needed for every row.
+    // A sold lot may carry a slope discount that listingPrice() no longer
+    // reflects, so the BuyListing log is preferred when it exists.
     let price = 0n;
+    let priceEstimated = false;
     try {
-      const pRaw = await ethCall(SELECTORS.listingPrice + encUint(i));
-      price = wordToBigInt(decodeWords(pRaw)[0] || pRaw);
+      if (soldTime !== 0n && paidPriceByListing.has(i.toString())) {
+        price = paidPriceByListing.get(i.toString());
+      } else {
+        const pRaw = await ethCall(SELECTORS.listingPrice + encUint(i));
+        price = wordToBigInt(decodeWords(pRaw)[0] || pRaw);
+        priceEstimated = soldTime !== 0n && (slopeMax !== 0n || slopeDuration !== 0n);
+      }
     } catch (e) {
       throw new Error(
         'listingPrice failed for #' + i + ': ' +
@@ -334,6 +421,7 @@ async function readListings() {
       seller,
       currency,
       price,
+      priceEstimated,
       soldTime,
       endTime,
       isLive,
@@ -400,13 +488,13 @@ function updateSales(items, snapshot) {
   list.className = 'sales-list';
   for (const it of sold.slice(0, 5)) {
     const pos = snapshot ? findPos(snapshot, it.nftId) : null;
-    const amt = pos ? Number(pos.amount) / 1e18 : (it.chainAmount != null ? Number(it.chainAmount) / 1e18 : null);
+    const amt = it.chainAmount != null ? Number(it.chainAmount) / 1e18 : (pos ? Number(pos.amount) / 1e18 : null);
     const row = document.createElement('div');
     row.className = 'sale-row';
     row.textContent = '#' + it.listingId + ' · pos ' + it.nftId + ' · ' + (amt != null ? amt.toFixed(2) + ' ANTS · ' : '') +
-      Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC · ' +
+      Number(formatUnits(it.price, MARKET.usdcDecimals)).toFixed(2) + ' USDC' + (it.priceEstimated ? ' (est.)' : '') + ' · ' +
       new Date(Number(it.soldTime) * 1000).toISOString().slice(0, 10) +
-      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * ANTS_MAX_SUPPLY) : '') +
+      (amt ? ' · FDV ' + fmtUsd(Number(formatUnits(it.price, MARKET.usdcDecimals)) / amt * (MAX_SUPPLY ?? ANTS_MAX_SUPPLY)) : '') +
       (internal.has(String(it.listingId)) ? ' · internal' : '');
     list.appendChild(row);
   }
@@ -416,13 +504,56 @@ function updateSales(items, snapshot) {
   if (note) note.textContent = 'internal = our own wallets, not in volume';
 }
 
+const USD_LIVE = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
+
+// set a metric tile value and mark it computed
+function setTile(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const value = el.querySelector('.metric-value');
+  if (!value) return;
+  value.textContent = text;
+  value.setAttribute('data-src', 'computed');
+}
+
 function updateTiles(items, snapshot) {
   updateSales(items, snapshot);
-  const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, Math.floor(Date.now() / 1000));
-  const vol = document.querySelector('#m-positions .metric-value');
-  const fdv = document.querySelector('#m-locked .metric-value');
-  if (vol) { vol.textContent = s.volumeText; vol.setAttribute('data-src', 'computed'); }
-  if (fdv) { fdv.textContent = s.fdvText; fdv.setAttribute('data-src', 'computed'); }
+  const nowSec = Math.floor(Date.now() / 1000);
+  const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, nowSec);
+  const impl = computeImpliedFromAsks(items || [], INTERNAL_LISTING_IDS, {
+    maxSupply: MAX_SUPPLY ?? ANTS_MAX_SUPPLY,
+    minted: MINTED,
+    supplyCount: (snapshot && (snapshot.positions || snapshot.rows)) ? (snapshot.positions || snapshot.rows).length : null,
+    snapshot: snapshot || null
+  });
+
+  // 24H volume (historical sales) - kept from computeMarketStats
+  setTile('m-positions', s.volumeText);
+
+  // Implied price/ANTS, MC, FDV, LISTED/SUPPLY and FLOOR ASK from live asks.
+  // Gate on at least one live external listing; otherwise a dash, not "n/a 0".
+  if (impl.listedCount > 0) {
+    setTile('m-price', USD_LIVE.format(impl.impliedPricePerAnts) + ' /ANTS');
+    setTile('m-mc', fmtUsd(impl.mcUsd));
+    setTile('m-locked', fmtUsd(impl.fdvUsd));
+    const supply = impl.supplyCount != null
+      ? impl.listedCount + ' / ' + fmtSupply(impl.supplyCount)
+      : String(impl.listedCount);
+    setTile('m-listed', supply);
+    setTile('m-floor', USD_LIVE.format(impl.floorAskPerAnts) + ' /ANTS');
+  } else {
+    setTile('m-price', '—');
+    setTile('m-mc', '—');
+    setTile('m-locked', '—');
+    setTile('m-listed', '—');
+    setTile('m-floor', '—');
+  }
+}
+
+// Compact supply: 130000000 -> "130.0M", 135 -> "135".
+function fmtSupply(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 }
 function render(snapshot, items) {
   updateTiles(items, snapshot);
@@ -438,7 +569,7 @@ function render(snapshot, items) {
     { label: 'POSITION', tip: 'lANTS position id backing this lot on Base.' },
     { label: 'PRICE', tip: 'Asking price in the listing currency.' },
     { label: 'ANTS', tip: 'ANTS locked in the listed position.' },
-    { label: 'MC / FDV', tip: 'At this lot price per ANTS: market cap = x ANTS minted so far, fully diluted value = x 1.04B max supply.' },
+    { label: 'MC / FDV', tip: 'At this lot price per ANTS: market cap = x ANTS minted so far, fully diluted value = x max supply (read live from the ANTS token).' },
     { label: 'LOCK', tip: "Weeks left in the lock; 'max' never counts down." },
     { label: 'EXIT', tip: 'ANTS returned on early exit after the slash burn.', note: 'net' },
     { label: 'STATUS', tip: 'live can be bought; sold, internal = between our own wallets, not in volume.' },
@@ -505,10 +636,10 @@ function render(snapshot, items) {
     const antsSpan = document.createElement('span');
     antsSpan.dataset.field = 'ants';
     let antsNumeric = null;
-    if (pos) {
-      antsNumeric = Number(pos.amount) / 1e18;
-    } else if (item.chainAmount != null) {
+    if (item.chainAmount != null) {
       antsNumeric = Number(item.chainAmount) / 1e18;
+    } else if (pos) {
+      antsNumeric = Number(pos.amount) / 1e18;
     }
     antsSpan.textContent = antsNumeric != null ? antsNumeric.toFixed(2) : '—';
     row.appendChild(antsSpan);
@@ -521,9 +652,9 @@ function render(snapshot, items) {
       const unit = usdcPrice / antsNumeric;
       unitPriceSpan.textContent = MINTED ? fmtUsd(unit * MINTED) : '—';
       const fdvLine = document.createElement('small');
-      fdvLine.textContent = fmtUsd(unit * ANTS_MAX_SUPPLY) + ' FDV';
+      fdvLine.textContent = fmtUsd(unit * (MAX_SUPPLY ?? ANTS_MAX_SUPPLY)) + ' FDV';
       unitPriceSpan.appendChild(fdvLine);
-      unitPriceSpan.title = unit.toFixed(4) + ' USDC per ANTS' + (MINTED ? ' · MC = x ' + (MINTED / 1e6).toFixed(2) + 'M minted' : '') + ' · FDV = x 1.04B max supply';
+      unitPriceSpan.title = unit.toFixed(4) + ' USDC per ANTS' + (MINTED ? ' · MC = x ' + (MINTED / 1e6).toFixed(2) + 'M minted' : '') + ' · FDV = x ' + fmtSupply(MAX_SUPPLY ?? ANTS_MAX_SUPPLY) + ' max supply';
     } else {
       unitPriceSpan.textContent = '—';
     }
