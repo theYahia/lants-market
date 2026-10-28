@@ -69,6 +69,33 @@ When all conditions hold, the buyer pays `price` in USDC. The seller
 receives `price - fee`, the fee recipient receives `fee`, and the NFT is
 transferred from seller to buyer in the same transaction.
 
+## Aggregated Seaport lots
+
+The storefront also shows active orders from the ecosystem front
+(antseedmarkets.com) in the same grid as our own lots, sorted by price per
+ANTS. The source badge says where an order lives.
+
+| Source | Fee | Where the order lives |
+|---|---|---|
+| lANTS (this market) | 1% paid by the seller | VexyMarketplace on Base |
+| Seaport | 0% platform fee | Seaport 1.6, signed off-chain |
+
+The buyer price is final in both cases: the 1% is deducted from the seller's
+proceeds, not added to the buyer's price. Only the seller-facing copy in the
+list form mentions it.
+
+Seaport lots come from the front's public feed. That feed is the **only
+discovery source**: Seaport orders are signed off-chain, so nothing can be
+recovered from chain logs. The chain is used only to verify an order
+(`getOrderStatus`, `getCounter`, `ownerOf`, `isApprovedForAll`). If the feed is
+unavailable, Seaport lots are hidden with a banner and our own lots keep
+rendering.
+
+Buying a Seaport lot calls `fulfillBasicOrder` on Seaport 1.6 with no platform
+fee. Only orders that pass every check are offered with a Buy button here;
+anything else links out to antseedmarkets.com. While `SEAPORT_BUY_ENABLED` is
+false in `market-config.mjs`, every Seaport card links out.
+
 ## MC / FDV on each lot
 
 The table shows what a lot's price implies for ANTS as a whole:

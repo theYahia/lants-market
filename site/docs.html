@@ -257,6 +257,20 @@ price = basePrice + (basePrice * r^3 / 1e36) * slopeMax / 1e18</code></pre>
 </tbody>
 </table>
 <p>When all conditions hold, the buyer pays <code>price</code> in USDC. The seller receives <code>price - fee</code>, the fee recipient receives <code>fee</code>, and the NFT is transferred from seller to buyer in the same transaction.</p>
+<h2>Aggregated Seaport lots</h2>
+<p>The storefront also shows active orders from the ecosystem front (antseedmarkets.com) in the same grid as our own lots, sorted by price per ANTS. The source badge says where an order lives.</p>
+<table>
+<thead>
+<tr><th>Source</th><th>Fee</th><th>Where the order lives</th></tr>
+</thead>
+<tbody>
+<tr><td>lANTS (this market)</td><td>1% paid by the seller</td><td>VexyMarketplace on Base</td></tr>
+<tr><td>Seaport</td><td>0% platform fee</td><td>Seaport 1.6, signed off-chain</td></tr>
+</tbody>
+</table>
+<p>The buyer price is final in both cases: the 1% is deducted from the seller's proceeds, not added to the buyer's price. Only the seller-facing copy in the list form mentions it.</p>
+<p>Seaport lots come from the front's public feed. That feed is the <strong>only discovery source</strong>: Seaport orders are signed off-chain, so nothing can be recovered from chain logs. The chain is used only to verify an order (<code>getOrderStatus</code>, <code>getCounter</code>, <code>ownerOf</code>, <code>isApprovedForAll</code>). If the feed is unavailable, Seaport lots are hidden with a banner and our own lots keep rendering.</p>
+<p>Buying a Seaport lot calls <code>fulfillBasicOrder</code> on Seaport 1.6 with no platform fee. Only orders that pass every check are offered with a Buy button here; anything else links out to antseedmarkets.com. While <code>SEAPORT_BUY_ENABLED</code> is false in <code>market-config.mjs</code>, every Seaport card links out.</p>
 <h2>MC / FDV on each lot</h2>
 <p>The table shows what a lot's price implies for ANTS as a whole:</p>
 <pre><code>price per ANTS = price / ANTS in the position
