@@ -9,6 +9,7 @@ const FILES = [
   ['site/index.html', 'dist/index.html'],
   ['site/docs.html', 'dist/docs.html'],
   ['site/app.css', 'dist/app.css'],
+  ['site/storefront.css', 'dist/storefront.css'],
   ['site/render.mjs', 'dist/render.mjs'],
   ['site/incentives.mjs', 'dist/incentives.mjs'],
   ['site/rebate.mjs', 'dist/rebate.mjs'],
@@ -22,6 +23,12 @@ const FILES = [
   ['site/portfolio-fresh.mjs', 'dist/portfolio-fresh.mjs'],
   ['site/portfolio-state.mjs', 'dist/portfolio-state.mjs'],
   ['site/market-buy.mjs', 'dist/market-buy.mjs'],
+  ['site/own-listings.mjs', 'dist/own-listings.mjs'],
+  ['site/listing-model.mjs', 'dist/listing-model.mjs'],
+  ['site/position-yield.mjs', 'dist/position-yield.mjs'],
+  ['site/seaport-feed.mjs', 'dist/seaport-feed.mjs'],
+  ['site/storefront.mjs', 'dist/storefront.mjs'],
+  ['site/storefront-card.mjs', 'dist/storefront-card.mjs'],
   ['site/fixtures/snapshot-e23.full.json', 'dist/fixtures/snapshot-e23.full.json'],
   ['site/vendor/mipd/utils.js', 'dist/vendor/mipd/utils.js'],
 ];
@@ -98,13 +105,13 @@ for (const [, dest] of FILES) {
 // 2c. Cache-busting: stamp ?v=<content hash> onto local .mjs/.css references so
 // stale per-file copies across IPNS gateways cannot combine into a broken page.
 import { createHash } from 'node:crypto';
-const VERSIONABLE = [...readdirSync(DIST_ROOT).filter((f) => f.endsWith('.mjs')), 'app.css'];
+const VERSIONABLE = [...readdirSync(DIST_ROOT).filter((f) => f.endsWith('.mjs')), 'app.css', 'storefront.css'];
 const { writeFileSync } = await import('node:fs');
 const versions = {};
 for (const name of VERSIONABLE) {
   versions[name] = createHash('sha256').update(readFileSync(join(DIST_ROOT, name))).digest('hex').slice(0, 8);
 }
-const RE = /(\.\/)?([A-Za-z0-9_-]+)\.mjs|app\.css/g;
+const RE = /(\.\/)?([A-Za-z0-9_-]+)\.mjs|app\.css|storefront\.css/g;
 const stamp = (txt) => txt.replace(RE, (m) => { if (m.includes('?v=')) return m; const key = m.replace('./', ''); return versions[key] ? m + '?v=' + versions[key] : m; });
 for (const name of ['index.html', 'docs.html', ...VERSIONABLE.filter((n) => n.endsWith('.mjs'))]) {
   const p = join(DIST_ROOT, name);

@@ -1,6 +1,7 @@
 // site/market-buy.mjs
-// Market buying logic
-// Delegated click handler on #market-list for buttons with class "buy"
+// Buying a lot on our own marketplace (buyListing(uint256)). The storefront
+// card and the legacy market-row button share buyListing(); the delegated
+// click handler below keeps the old #market-list behaviour.
 
 import {
   MARKET,
@@ -12,9 +13,6 @@ import {
 } from "./market-config.mjs";
 import { walletRequest, ensureChain, waitReceipt, loadPublicMarket, humanError } from "./market-view.mjs";
 
-/**
- * Helper: create / get a span for messages inside the same market row.
- */
 function getMessageSpan(row) {
   let span = row.querySelector("span.msg");
   if (!span) {
@@ -26,9 +24,6 @@ function getMessageSpan(row) {
   return span;
 }
 
-/**
- * Show a temporary message (hash or error) next to the button.
- */
 function setMessage(row, text, isError = false) {
   const span = getMessageSpan(row);
   span.textContent = text;
@@ -36,131 +31,119 @@ function setMessage(row, text, isError = false) {
 }
 
 /**
- * Main delegated click handler.
+ * Buy one of our own listings. Returns { ok, txHash } and reports progress
+ * through the caller's status callback.
  */
+export async function buyListing({ id, price, currency }, report = () => {}) {
+  let accounts = [];
+  try {
+    accounts = await walletRequest({ method: "eth_accounts" });
+  } catch (e) {
+    report(humanError(e), true);
+    return { ok: false };
+  }
+
+  if (!accounts || accounts.length === 0) {
+    report("connect wallet first", true);
+    return { ok: false };
+  }
+  const from = accounts[0];
+
+  try {
+    if (!(await ensureChain())) {
+      report("wrong network", true);
+      return { ok: false };
+    }
+  } catch (e) {
+    report(humanError(e), true);
+    return { ok: false };
+  }
+
+  let needApprove = false;
+  try {
+    const callData = SEL.allowance + encAddr(from) + encAddr(MARKET.market);
+    const raw = await walletRequest({
+      method: "eth_call",
+      params: [{ to: currency, data: callData }, "latest"],
+    });
+    const words = decodeWords(raw);
+    const allowance = wordToBigInt(words[0] ?? "0x0");
+    needApprove = allowance < price;
+  } catch (e) {
+    report("Could not check the USDC allowance: " + humanError(e), true);
+    return { ok: false };
+  }
+
+  if (needApprove) {
+    try {
+      const approveData = SEL.approve + encAddr(MARKET.market) + encUint(price);
+      const approveHash = await walletRequest({
+        method: "eth_sendTransaction",
+        params: [{ from, to: currency, data: approveData }],
+      });
+      report(`approve sent: ${approveHash}`);
+      const aRcpt = await waitReceipt(approveHash);
+      if (!aRcpt || aRcpt.status !== "0x1") {
+        report("approve failed", true);
+        return { ok: false };
+      }
+    } catch (e) {
+      report(humanError(e), true);
+      return { ok: false };
+    }
+  }
+
+  try {
+    const buyData = SEL.buyListing + encUint(id);
+    const txHash = await walletRequest({
+      method: "eth_sendTransaction",
+      params: [{ from, to: MARKET.market, data: buyData }],
+    });
+    report(`buy sent: ${txHash}`);
+    const rcpt = await waitReceipt(txHash);
+    if (rcpt && rcpt.status === "0x1") {
+      report("bought");
+      await loadPublicMarket();
+      await afterBuy();
+      return { ok: true, txHash };
+    }
+    report("buy reverted", true);
+    return { ok: false, txHash };
+  } catch (e) {
+    report(humanError(e), true);
+    return { ok: false };
+  }
+}
+
+async function afterBuy() {
+  if (typeof window !== "undefined" && typeof CustomEvent === "function") {
+    window.dispatchEvent(new CustomEvent("market:refresh"));
+  }
+}
+
 function initBuyHandler() {
   const list = document.getElementById("market-list");
-  if (!list) return; // nothing to do
+  if (!list) return;
 
   list.addEventListener("click", async (ev) => {
     const btn = ev.target.closest("button.buy");
-    if (!btn) return; // not a buy button
+    if (!btn) return;
 
     ev.preventDefault();
-
-    // Disable button to avoid double clicks
     btn.disabled = true;
 
     const row = btn.closest("div.market-row") || btn.parentElement;
-    const id = Number(btn.dataset.id);
-    const price = BigInt(btn.dataset.price);
-    const currency = btn.dataset.currency;
+    await buyListing(
+      {
+        id: Number(btn.dataset.id),
+        price: BigInt(btn.dataset.price),
+        currency: btn.dataset.currency,
+      },
+      (text, isError) => setMessage(row, text, isError)
+    );
 
-    // -----------------------------------------------------------------
-    // 1. Get user address
-    // -----------------------------------------------------------------
-    let accounts = [];
-    try {
-      accounts = await walletRequest({ method: "eth_accounts" });
-    } catch (e) {
-      setMessage(row, humanError(e), true);
-      btn.disabled = false;
-      return;
-    }
-
-    if (!accounts || accounts.length === 0) {
-      setMessage(row, "connect wallet first", true);
-      btn.disabled = false;
-      return;
-    }
-
-    const from = accounts[0];
-
-    try {
-      if (!(await ensureChain())) {
-        setMessage(row, "wrong network", true);
-        btn.disabled = false;
-        return;
-      }
-    } catch (e) {
-      setMessage(row, humanError(e), true);
-      btn.disabled = false;
-      return;
-    }
-
-    // -----------------------------------------------------------------
-    // 2. Check allowance (ERC20)
-    // -----------------------------------------------------------------
-    let needApprove = false;
-    try {
-      // SEL.allowance already contains the 0x prefix
-      const callData = SEL.allowance + encAddr(from) + encAddr(MARKET.market);
-      const raw = await walletRequest({
-        method: "eth_call",
-        params: [{ to: currency, data: callData }, "latest"],
-      });
-      const words = decodeWords(raw);
-      const allowance = wordToBigInt(words[0] ?? "0x0");
-      if (allowance < price) needApprove = true;
-    } catch (e) {
-      setMessage(row, 'Could not check the USDC allowance: ' + humanError(e), true);
-      btn.disabled = false;
-      return;
-    }
-
-    // -----------------------------------------------------------------
-    // 3. Approve if needed
-    // -----------------------------------------------------------------
-    if (needApprove) {
-      try {
-        // SEL.approve already contains the 0x prefix
-        const approveData = SEL.approve + encAddr(MARKET.market) + encUint(price);
-        const txHash = await walletRequest({
-          method: "eth_sendTransaction",
-          params: [{ from, to: currency, data: approveData }],
-        });
-        setMessage(row, `approve sent: ${txHash}`);
-        const aRcpt = await waitReceipt(txHash);
-        if (!aRcpt || aRcpt.status !== "0x1") {
-          setMessage(row, "approve failed", true);
-          btn.disabled = false;
-          return;
-        }
-      } catch (e) {
-        setMessage(row, humanError(e), true);
-        btn.disabled = false;
-        return;
-      }
-    }
-
-    // -----------------------------------------------------------------
-    // 4. Buy listing
-    // -----------------------------------------------------------------
-    try {
-      // SEL.buyListing already contains the 0x prefix
-      const buyData = SEL.buyListing + encUint(id);
-      const txHash = await walletRequest({
-        method: "eth_sendTransaction",
-        params: [{ from, to: MARKET.market, data: buyData }],
-      });
-      setMessage(row, `buy sent: ${txHash}`);
-      const rcpt = await waitReceipt(txHash);
-      if (rcpt && rcpt.status === "0x1") {
-        setMessage(row, "bought");
-        await loadPublicMarket();
-      } else {
-        setMessage(row, "buy reverted", true);
-      }
-    } catch (e) {
-      setMessage(row, humanError(e), true);
-      btn.disabled = false;
-      return;
-    }
-
-    // Re‑enable button after all work is done
     btn.disabled = false;
   });
 }
 
-// Initialise on module load
 initBuyHandler();

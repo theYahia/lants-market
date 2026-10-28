@@ -6,6 +6,7 @@
     <title>lANTS Market</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c2f04a'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="app.css">
+    <link rel="stylesheet" href="storefront.css">
 </head>
 <body>
     <div class="container">
@@ -95,39 +96,72 @@
           <button class="tab" data-tab="listings">Listings</button>
         </div>
 
+        <div id="position-panel" class="position-panel" hidden></div>
+
         <div class="panel is-open" data-panel="all">
             <div class="all-layout">
-                <section class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>#<span class="info" tabindex="0" data-tip="Position id in the lANTS collection on Base.">ⓘ</span></th>
-                                <th class="text-right">AMOUNT<span class="info" tabindex="0" data-tip="ANTS locked in this position.">ⓘ</span></th>
-                                <th class="text-right">LOCK<span class="info" tabindex="0" data-tip="Weeks left in the lock; 'max' keeps constant weight that never counts down.">ⓘ</span></th>
-                                <th class="text-right">REWARD<span class="info" tabindex="0" data-tip="Staker reward for the current epoch; grows with pool purchases, settles at epoch end.">ⓘ</span><span class="th-note" id="th-reward-note">live</span></th>
-                                <th class="text-right">EXIT<span class="info" tabindex="0" data-tip="ANTS returned on early exit after the slash burn.">ⓘ</span><span class="th-note">net</span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="rows">
-                            <!-- Rows populated by JavaScript -->
-                        </tbody>
-                    </table>
+                <section class="storefront" id="storefront" aria-label="Position cards">
+                    <div class="sf-toolbar" id="sf-toolbar">
+                      <div class="sf-controls">
+                        <label class="sf-field">Sort
+                          <select id="sf-sort">
+                            <option value="perAnt">$/ANTS</option>
+                            <option value="amount">Amount</option>
+                            <option value="apr">APR</option>
+                            <option value="unlock">Unlock</option>
+                          </select>
+                        </label>
+                        <label class="sf-field">Source
+                          <select id="sf-source">
+                            <option value="all">All sources</option>
+                            <option value="lants">lANTS</option>
+                            <option value="seaport">Seaport</option>
+                          </select>
+                        </label>
+                        <label class="sf-check"><input type="checkbox" id="sf-listed"> Listed only</label>
+                      </div>
+                      <div class="sf-views" role="group" aria-label="View">
+                        <button type="button" class="sf-view-btn is-on" data-view="grid" aria-pressed="true">Grid</button>
+                        <button type="button" class="sf-view-btn" data-view="list" aria-pressed="false">List</button>
+                      </div>
+                    </div>
+                    <div class="sf-banner" id="sf-banner" hidden></div>
+                    <div class="sf-grid" id="sf-grid"></div>
+                    <div class="sf-empty" id="sf-empty" hidden>No positions match these filters.</div>
                 </section>
-                <aside class="side-panels">
-                    <section class="soon-panel" id="sales-panel">
-                        <h3>Sales</h3>
-                        <div class="soon-word">SOON</div>
-                        <p class="soon-note">No sales have happened yet.</p>
+                <div id="all-list-view" hidden>
+                    <section class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#<span class="info" tabindex="0" data-tip="Position id in the lANTS collection on Base.">ⓘ</span></th>
+                                    <th class="text-right">AMOUNT<span class="info" tabindex="0" data-tip="ANTS locked in this position.">ⓘ</span></th>
+                                    <th class="text-right">LOCK<span class="info" tabindex="0" data-tip="Weeks left in the lock; 'max' keeps constant weight that never counts down.">ⓘ</span></th>
+                                    <th class="text-right">REWARD<span class="info" tabindex="0" data-tip="Staker reward for the current epoch; grows with pool purchases, settles at epoch end.">ⓘ</span><span class="th-note" id="th-reward-note">live</span></th>
+                                    <th class="text-right">EXIT<span class="info" tabindex="0" data-tip="ANTS returned on early exit after the slash burn.">ⓘ</span><span class="th-note">net</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="rows">
+                                <!-- Rows populated by JavaScript -->
+                            </tbody>
+                        </table>
                     </section>
-                    <section class="soon-panel">
-                        <h3>Discount vs Lock Size</h3>
-                        <div class="soon-word">SOON</div>
-                        <p class="soon-note">No discount-to-lock data to plot yet.</p>
-                    </section>
-                </aside>
-                <div class="cta-row">
-                  <span class="cta-text">Not seeing anything you like?</span>
-                  <a class="cta-btn" href="#offers">Make an offer</a>
+                    <aside class="side-panels">
+                        <section class="soon-panel" id="sales-panel">
+                            <h3>Sales</h3>
+                            <div class="soon-word">SOON</div>
+                            <p class="soon-note">No sales have happened yet.</p>
+                        </section>
+                        <section class="soon-panel">
+                            <h3>Discount vs Lock Size</h3>
+                            <div class="soon-word">SOON</div>
+                            <p class="soon-note">No discount-to-lock data to plot yet.</p>
+                        </section>
+                    </aside>
+                    <div class="cta-row">
+                      <span class="cta-text">Not seeing anything you like?</span>
+                      <a class="cta-btn" href="#offers">Make an offer</a>
+                    </div>
                 </div>
                 <div class="snap-footer"></div>
             </div>
@@ -292,6 +326,7 @@
       var pfLinks=document.querySelectorAll('.hdr-link');
       var pfPanel=document.getElementById('portfolio');
       var incPanel=document.getElementById('incentives');
+      var posPanel=document.getElementById('position-panel');
       var tabsPanel=document.getElementById('tabs');
       var viewLinks={};
       pfLinks.forEach(function(l){viewLinks[l.getAttribute('href')]=l;});
@@ -300,11 +335,14 @@
       function showView(v){
         var isPortfolio=(v==='portfolio');
         var isIncentives=(v==='incentives');
+        var isPosition=(v==='position');
         document.body.classList.toggle('view-portfolio',isPortfolio);
         document.body.classList.toggle('view-incentives',isIncentives);
+        document.body.classList.toggle('view-position',isPosition);
         if(pfPanel)pfPanel.hidden=!isPortfolio;
         if(incPanel)incPanel.hidden=!isIncentives;
-        if(tabsPanel)tabsPanel.hidden=isPortfolio||isIncentives;
+        if(posPanel)posPanel.hidden=!isPosition;
+        if(tabsPanel)tabsPanel.hidden=isPosition||isPortfolio||isIncentives;
         pfLinks.forEach(function(l){
           var on=l.getAttribute('href')==='#'+v;
           l.classList.toggle('is-on',on);
@@ -314,8 +352,15 @@
         open('all');
         window.scrollTo(0,0);
       }
-      // Every view has an address: #market, #listings, #portfolio, #incentives.
+      // Every view has an address: #market, #listings, #portfolio, #incentives,
+      // and #position/{id} for the deep page.
       function route(hash){
+        var pm=String(hash||'').match(/^#position\/(\d+)$/);
+        if(pm){
+          showView('position');
+          document.dispatchEvent(new CustomEvent('position:open',{detail:{id:pm[1]}}));
+          return;
+        }
         if(hash==='#portfolio'||hash==='#incentives'){showView(hash.slice(1));return;}
         showView('tabs');
         if(hash==='#listings')open('listings');
@@ -347,6 +392,7 @@
     <script type="module" src="./render.mjs"></script>
     <script type="module" src="./market-view.mjs"></script>
     <script type="module" src="./market-buy.mjs"></script>
+    <script type="module" src="./storefront.mjs"></script>
 <script type="module" src="./tips.mjs"></script>
 <script type="module" src="./incentives.mjs"></script>
 <script type="module" src="./rebate-claim.mjs"></script>
