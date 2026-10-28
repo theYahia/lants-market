@@ -8,6 +8,7 @@ import {
   floorText,
   tradeText,
   newListingText,
+  newFloorListingText,
   delistText,
   epochText,
   burnText,
@@ -79,6 +80,12 @@ test('newListingText: with and without a lock', () => {
   const s = newListingText({ id: 8, amount: 100, perAntUsd: 0.101, lockDays: 0 });
   assert.ok(!s.includes('lock'));
   assert.ok(s.startsWith('New listing: #8'));
+});
+
+test('newFloorListingText: same detail as a listing, new-floor prefix', () => {
+  const t = newFloorListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
+  assert.equal(t, 'New floor listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo');
+  assert.ok(newFloorListingText({ id: 8, amount: 100, perAntUsd: 0.09, lockDays: 0 }).startsWith('New floor listing: #8'));
 });
 
 test('delistText: plain id line', () => {

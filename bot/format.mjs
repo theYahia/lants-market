@@ -65,6 +65,13 @@ export function newListingText(l) {
   return `New listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${SITE}`;
 }
 
+export function newFloorListingText(l) {
+  const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
+    ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
+    : '';
+  return `New floor listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${SITE}`;
+}
+
 export function delistText(id) {
   return `Delisted: #${id} ${MID} ${SITE}`;
 }

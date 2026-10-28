@@ -184,7 +184,7 @@ export async function fetchEmission({ fetchImpl = globalThis.fetch, timeoutMs = 
   return { ok: false, reason: 'network' };
 }
 
-// Compact state persisted between runs (ids only; curr carries full objects).
+// Compact state persisted between runs (ids + price; curr carries full objects).
 // When the trades feed was down, keep the previously known ids instead of
 // resetting to [] (otherwise the next successful run reposts the whole history).
 export function toState(feed, prevTradeIds = null) {
@@ -195,7 +195,7 @@ export function toState(feed, prevTradeIds = null) {
     floorAsk: feed.market.floorAsk,
     avg24h: feed.market.avg24h,
     epoch: feed.market.epoch,
-    listings: feed.market.listings.map((l) => l.id),
+    listings: feed.market.listings.map((l) => ({ id: l.id, perAntUsd: l.perAntUsd })),
     tradeIds,
   };
 }

@@ -138,14 +138,16 @@ test('readFeed treats a market failure as fatal and a trades failure as soft', a
   assert.deepEqual(down, { ok: false, reason: 'http' });
 });
 
-test('toState keeps ids only for compact persistence', () => {
+test('toState keeps ids + price for compact persistence', () => {
   const parsed = parseSeaportMarket(marketFixture, { includeNonFulfillable: true });
   const market = toMarket(parsed);
   const state = toState({ market, trades: parseTrades(tradesFixture).trades });
   assert.equal(state.epoch, 28);
   assert.equal(state.listings.length, 15);
   assert.equal(state.tradeIds.length, 32);
-  assert.equal(typeof state.listings[0], 'number');
+  assert.equal(typeof state.listings[0], 'object');
+  assert.equal(typeof state.listings[0].id, 'number');
+  assert.equal(typeof state.listings[0].perAntUsd, 'number');
 });
 
 test('toState preserves known trade ids when the trades feed was down', () => {
