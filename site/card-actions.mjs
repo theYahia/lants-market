@@ -4,6 +4,7 @@
 import { SEAPORT_BUY_ENABLED } from './market-config.mjs';
 import { buyListing } from './market-buy.mjs';
 import { buySeaportOrder } from './seaport-buy.mjs';
+import { SEAPORT_MARKET_URL } from './storefront-card.mjs';
 
 const SHARE_BASE = 'https://lants.eth.limo/';
 
@@ -105,6 +106,16 @@ export function initCardActions(container, opts = {}) {
     if (res.ok) {
       pendingPrice.delete(tokenId);
       await refresh();
+    } else if (res.reason && res.reason !== 'wallet' && res.reason !== 'chain') {
+      // The order no longer validates here: fall back to the source front.
+      const link = document.createElement('a');
+      link.className = 'sf-btn sf-btn-link';
+      link.href = SEAPORT_MARKET_URL;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Buy on antseedmarkets.com';
+      buy.replaceWith(link);
+      return;
     }
     buy.disabled = false;
   });
