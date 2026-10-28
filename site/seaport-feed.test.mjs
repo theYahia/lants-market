@@ -31,6 +31,29 @@ test('parse the captured live feed: only executable lots survive', () => {
   assert.equal(res.items[0].agentId, 45869);
 });
 
+test('parse exposes market-wide fields and per-lot economics for data consumers', () => {
+  const res = parseSeaportMarket(fixture, { includeNonFulfillable: true });
+  assert.equal(res.ok, true);
+  assert.equal(res.currentEpoch, 28);
+  assert.equal(res.offeredCount, 0);
+  assert.equal(res.antsTotalSupply, 129929424.0681841);
+  assert.equal(res.items.length, 15);
+  const lot = res.items.find((it) => it.id === 205);
+  assert.equal(lot.listed, true);
+  assert.equal(lot.fulfillableHere, true);
+  assert.equal(lot.lockDays, 126);
+  assert.ok(Math.abs(lot.perAntUsd - 0.14) < 1e-9);
+});
+
+test('includeNonFulfillable keeps priced listings the storefront would drop', () => {
+  const listed = { id: 1, listed: true, fulfillableHere: false, amount: 10, listing: { usd: 2 } };
+  assert.equal(normalizeSeaportItem(listed), null);
+  const kept = normalizeSeaportItem(listed, { includeNonFulfillable: true });
+  assert.equal(kept.id, 1);
+  assert.equal(kept.fulfillableHere, false);
+  assert.equal(kept.perAntUsd, 0.2);
+});
+
 test('item validation rejects unlisted, non-fulfillable and malformed lots', () => {
   const base = {
     id: 1,

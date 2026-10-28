@@ -22,15 +22,20 @@ function finiteNumber(v) {
 // One feed item -> normalized lot, or null when it cannot be executed from
 // this site. The feed's mcUsd/fdvUsd are deliberately ignored: we recompute
 // implied values from the ask and the position amount.
-export function normalizeSeaportItem(item) {
+export function normalizeSeaportItem(item, { includeNonFulfillable = false } = {}) {
   if (!isObject(item)) return null;
-  if (item.listed !== true || item.fulfillableHere !== true) return null;
+  if (item.listed !== true) return null;
+  // The storefront only wants lots it can fill itself; the data consumer (bot)
+  // wants every priced listing, whether or not this site can execute it.
+  if (!includeNonFulfillable && item.fulfillableHere !== true) return null;
   if (!Number.isInteger(item.id) || item.id < 0) return null;
   if (!isObject(item.listing)) return null;
   const priceUsdc = finiteNumber(item.listing.usd);
   if (priceUsdc === null || !(priceUsdc > 0)) return null;
   const amount = finiteNumber(item.amount);
   const agentId = Number.isInteger(item.agentId) ? item.agentId : null;
+  const perAntUsd = finiteNumber(item.listing.perAntUsd)
+    ?? (amount > 0 ? priceUsdc / amount : null);
   return {
     id: item.id,
     agentId,
@@ -38,6 +43,10 @@ export function normalizeSeaportItem(item) {
     owner: typeof item.owner === 'string' ? item.owner.toLowerCase() : null,
     amount: amount !== null && amount > 0 ? amount : null,
     priceUsdc,
+    listed: true,
+    fulfillableHere: item.fulfillableHere === true,
+    lockDays: finiteNumber(item.lockDays),
+    perAntUsd,
     stakeStartEpoch: finiteNumber(item.stakeStartEpoch),
     stakeEndEpoch: finiteNumber(item.stakeEndEpoch),
     epochYield: isObject(item.epochYield)
@@ -51,7 +60,7 @@ export function normalizeSeaportItem(item) {
 
 // Parse one API page. A missing/renamed shape fails the whole feed instead of
 // rendering a misleading partial market; individual bad lots are dropped.
-export function parseSeaportMarket(json) {
+export function parseSeaportMarket(json, { includeNonFulfillable = false } = {}) {
   if (!isObject(json)) return { ok: false, reason: 'schema' };
   if (!Array.isArray(json.items)) return { ok: false, reason: 'schema' };
 
@@ -61,7 +70,7 @@ export function parseSeaportMarket(json) {
   const items = [];
   let dropped = 0;
   for (const raw of json.items) {
-    const item = normalizeSeaportItem(raw);
+    const item = normalizeSeaportItem(raw, { includeNonFulfillable });
     if (item) items.push(item);
     else dropped += 1;
   }
@@ -82,6 +91,9 @@ export function parseSeaportMarket(json) {
     price,
     fetchedAt: finiteNumber(json.fetchedAt),
     totalNfts: finiteNumber(json.totalNfts),
+    offeredCount: Number.isInteger(json.offeredCount) ? json.offeredCount : null,
+    currentEpoch: Number.isInteger(json.currentEpoch) ? json.currentEpoch : null,
+    antsTotalSupply: finiteNumber(json.antsTotalSupply),
   };
 }
 
@@ -123,7 +135,7 @@ function pageUrl(page, pageSize) {
  * @returns {Promise<{ok:true, items:Array, price:Object, fetchedAt:number, listedCount:number} |
  *                   {ok:false, reason:string}>}
  */
-export async function fetchSeaportMarket({ fetchImpl = globalThis.fetch, timeoutMs = 8000, pageSize = DEFAULT_PAGE_SIZE } = {}) {
+export async function fetchSeaportMarket({ fetchImpl = globalThis.fetch, timeoutMs = 8000, pageSize = DEFAULT_PAGE_SIZE, includeNonFulfillable = false } = {}) {
   if (typeof fetchImpl !== 'function') return { ok: false, reason: 'no-fetch' };
 
   const seen = new Set();
@@ -132,12 +144,15 @@ export async function fetchSeaportMarket({ fetchImpl = globalThis.fetch, timeout
   let price = { avgPrice24h: null, floorAsk: null, lastPrice: null };
   let fetchedAt = null;
   let totalNfts = null;
+  let offeredCount = null;
+  let currentEpoch = null;
+  let antsTotalSupply = null;
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     const res = await fetchJson(fetchImpl, pageUrl(page, pageSize), timeoutMs);
     if (!res.ok) return { ok: false, reason: res.reason };
 
-    const parsed = parseSeaportMarket(res.json);
+    const parsed = parseSeaportMarket(res.json, { includeNonFulfillable });
     if (!parsed.ok) return { ok: false, reason: parsed.reason };
 
     if (listedCount === null) {
@@ -145,6 +160,9 @@ export async function fetchSeaportMarket({ fetchImpl = globalThis.fetch, timeout
       price = parsed.price;
       fetchedAt = parsed.fetchedAt;
       totalNfts = parsed.totalNfts;
+      offeredCount = parsed.offeredCount;
+      currentEpoch = parsed.currentEpoch;
+      antsTotalSupply = parsed.antsTotalSupply;
     }
 
     for (const item of parsed.items) {
@@ -166,5 +184,8 @@ export async function fetchSeaportMarket({ fetchImpl = globalThis.fetch, timeout
     fetchedAt: fetchedAt ?? Date.now(),
     listedCount,
     totalNfts,
+    offeredCount,
+    currentEpoch,
+    antsTotalSupply,
   };
 }
