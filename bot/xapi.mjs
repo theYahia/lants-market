@@ -2,10 +2,12 @@
 // refresh and tweet creation. No SDK; fetch only. The app is a confidential
 // client (client id + secret), so refresh uses HTTP Basic auth.
 //
-// Scopes required on the refresh token: tweet.write, tweet.read, offline.access.
+// Scopes required on the refresh token: tweet.write, tweet.read, offline.access,
+// users.read (for GET /2/users/me identity check).
 
 const OAUTH_TOKEN_URL = 'https://api.x.com/2/oauth2/token';
 const TWEET_URL = 'https://api.x.com/2/tweets';
+const ME_URL = 'https://api.x.com/2/users/me';
 const MAX_TWEET_LEN = 280;
 
 function basicAuth(clientId, clientSecret) {
@@ -21,8 +23,34 @@ function errorDetail(json) {
   return json.detail || json.title || json.error_description || json.error || null;
 }
 
+// A tweet.write scope is what lets POST /2/tweets succeed; its absence is the
+// signal that the refresh token was minted under a read-only (or downgraded) app.
+export function scopeAllowsWrite(scope) {
+  return typeof scope === 'string' && scope.split(/\s+/).includes('tweet.write');
+}
+
+const HEADER_KEYS = [
+  'x-rate-limit-limit',
+  'x-rate-limit-remaining',
+  'x-rate-limit-reset',
+  'x-user-limit-24hour-limit',
+  'x-user-limit-24hour-remaining',
+  'www-authenticate',
+  'x-response-time',
+];
+
+function pickHeaders(response) {
+  const headers = {};
+  if (!response || typeof response.headers?.get !== 'function') return headers;
+  for (const key of HEADER_KEYS) {
+    const value = response.headers.get(key);
+    if (value != null) headers[key] = value;
+  }
+  return headers;
+}
+
 async function send(fetchImpl, url, options, timeoutMs) {
-  if (typeof fetchImpl !== 'function') return { ok: false, status: 0, reason: 'no-fetch', json: null };
+  if (typeof fetchImpl !== 'function') return { ok: false, status: 0, reason: 'no-fetch', json: null, headers: {} };
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let timer = null;
   const timeout = new Promise((_, reject) => {
@@ -38,7 +66,7 @@ async function send(fetchImpl, url, options, timeoutMs) {
       timeout,
     ]);
   } catch (e) {
-    return { ok: false, status: 0, reason: e && e.message === 'timeout' ? 'timeout' : 'network', json: null };
+    return { ok: false, status: 0, reason: e && e.message === 'timeout' ? 'timeout' : 'network', json: null, headers: {} };
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -48,7 +76,13 @@ async function send(fetchImpl, url, options, timeoutMs) {
   } catch {
     json = null;
   }
-  return { ok: response.ok === true, status: response.status, reason: response.ok === true ? null : 'http', json };
+  return {
+    ok: response.ok === true,
+    status: response.status,
+    reason: response.ok === true ? null : 'http',
+    json,
+    headers: pickHeaders(response),
+  };
 }
 
 /**
@@ -95,6 +129,33 @@ export async function refreshAccessToken({
   };
 }
 
+/** Resolve the account behind an access token via GET /2/users/me (needs users.read). */
+export async function getMe({
+  accessToken,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 15000,
+} = {}) {
+  if (!accessToken) return { ok: false, status: 0, retryable: false, reason: 'token', username: null, userId: null, body: null };
+  const res = await send(fetchImpl, ME_URL, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+  }, timeoutMs);
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      retryable: isRetryable(res.status),
+      reason: errorDetail(res.json) || res.reason || 'http',
+      username: null,
+      userId: null,
+      body: res.json,
+    };
+  }
+  const username = typeof res.json?.data?.username === 'string' ? res.json.data.username : null;
+  const userId = typeof res.json?.data?.id === 'string' ? res.json.data.id : null;
+  return { ok: true, status: res.status, retryable: false, reason: null, username, userId, body: res.json };
+}
+
 /** Create one tweet. Returns { ok:true, id } or an error with a retryable flag. */
 export async function postTweet({
   accessToken,
@@ -123,11 +184,12 @@ export async function postTweet({
       retryable: isRetryable(res.status),
       reason: errorDetail(res.json) || res.reason || 'http',
       body: res.json,
+      headers: res.headers,
     };
   }
   const id = res.json?.data?.id;
   if (typeof id !== 'string' || id === '') {
-    return { ok: false, status: res.status, retryable: false, reason: 'no-id', body: res.json };
+    return { ok: false, status: res.status, retryable: false, reason: 'no-id', body: res.json, headers: res.headers };
   }
   return { ok: true, id };
 }

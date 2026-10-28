@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { refreshAccessToken, postTweet } from './xapi.mjs';
+import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.mjs';
 
-function jsonResponse(status, body) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+function jsonResponse(status, body, headers = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    headers: { get: (key) => headers[key] ?? null },
+  };
 }
 
 test('refreshAccessToken posts basic auth and returns a rotated token', async () => {
@@ -77,4 +82,73 @@ test('postTweet rejects empty or over-length text before calling the API', async
   assert.equal((await postTweet({ accessToken: 'at', text: '  ', fetchImpl })).ok, false);
   assert.equal((await postTweet({ accessToken: 'at', text: 'x'.repeat(281), fetchImpl })).ok, false);
   assert.equal(called, false);
+});
+
+test('postTweet surfaces rate-limit and response headers on failure', async () => {
+  const res = await postTweet({
+    accessToken: 'at',
+    text: 'hi',
+    fetchImpl: async () =>
+      jsonResponse(403, { title: 'Forbidden' }, {
+        'x-rate-limit-limit': '17',
+        'x-user-limit-24hour-remaining': '0',
+        'x-response-time': '12',
+      }),
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.headers['x-rate-limit-limit'], '17');
+  assert.equal(res.headers['x-user-limit-24hour-remaining'], '0');
+  assert.equal(res.headers['x-response-time'], '12');
+});
+
+test('getMe resolves the authenticated account identity', async () => {
+  let seen = null;
+  const fetchImpl = async (url, opts) => {
+    seen = { url, opts };
+    return jsonResponse(200, { data: { id: '2115408906172485912', name: 'sxsiant', username: 'sxsiant' } });
+  };
+  const res = await getMe({ accessToken: 'at', fetchImpl });
+  assert.equal(res.ok, true);
+  assert.equal(res.username, 'sxsiant');
+  assert.equal(res.userId, '2115408906172485912');
+  assert.equal(seen.url, 'https://api.x.com/2/users/me');
+  assert.equal(seen.opts.headers.authorization, 'Bearer at');
+});
+
+test('getMe surfaces a 403 as a non-retryable failure', async () => {
+  const res = await getMe({
+    accessToken: 'at',
+    fetchImpl: async () => jsonResponse(403, { title: 'Forbidden', detail: 'Forbidden' }),
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.status, 403);
+  assert.equal(res.retryable, false);
+});
+
+test('getMe maps network and timeout failures to a non-ok result', async () => {
+  const timedOut = await getMe({
+    accessToken: 'at',
+    fetchImpl: async () => {
+      throw new Error('timeout');
+    },
+  });
+  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.reason, 'timeout');
+
+  const offline = await getMe({
+    accessToken: 'at',
+    fetchImpl: async () => {
+      throw new Error('boom');
+    },
+  });
+  assert.equal(offline.ok, false);
+  assert.equal(offline.reason, 'network');
+});
+
+test('scopeAllowsWrite detects tweet.write in a scope string', () => {
+  assert.equal(scopeAllowsWrite(null), false);
+  assert.equal(scopeAllowsWrite(''), false);
+  assert.equal(scopeAllowsWrite('tweet.read offline.access'), false);
+  assert.equal(scopeAllowsWrite('tweet.write'), true);
+  assert.equal(scopeAllowsWrite('tweet.write tweet.read offline.access users.read'), true);
 });

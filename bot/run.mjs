@@ -18,7 +18,7 @@ import { diffFeed, diffAntseedStats } from './diff.mjs';
 import { readAntseedStats, toAntseedSnapshot, toAntseedState } from './read-antseedstats.mjs';
 import { loadState, saveState, enqueue, dropStale, markEmitted } from './state.mjs';
 import { saveRotatedToken } from './token-store.mjs';
-import { refreshAccessToken, postTweet } from './xapi.mjs';
+import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.mjs';
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
@@ -160,6 +160,25 @@ async function main(argv) {
   if (token.refreshToken) saveRotatedToken(statePath, state, token.refreshToken);
   log(`token refresh ok (scope: ${token.scope ?? 'unknown'})`);
 
+  if (token.scope && !scopeAllowsWrite(token.scope)) {
+    saveState(statePath, state);
+    log('token lacks tweet.write scope — re-mint under Read and Write');
+    return 1;
+  }
+
+  const me = await getMe({ accessToken: token.accessToken });
+  if (!me.ok) {
+    saveState(statePath, state);
+    log(`token cannot authenticate (HTTP ${me.status ?? 0}${me.reason ? `: ${me.reason}` : ''}): wrong app/account or revoked`);
+    return 1;
+  }
+  if (me.username !== 'sxsiant') {
+    saveState(statePath, state);
+    log(`token belongs to @${me.username ?? 'unknown'}, expected @sxsiant — minted against the wrong app/account`);
+    return 1;
+  }
+  log(`authenticated as @${me.username} (id ${me.userId})`);
+
   const toPost = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
   let posted = 0;
   for (const post of toPost) {
@@ -167,6 +186,7 @@ async function main(argv) {
     if (!res.ok) {
       saveState(statePath, state);
       if (res.body) log(`X response: ${JSON.stringify(res.body)}`);
+      if (res.headers && Object.keys(res.headers).length > 0) log(`X headers: ${JSON.stringify(res.headers)}`);
       log(`post failed: ${res.reason}${res.status ? ` (HTTP ${res.status})` : ''}; will retry next run`);
       return res.retryable ? 0 : 1;
     }
