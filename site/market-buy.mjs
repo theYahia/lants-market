@@ -146,4 +146,4 @@ function initBuyHandler() {
   });
 }
 
-initBuyHandler();
+if (typeof document !== 'undefined') initBuyHandler();

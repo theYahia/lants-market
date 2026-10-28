@@ -194,6 +194,11 @@ export function encAddressPlusTwoNumbers(selector, address, num1, num2) {
   return selector + encAddr(address) + encUint(num1) + encUint(num2);
 }
 
+// Seaport aggregation: buy through the canonical Seaport 1.6 contract.
+// Disabled until a Base-fork end-to-end fulfill run is recorded (see handoff);
+// while false, Seaport cards link out to antseedmarkets.com instead.
+export const SEAPORT_BUY_ENABLED = false;
+
 // Listing ids of trades between our own wallets. They are marked internal on the market and never count toward
 // volume, price per ANTS or implied FDV. Add an id here in a commit after an internal trade; a lot bought by
 // an outside wallet is a real external sale and is NOT added.

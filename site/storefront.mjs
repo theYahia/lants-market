@@ -8,9 +8,8 @@ import { aprPct, antsPerEpoch, poolShare, unlockDate, lockWeeks } from './positi
 import { fetchSeaportMarket } from './seaport-feed.mjs';
 import { readListings } from './own-listings.mjs';
 import { loadSnapshot } from './market-view.mjs';
-import { buyListing } from './market-buy.mjs';
-
-const SHARE_BASE = 'https://lants.eth.limo/';
+import { initCardActions } from './card-actions.mjs';
+import { SEAPORT_BUY_ENABLED } from './market-config.mjs';
 
 const state = {
   sort: 'perAnt',
@@ -102,7 +101,7 @@ function renderGrid() {
   const lots = sortLots(ctx.lots.filter(matches));
   grid.textContent = '';
   const frag = document.createDocumentFragment();
-  for (const lot of lots) frag.appendChild(buildCard(lot, { seaportBuyEnabled: false }));
+  for (const lot of lots) frag.appendChild(buildCard(lot, { seaportBuyEnabled: SEAPORT_BUY_ENABLED }));
   grid.appendChild(frag);
   if (empty) empty.hidden = lots.length > 0;
 }
@@ -162,82 +161,6 @@ async function loadStorefront() {
   loading = false;
 }
 
-function report(card, text, isError) {
-  const msg = card?.querySelector('.sf-msg');
-  if (!msg) return;
-  msg.textContent = text;
-  msg.classList.toggle('is-error', !!isError);
-}
-
-async function copyShare(value) {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch (e) {
-    try {
-      const area = document.createElement('textarea');
-      area.value = value;
-      area.setAttribute('readonly', '');
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      const ok = document.execCommand('copy');
-      area.remove();
-      return ok;
-    } catch (e2) {
-      return false;
-    }
-  }
-}
-
-async function onGridClick(ev) {
-  const card = ev.target.closest('.sf-card');
-  if (!card) return;
-
-  const offer = ev.target.closest('.sf-offer');
-  if (offer) {
-    ev.preventDefault();
-    const modal = document.querySelector('.offer-modal');
-    if (modal) modal.dataset.tokenId = offer.dataset.tokenId || '';
-    const opener = document.querySelector('.ms-offer');
-    if (opener) opener.click();
-    return;
-  }
-
-  const share = ev.target.closest('.sf-share');
-  if (share) {
-    ev.preventDefault();
-    const id = share.dataset.tokenId;
-    const url = SHARE_BASE + '#position/' + id;
-    const ok = await copyShare(url);
-    const original = share.textContent;
-    share.textContent = ok ? 'Copied' : 'Copy failed';
-    setTimeout(() => {
-      share.textContent = original;
-    }, 1500);
-    return;
-  }
-
-  const buy = ev.target.closest('.sf-buy');
-  if (!buy) return;
-  ev.preventDefault();
-
-  if (buy.dataset.source === 'lants') {
-    buy.disabled = true;
-    const res = await buyListing(
-      {
-        id: Number(buy.dataset.listingId),
-        price: BigInt(buy.dataset.price),
-        currency: buy.dataset.currency,
-      },
-      (text, isError) => report(card, text, isError)
-    );
-    buy.disabled = false;
-    if (res.ok) await loadStorefront();
-  }
-}
-
 function initToolbar() {
   const sort = q('#sf-sort');
   const source = q('#sf-source');
@@ -277,7 +200,7 @@ function init() {
   const grid = q('#sf-grid');
   if (!grid) return;
   initToolbar();
-  grid.addEventListener('click', onGridClick);
+  initCardActions(grid, { onRefresh: loadStorefront });
   window.addEventListener('market:refresh', () => {
     loadStorefront();
   });

@@ -8,7 +8,8 @@ import { fetchSeaportMarket } from './seaport-feed.mjs';
 import { buildLots } from './listing-model.mjs';
 import { aprPct, antsPerEpoch, poolShare, unlockDate, lockWeeks, formatUnlock } from './position-yield.mjs';
 import { buildCard, formatPerAnt } from './storefront-card.mjs';
-import { MARKET, SEL, encUint, decodeWords, wordToAddr } from './market-config.mjs';
+import { initCardActions } from './card-actions.mjs';
+import { SEAPORT_BUY_ENABLED, MARKET, SEL, encUint, decodeWords, wordToAddr } from './market-config.mjs';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const amountFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
@@ -196,7 +197,7 @@ function renderPosition(panel, vm) {
   } else {
     const grid2 = el('div', 'sf-grid');
     for (const lot of vm.lots) {
-      const lotEl = buildCard(lot, { seaportBuyEnabled: false });
+      const lotEl = buildCard(lot, { seaportBuyEnabled: SEAPORT_BUY_ENABLED });
       grid2.appendChild(lotEl);
     }
     lots.appendChild(grid2);
@@ -298,6 +299,10 @@ function idFromHash() {
 function init() {
   const panel = document.getElementById('position-panel');
   if (!panel) return;
+
+  initCardActions(panel, {
+    onRefresh: () => (currentId ? openPosition(currentId) : undefined),
+  });
 
   document.addEventListener('position:open', (ev) => {
     const id = ev.detail && ev.detail.id;
