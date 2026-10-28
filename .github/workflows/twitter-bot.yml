@@ -65,6 +65,15 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: node bot/run.mjs 2>&1 | tee bot-run.log
 
+      - name: Rotate X refresh token secret
+        # Refresh tokens are single-use: after a refresh the old secret is dead.
+        # Push the rotated token (written by run.mjs) back into the secret so a
+        # cache miss never falls back to a dead token.
+        if: always() && hashFiles('bot/.rotated-token') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRETS_PAT }}
+        run: gh secret set X_REFRESH_TOKEN < bot/.rotated-token
+
       - name: Save bot state
         if: always() && hashFiles('bot/state.json') != ''
         uses: actions/cache/save@v4

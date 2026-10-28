@@ -16,3 +16,7 @@ contracts/cache/
 sellers.json
 __pycache__/
 scripts/site/*.png
+# twitter bot runtime state (persisted in CI via Actions cache)
+bot/state.json
+# rotated refresh token handed to the workflow via `gh secret set`
+bot/.rotated-token

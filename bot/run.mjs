@@ -17,6 +17,7 @@ import { readFeed, fetchEmission, toState } from './read-feed.mjs';
 import { diffFeed, diffAntseedStats } from './diff.mjs';
 import { readAntseedStats, toAntseedSnapshot, toAntseedState } from './read-antseedstats.mjs';
 import { loadState, saveState, enqueue, dropStale, markEmitted } from './state.mjs';
+import { saveRotatedToken } from './token-store.mjs';
 import { refreshAccessToken, postTweet } from './xapi.mjs';
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -153,7 +154,10 @@ async function main(argv) {
     log(`token refresh failed: ${token.reason}${token.status ? ` (HTTP ${token.status})` : ''}`);
     return token.retryable ? 0 : 1;
   }
-  if (token.refreshToken) state.refreshToken = token.refreshToken;
+  // X rotates the refresh token; persist it write-ahead so the live token is
+  // never lost between refresh and the end-of-run save (and the workflow can
+  // update the GitHub secret from bot/.rotated-token).
+  if (token.refreshToken) saveRotatedToken(statePath, state, token.refreshToken);
 
   const toPost = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
   let posted = 0;
