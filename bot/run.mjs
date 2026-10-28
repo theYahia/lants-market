@@ -158,6 +158,7 @@ async function main(argv) {
   // never lost between refresh and the end-of-run save (and the workflow can
   // update the GitHub secret from bot/.rotated-token).
   if (token.refreshToken) saveRotatedToken(statePath, state, token.refreshToken);
+  log(`token refresh ok (scope: ${token.scope ?? 'unknown'})`);
 
   const toPost = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
   let posted = 0;
@@ -165,6 +166,7 @@ async function main(argv) {
     const res = await postTweet({ accessToken: token.accessToken, text: post.text });
     if (!res.ok) {
       saveState(statePath, state);
+      if (res.body) log(`X response: ${JSON.stringify(res.body)}`);
       log(`post failed: ${res.reason}${res.status ? ` (HTTP ${res.status})` : ''}; will retry next run`);
       return res.retryable ? 0 : 1;
     }

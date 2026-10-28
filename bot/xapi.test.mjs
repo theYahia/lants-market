@@ -63,6 +63,9 @@ test('postTweet flags 429 as retryable and 403 as human-actionable', async () =>
   assert.equal(forbidden.ok, false);
   assert.equal(forbidden.retryable, false);
   assert.equal(forbidden.reason, 'client-not-enrolled');
+  // The raw body is surfaced so run.mjs can log the full X response.
+  assert.ok(forbidden.body);
+  assert.equal(forbidden.body.detail, 'client-not-enrolled');
 });
 
 test('postTweet rejects empty or over-length text before calling the API', async () => {

@@ -122,9 +122,12 @@ export async function postTweet({
       status: res.status,
       retryable: isRetryable(res.status),
       reason: errorDetail(res.json) || res.reason || 'http',
+      body: res.json,
     };
   }
   const id = res.json?.data?.id;
-  if (typeof id !== 'string' || id === '') return { ok: false, status: res.status, retryable: false, reason: 'no-id' };
+  if (typeof id !== 'string' || id === '') {
+    return { ok: false, status: res.status, retryable: false, reason: 'no-id', body: res.json };
+  }
   return { ok: true, id };
 }
