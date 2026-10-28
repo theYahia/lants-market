@@ -1,10 +1,8 @@
 name: twitter-bot
 
-# Plan T5/T6: manual dispatch first, then enable the hourly schedule.
-# Uncomment `schedule` only after the first post is verified on @sxsiant.
 on:
-  # schedule:
-  #   - cron: '7 * * * *'
+  schedule:
+    - cron: '7 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -40,23 +38,6 @@ jobs:
           restore-keys: |
             twitter-bot-state-${{ github.ref_name }}-
 
-      - name: Feed diagnostic
-        run: |
-          node --input-type=module -e '
-            import { fetchSeaportMarket } from "./site/seaport-feed.mjs";
-            import { toMarket } from "./bot/read-feed.mjs";
-            const feed = await fetchSeaportMarket({ timeoutMs: 8000, includeNonFulfillable: true });
-            console.log("fetchSeaportMarket.ok:", feed.ok, "reason:", feed.reason);
-            console.log("normalized items.len:", feed.items && feed.items.length, "listedCount:", feed.listedCount);
-            if (Array.isArray(feed.items)) {
-              feed.items.slice(0, 8).forEach((it) => {
-                console.log("norm id=" + it.id + " amount=" + JSON.stringify(it.amount) + " perAntUsd=" + JSON.stringify(it.perAntUsd) + " priceUsdc=" + JSON.stringify(it.priceUsdc));
-              });
-            }
-            const m = toMarket(feed);
-            console.log("toMarket:", m === null ? "null" : "listings=" + m.listings.length);
-          ' 2>&1 | tee feed-diag.log
-
       - name: Run bot
         env:
           X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
@@ -91,10 +72,6 @@ jobs:
             echo "dry_run=${{ inputs.dry_run }}"
             echo '```'
             cat bot-run.log 2>/dev/null || echo "(no bot-run.log)"
-            echo '```'
-            echo ""
-            echo '```'
-            cat feed-diag.log 2>/dev/null || echo "(no feed-diag.log)"
             echo '```'
             echo ""
             if [ -f bot/state.json ]; then
