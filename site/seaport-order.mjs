@@ -15,7 +15,11 @@ const lower = (v) => (v == null ? '' : String(v).toLowerCase());
 function toBig(v) {
   if (typeof v === 'bigint') return v;
   if (typeof v === 'number') return Number.isInteger(v) ? BigInt(v) : null;
-  if (typeof v === 'string' && /^[0-9]+$/.test(v.trim())) return BigInt(v.trim());
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (/^[0-9]+$/.test(s)) return BigInt(s);
+    if (/^0x[0-9a-fA-F]+$/.test(s)) return BigInt(s);
+  }
   return null;
 }
 
@@ -76,6 +80,7 @@ export function validateOrder(order, expected = {}) {
   if (!/^0x[0-9a-fA-F]+$/.test(String(order.signature || ''))) return fail('signature');
   const counter = toBig(p.counter);
   if (counter === null) return fail('counter');
+  if (toBig(p.salt) === null) return fail('salt');
   if (!/^0x[0-9a-fA-F]{64}$/.test(String(order.orderHash || ''))) return fail('order-hash');
 
   return {

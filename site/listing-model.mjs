@@ -19,12 +19,11 @@ function providerName(agentId, poolNames, fallback) {
   return fallback || (agentId != null ? '#' + agentId : 'unknown provider');
 }
 
-function isActivePosition(pos, curEpoch) {
+export function isActivePosition(pos, curEpoch) {
   if (!pos || pos.withdrawn) return false;
   const closedAt = Number(pos.closedAtEpoch || 0);
   return !(closedAt > 0 && closedAt <= curEpoch);
 }
-
 function etherToAnts(wei) {
   const n = Number(wei);
   return Number.isFinite(n) ? n / 1e18 : 0;
@@ -77,7 +76,7 @@ export function buildLots(ownListings, seaportItems, snapshot, poolNames = {}, o
   };
 
   for (const item of ownListings || []) {
-    if (!item.isLive) continue;
+    if (!item.isLive || item.ownerMismatch || item.chainClosed) continue;
     if (internal.has(String(item.listingId))) continue;
     const priceMicro = Number(item.price);
     if (!(priceMicro > 0)) continue;
@@ -90,6 +89,7 @@ export function buildLots(ownListings, seaportItems, snapshot, poolNames = {}, o
       tokenId,
       listingId: Number(item.listingId),
       priceUsdc: priceMicro / 1e6,
+      currency: item.currency,
       seller: item.seller ? String(item.seller).toLowerCase() : null,
       amountAnts: etherToAnts(chainAmount),
       agentId: pos.agentId,
@@ -160,9 +160,4 @@ export function buildUnlistedLots(snapshot, existingLots, poolNames = {}) {
     }, snapshot, poolNames, curEpoch));
   }
   return out;
-}
-
-// Listed lots first, then by the storefront's default sort key.
-export function mergeStorefrontLots(lots, unlisted) {
-  return [...(lots || []), ...(unlisted || [])];
 }

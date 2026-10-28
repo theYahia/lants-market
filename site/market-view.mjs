@@ -176,7 +176,19 @@ export async function ensureChain() {
 // Load the snapshot honouring the ?data=frozen switch.
 // frozen -> local full fixture.
 // otherwise -> live URL, then local live fixture, then local full fixture.
+// Concurrent callers (market table, storefront, deep page) share one read;
+// the next call after it settles always re-fetches.
+let snapshotInFlight = null;
 export async function loadSnapshot() {
+  if (!snapshotInFlight) {
+    snapshotInFlight = loadSnapshotUncached().finally(() => {
+      snapshotInFlight = null;
+    });
+  }
+  return snapshotInFlight;
+}
+
+async function loadSnapshotUncached() {
   let frozen = false;
   try {
     frozen = new URLSearchParams(window.location.search).get('data') === 'frozen';

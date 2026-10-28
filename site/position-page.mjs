@@ -5,7 +5,7 @@
 import { loadSnapshot } from './market-view.mjs';
 import { readListings, getMinted, getMaxSupply, ethCallTo } from './own-listings.mjs';
 import { fetchSeaportMarket } from './seaport-feed.mjs';
-import { buildLots } from './listing-model.mjs';
+import { buildLots, isActivePosition } from './listing-model.mjs';
 import { aprPct, antsPerEpoch, poolShare, unlockDate, lockWeeks, formatUnlock } from './position-yield.mjs';
 import { buildCard, formatPerAnt } from './storefront-card.mjs';
 import { initCardActions } from './card-actions.mjs';
@@ -14,12 +14,9 @@ import { SEAPORT_BUY_ENABLED, MARKET, SEL, encUint, decodeWords, wordToAddr } fr
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const amountFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
-function activePosition(snapshot, tokenId, epoch) {
+function activePosition(snapshot, tokenId, curEpoch) {
   const hit = (snapshot?.positions || []).find((p) => String(p.id) === String(tokenId));
-  if (!hit || hit.withdrawn) return null;
-  const closedAt = Number(hit.closedAtEpoch || 0);
-  if (closedAt > 0 && closedAt <= epoch) return null;
-  return hit;
+  return hit && isActivePosition(hit, curEpoch) ? hit : null;
 }
 
 function shortAddress(a) {
@@ -32,8 +29,9 @@ function shortAddress(a) {
  * @param {Object} input - { tokenId, snapshot, lots, sales, trades, minted, maxSupply }
  */
 export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], trades = [], minted = null, maxSupply = null }) {
-  const epoch = Number(snapshot?.epoch || 0) + 1;
-  const pos = activePosition(snapshot, tokenId, epoch);
+  const curEpoch = Number(snapshot?.epoch || 0);
+  const epoch = curEpoch + 1;
+  const pos = activePosition(snapshot, tokenId, curEpoch);
   const tokenLots = (lots || []).filter((l) => String(l.tokenId) === String(tokenId));
 
   if (!pos) {

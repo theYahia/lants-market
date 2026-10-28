@@ -4,7 +4,7 @@
 
 import { buildLots, buildUnlistedLots } from './listing-model.mjs';
 import { buildCard } from './storefront-card.mjs';
-import { aprPct, antsPerEpoch, poolShare, unlockDate, lockWeeks } from './position-yield.mjs';
+import { aprPct, antsPerEpoch, poolShares, unlockDate, lockWeeks } from './position-yield.mjs';
 import { fetchSeaportMarket } from './seaport-feed.mjs';
 import { readListings } from './own-listings.mjs';
 import { loadSnapshot } from './market-view.mjs';
@@ -44,14 +44,14 @@ async function loadPoolNames() {
   }
 }
 
-function enrich(lot, snapshot) {
+function enrich(lot, snapshot, shares) {
   const nextEpoch = Number(snapshot?.epoch || 0) + 1;
   const pos = lot.position;
   return {
     ...lot,
     aprPct: aprPct(snapshot, pos),
     antsPerEpoch: antsPerEpoch(snapshot, pos),
-    poolSharePct: poolShare(snapshot, pos?.agentId, nextEpoch),
+    poolSharePct: shares.get(String(pos?.agentId)) ?? null,
     unlock: unlockDate(pos, nextEpoch),
     lockWeeks: lockWeeks(pos, nextEpoch),
   };
@@ -153,9 +153,10 @@ async function loadStorefront() {
 
     const listed = buildLots(own, feed.ok ? feed.items : [], snapshot, names);
     const unlisted = buildUnlistedLots(snapshot, listed, names);
+    const shares = poolShares(snapshot, Number(snapshot.epoch || 0) + 1);
     ctx = {
       snapshot,
-      lots: [...listed, ...unlisted].map((lot) => enrich(lot, snapshot)),
+      lots: [...listed, ...unlisted].map((lot) => enrich(lot, snapshot, shares)),
       feedOk: feed.ok,
     };
     renderGrid();
@@ -196,10 +197,6 @@ function initToolbar() {
     btn.addEventListener('click', () => setView(btn.dataset.view === 'list' ? 'list' : 'grid'));
   });
   setView(state.view);
-}
-
-export function refreshStorefront() {
-  return loadStorefront();
 }
 
 function init() {

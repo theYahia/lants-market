@@ -29,20 +29,35 @@ export function aprPct(snapshot, pos) {
 }
 
 /**
+ * Per-provider shares of all position weight at an epoch (agentId -> 0..1).
+ * One pass over positions, so the storefront can render hundreds of cards
+ * without rescanning the snapshot per card.
+ */
+export function poolShares(snapshot, epoch) {
+  const key = String(epoch);
+  let total = 0n;
+  const byAgent = new Map();
+  for (const pos of snapshot?.positions || []) {
+    const w = BigInt(String(pos.weightsByEpoch?.[key] ?? '0'));
+    total += w;
+    const agent = String(pos.agentId);
+    byAgent.set(agent, (byAgent.get(agent) || 0n) + w);
+  }
+  const shares = new Map();
+  if (total === 0n) return shares;
+  for (const [agent, weight] of byAgent) {
+    shares.set(agent, Number((weight * 10n ** 6n) / total) / 1e6);
+  }
+  return shares;
+}
+
+/**
  * Provider pool's share of all position weight at an epoch (0..1).
  * Returns null when the epoch has no weight at all.
  */
 export function poolShare(snapshot, agentId, epoch) {
-  const key = String(epoch);
-  let total = 0n;
-  let mine = 0n;
-  for (const pos of snapshot?.positions || []) {
-    const w = BigInt(String(pos.weightsByEpoch?.[key] ?? '0'));
-    total += w;
-    if (String(pos.agentId) === String(agentId)) mine += w;
-  }
-  if (total === 0n) return null;
-  return Number((mine * 10n ** 6n) / total) / 1e6;
+  const share = poolShares(snapshot, epoch).get(String(agentId));
+  return share === undefined ? null : share;
 }
 
 /** Total weight in the pool at an epoch, in ANTS-equivalent units. */

@@ -372,29 +372,6 @@ a.sf-provider:hover { color: var(--accent); }
     margin-bottom: 10px;
 }
 
-.pp-lots {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.pp-lot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 10px 12px;
-}
-
-.pp-lot-price {
-    font-size: var(--fs-16);
-    font-weight: 900;
-    font-variant-numeric: tabular-nums;
-}
-
 .pp-history {
     display: flex;
     flex-direction: column;

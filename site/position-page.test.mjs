@@ -43,6 +43,18 @@ test('unknown and closed ids are reported as not found', () => {
   assert.equal(positionViewModel({ tokenId: 2, snapshot, lots }).found, false);
 });
 
+test('a position closing at the next epoch is still active now', () => {
+  const snap = {
+    epoch: '28',
+    positions: [
+      { id: '3', agentId: '10', amount: E18(1), stakeStartEpoch: '20', stakeEndEpoch: '30', closedAtEpoch: '29' },
+    ],
+  };
+  const vm = positionViewModel({ tokenId: 3, snapshot: snap, lots: [] });
+  assert.equal(vm.found, true);
+  assert.equal(vm.lockWeeks, 1); // next epoch 29 -> 30 is one week away
+});
+
 test('view model joins position, lots, owner and implied valuation', () => {
   const vm = positionViewModel({
     tokenId: 1,

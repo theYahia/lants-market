@@ -31,6 +31,7 @@ test('the captured order validates and returns the exact total', () => {
 
   const params = toBasicOrderParameters(fixture, expected);
   assert.equal(params.considerationAmount, 106746148n);
+  assert.equal(params.salt, BigInt(fixture.orderParameters.salt));
   assert.equal(params.considerationToken.toLowerCase(), MARKET.usdc.toLowerCase());
   assert.equal(params.offerToken.toLowerCase(), MARKET.nft.toLowerCase());
   assert.equal(params.fulfillerConduitKey, '0x' + '0'.repeat(64));
@@ -59,6 +60,7 @@ test('every rejection branch fails closed', () => {
     ['timing', (o) => { o.orderParameters.startTime = String(NOW + 1); }],
     ['signature', (o) => { o.signature = '0x'; }],
     ['counter', (o) => { delete o.orderParameters.counter; }],
+    ['salt', (o) => { o.orderParameters.salt = 'not-a-number'; }],
     ['order-hash', (o) => { o.orderHash = '0x1234'; }],
   ];
   for (const [want, mutate] of cases) {

@@ -7,6 +7,7 @@ import {
   antsPerEpoch,
   aprPct,
   poolShare,
+  poolShares,
   poolWeight,
   unlockDate,
   lockWeeks,
@@ -37,6 +38,10 @@ test('pool share and pool weight come from position weights', () => {
   assert.ok(Math.abs(poolShare(snapshot, 45869, '25') - 0.065218) < 1e-9);
   assert.ok(Math.abs(poolWeight(snapshot, 45869, '25') - 1208078.8504779613) < 1e-6);
   assert.equal(poolShare(snapshot, 45869, '99'), null);
+
+  const shares = poolShares(snapshot, '25');
+  assert.ok(Math.abs(shares.get('45869') - 0.065218) < 1e-9);
+  assert.equal(poolShares(snapshot, '99').size, 0);
 });
 
 test('unlock date uses the epoch boundary; max lock never counts down', () => {
