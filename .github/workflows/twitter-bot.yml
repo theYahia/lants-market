@@ -1,0 +1,59 @@
+name: twitter-bot
+
+# Plan T5/T6: manual dispatch first, then enable the hourly schedule.
+# Uncomment `schedule` only after the first post is verified on @sxsiant.
+on:
+  # schedule:
+  #   - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print pending posts without tweeting'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: twitter-bot
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore bot state
+        uses: actions/cache/restore@v4
+        with:
+          path: bot/state.json
+          key: twitter-bot-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            twitter-bot-state-${{ github.ref_name }}-
+
+      - name: Run bot
+        env:
+          X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
+          X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
+          X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node bot/run.mjs
+
+      - name: Save bot state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: bot/state.json
+          key: twitter-bot-state-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Summarize
+        if: always()
+        run: echo "Twitter bot run finished with status ${{ job.status }}." >> "$GITHUB_STEP_SUMMARY"
