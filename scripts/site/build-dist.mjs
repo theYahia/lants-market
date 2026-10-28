@@ -10,6 +10,8 @@ const FILES = [
   ['site/docs.html', 'dist/docs.html'],
   ['site/app.css', 'dist/app.css'],
   ['site/storefront.css', 'dist/storefront.css'],
+  ['site/favicon.png', 'dist/favicon.png'],
+  ['site/antseed-mark.png', 'dist/antseed-mark.png'],
   ['site/render.mjs', 'dist/render.mjs'],
   ['site/incentives.mjs', 'dist/incentives.mjs'],
   ['site/rebate.mjs', 'dist/rebate.mjs'],
@@ -221,9 +223,12 @@ checkForbiddenUrls(render, 'render.mjs');
 // 6. Cyrillic check (extended range)
 // guard-site-mjs-v1
 const cyrillicRegex = /[\u0400-\u04FF]/;
-// Every file that the builder copies to dist/ is checked for Cyrillic.
+const BINARY_RE = /\.(png|ico|jpe?g|webp|gif)$/i;
+// Every text file that the builder copies to dist/ is checked for Cyrillic.
+// Binary images are skipped: decoding them as UTF-8 can fake Cyrillic bytes.
 for (const [, dest] of FILES) {
   const destPath = join(DIST_ROOT, dest.replace(/^dist[\\/]/, ''));
+  if (BINARY_RE.test(destPath)) continue;
   const content = readFileSync(destPath, 'utf8');
   if (cyrillicRegex.test(content))
     fail(`${dest}: Cyrillic character found`);
