@@ -10,6 +10,7 @@ import {
   newListingText,
   newFloorListingText,
   delistText,
+  digestText,
   epochText,
   burnText,
   settledText,
@@ -71,12 +72,12 @@ test('floorText: price changes with sign and site link', () => {
 
 test('tradeText: full trade line with per-ANT price and USDC total', () => {
   const t = tradeText({ tokenId: 205, amount: 42.5, perAntUsd: 0.0025, usdTotal: 0.10625 });
-  assert.equal(t, 'Sold: #205 ' + DOT + ' 42.5 ANTS @ $0.0025 ($0.11 USDC) ' + DOT + ' lants.eth.limo');
+  assert.equal(t, 'Sold: #205 ' + DOT + ' 42.5 ANTS @ $0.0025 ($0.11 USDC) ' + DOT + ' lants.eth.limo/#position/205');
 });
 
 test('newListingText: with and without a lock', () => {
   const t = newListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
-  assert.equal(t, 'New listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo');
+  assert.equal(t, 'New listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
   const s = newListingText({ id: 8, amount: 100, perAntUsd: 0.101, lockDays: 0 });
   assert.ok(!s.includes('lock'));
   assert.ok(s.startsWith('New listing: #8'));
@@ -84,12 +85,12 @@ test('newListingText: with and without a lock', () => {
 
 test('newFloorListingText: same detail as a listing, new-floor prefix', () => {
   const t = newFloorListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
-  assert.equal(t, 'New floor listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo');
+  assert.equal(t, 'New floor listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
   assert.ok(newFloorListingText({ id: 8, amount: 100, perAntUsd: 0.09, lockDays: 0 }).startsWith('New floor listing: #8'));
 });
 
-test('delistText: plain id line', () => {
-  assert.equal(delistText(12), 'Delisted: #12 ' + DOT + ' lants.eth.limo');
+test('delistText: plain id line with deep link', () => {
+  assert.equal(delistText(12), 'Delisted: #12 ' + DOT + ' lants.eth.limo/#position/12');
 });
 
 test('epochText: emission only, avg only, neither and both', () => {
@@ -148,6 +149,32 @@ test('epochStatsText: optional measures included only when supplied', () => {
   assert.equal(bare, 'Epoch 21 rewards ' + DOT + ' data: antseedstats.com');
   const zero = epochStatsText({ epoch: 21, emissionAnts: 0, sellerPointsUsd: 0, burnAnts: 0 });
   assert.ok(!zero.includes('ANTS emission'));
+});
+
+test('digestText: market plus optional antseedstats measures', () => {
+  const t = digestText({
+    floorAsk: 0.13,
+    avg24h: 0.102,
+    listedCount: 16,
+    settled7d: 12804.23,
+    sellers7d: 70,
+    stakedAnts: 1535689.21,
+    stakedPct: 73.2107,
+  });
+  assert.ok(t.startsWith('lANTS weekly\n'));
+  assert.ok(t.includes('Floor $0.130 ' + DOT + ' 24h avg $0.102 ' + DOT + ' 16 listed'));
+  assert.ok(t.includes('7d settled $12,804 ' + DOT + ' 70 sellers'));
+  assert.ok(t.includes('1.54M ANTS staked ' + DOT + ' 73% of stakable'));
+  assert.ok(t.includes('lants.eth.limo ' + DOT + ' data: antseedstats.com'));
+});
+
+test('digestText: market only when antseedstats is absent', () => {
+  const t = digestText({ floorAsk: 0.14, avg24h: 0.101931, listedCount: 15 });
+  assert.ok(t.includes('Floor $0.140'));
+  assert.ok(t.includes('24h avg $0.102'));
+  assert.ok(t.includes('15 listed'));
+  assert.ok(!t.includes('7d settled'));
+  assert.ok(!t.includes('staked'));
 });
 
 console.log('format_ok=1');

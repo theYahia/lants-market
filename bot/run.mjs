@@ -16,12 +16,15 @@ import { fileURLToPath } from 'node:url';
 import { readFeed, fetchEmission, toState } from './read-feed.mjs';
 import { diffFeed, diffAntseedStats } from './diff.mjs';
 import { readAntseedStats, toAntseedSnapshot, toAntseedState } from './read-antseedstats.mjs';
-import { loadState, saveState, enqueue, dropStale, markEmitted } from './state.mjs';
+import { loadState, saveState, enqueue, dropStale, markEmitted, orderEvents, capStats, withinCooldown } from './state.mjs';
+import { digestText } from './format.mjs';
 import { saveRotatedToken } from './token-store.mjs';
 import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.mjs';
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
+const STATS_PER_RUN = 1;
+const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function log(msg) {
   console.log(`[bot] ${msg}`);
@@ -117,8 +120,29 @@ async function main(argv) {
     antseedEvents = diffAntseedStats(state.antseed, antseedSnapshot);
   }
 
-  const events = [...feedEvents, ...antseedEvents];
-  const pending = dropStale(enqueue(state.pending || [], events, state.emitted || [], nowMs), nowMs);
+  antseedEvents = antseedEvents.filter((e) => !withinCooldown(e, state.antseed, nowMs));
+
+  let digestEvent = null;
+  if (!state.lastDigestAt || nowMs - state.lastDigestAt >= DIGEST_INTERVAL_MS) {
+    state.lastDigestAt = nowMs;
+    digestEvent = {
+      type: 'digest',
+      key: `digest:${new Date(nowMs).toISOString().slice(0, 10)}`,
+      text: digestText({
+        floorAsk: feed.market.floorAsk,
+        avg24h: feed.market.avg24h,
+        listedCount: feed.market.listedCount,
+        settled7d: antseedSnapshot ? antseedSnapshot.settled7d : null,
+        sellers7d: antseedSnapshot ? antseedSnapshot.sellers7d : null,
+        stakedAnts: antseedSnapshot ? antseedSnapshot.stakedAnts : null,
+        stakedPct: antseedSnapshot ? antseedSnapshot.stakedPct : null,
+      }),
+      meta: null,
+    };
+  }
+
+  const events = [...feedEvents, ...antseedEvents, ...(digestEvent ? [digestEvent] : [])];
+  const pending = orderEvents(dropStale(enqueue(state.pending || [], events, state.emitted || [], nowMs), nowMs));
 
   if (dryRun) {
     log(`dry-run: ${events.length} new event(s), ${pending.length} pending post(s)`);
@@ -181,7 +205,8 @@ async function main(argv) {
   }
   log(`authenticated as @${me.username} (id ${me.userId})`);
 
-  const toPost = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
+  const sliced = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
+  const toPost = capStats(sliced, STATS_PER_RUN);
   let posted = 0;
   for (const post of toPost) {
     const res = await postTweet({ accessToken: token.accessToken, text: post.text });
@@ -199,7 +224,10 @@ async function main(argv) {
     // went out; a capped run leaves the baseline untouched for the queue.
     if (state.antseed && post.meta?.field) {
       if (post.meta.field === 'max7d') state.antseed.max7d = post.meta.value;
-      else state.antseed.posted[post.meta.field] = post.meta.value;
+      else {
+        state.antseed.posted[post.meta.field] = post.meta.value;
+        state.antseed.postedAt[post.meta.field] = nowMs;
+      }
     }
     posted += 1;
     log(`posted ${res.id}: ${post.text}`);

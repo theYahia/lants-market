@@ -276,5 +276,8 @@ export function toAntseedState(snapshot, prev = null) {
     },
     // All-time high of settled7d; a new high always posts (record key).
     max7d: prev?.max7d ?? snapshot.settled7d,
+    // Timestamps of the last successful post per continuous metric, used for
+    // the per-metric cooldown (24h settled, 48h staked).
+    postedAt: prev?.postedAt ?? {},
   };
 }

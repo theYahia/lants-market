@@ -15,6 +15,7 @@ export const EMPTY_STATE = {
   emitted: [],
   lastPostKey: null,
   lastPostAt: null,
+  lastDigestAt: null,
   refreshToken: null,
 };
 
@@ -56,4 +57,55 @@ export function dropStale(pending, nowMs = Date.now(), maxAgeMs = STALE_MS) {
 
 export function markEmitted(emitted, key) {
   return [...emitted, key].slice(-MAX_EMITTED);
+}
+
+// Post-priority and rate-limit helpers shared with run.mjs. Market events
+// (lants.eth.limo) always precede antseedstats events in a run's posting slice;
+// continuous antseedstats metrics are capped per run and cooled down per metric.
+
+export const MARKET_EVENT_TYPES = new Set(['sold', 'newFloorListing', 'floor', 'newListing', 'delist', 'epoch']);
+
+export const STAT_COOLDOWN_HOURS = { settled7d: 24, settled30d: 24, stakedAnts: 48 };
+
+export function isMarketEvent(type) {
+  return MARKET_EVENT_TYPES.has(type);
+}
+
+// Stable priority sort: market events first, then stats, each in creation order.
+export function orderEvents(pending) {
+  return pending.slice().sort((a, b) => {
+    const pa = isMarketEvent(a.type) ? 0 : 1;
+    const pb = isMarketEvent(b.type) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (a.createdAt < b.createdAt) return -1;
+    if (a.createdAt > b.createdAt) return 1;
+    return 0;
+  });
+}
+
+// Cap the number of stats events posted in one run. Filtered events stay in the
+// queue for the next run (they are not dropped).
+export function capStats(events, maxStats) {
+  const out = [];
+  let stats = 0;
+  for (const e of events) {
+    if (isMarketEvent(e.type)) {
+      out.push(e);
+      continue;
+    }
+    if (stats >= maxStats) continue;
+    stats += 1;
+    out.push(e);
+  }
+  return out;
+}
+
+// A continuous antseedstats metric is still inside its per-metric cooldown
+// window when its last successful post is too recent.
+export function withinCooldown(event, antseed, nowMs) {
+  const field = event && event.meta ? event.meta.field : null;
+  const hours = field ? STAT_COOLDOWN_HOURS[field] : null;
+  if (!hours) return false;
+  const last = antseed && antseed.postedAt ? antseed.postedAt[field] : null;
+  return typeof last === 'number' && nowMs - last < hours * 3600 * 1000;
 }

@@ -47,9 +47,9 @@ test('new listing and delist are keyed by token id, price and listed flag', () =
   const listing = events.find((e) => e.type === 'listing');
   const delist = events.find((e) => e.type === 'delist');
   assert.equal(listing.key, 'listing:3:listed:0.15');
-  assert.equal(listing.text, `New listing: #3 ${MID} 400 ANTS @ $0.150 ${MID} lock 8w ${MID} lants.eth.limo`);
+  assert.equal(listing.text, `New listing: #3 ${MID} 400 ANTS @ $0.150 ${MID} lock 8w ${MID} lants.eth.limo/#position/3`);
   assert.equal(delist.key, 'listing:1:unlisted');
-  assert.equal(delist.text, `Delisted: #1 ${MID} lants.eth.limo`);
+  assert.equal(delist.text, `Delisted: #1 ${MID} lants.eth.limo/#position/1`);
 });
 
 test('a relist at a new price is not swallowed (unlisted old + listed new)', () => {
@@ -67,7 +67,7 @@ test('a relist at a new price is not swallowed (unlisted old + listed new)', () 
   const listing = events.find((e) => e.type === 'listing');
   assert.equal(delist.key, 'listing:5:unlisted:0.14');
   assert.equal(listing.key, 'listing:5:listed:0.12');
-  assert.equal(listing.text, `New listing: #5 ${MID} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo`);
+  assert.equal(listing.text, `New listing: #5 ${MID} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo/#position/5`);
 });
 
 test('price float noise does not fake a relist', () => {
@@ -133,7 +133,7 @@ test('a brand-new lot that sets the new floor posts once as New floor listing', 
   assert.equal(floor.length, 0);
   assert.equal(listing.length, 0);
   assert.equal(floorListing.key, 'listing:3:listed:0.12');
-  assert.equal(floorListing.text, `New floor listing: #3 ${MID} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo`);
+  assert.equal(floorListing.text, `New floor listing: #3 ${MID} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo/#position/3`);
   assert.equal(events.length, 1);
 });
 
@@ -170,7 +170,7 @@ test('only listing fills are reported as sales, not offers', () => {
   const events = diffFeed(prev, curr);
   assert.equal(events.length, 1);
   assert.equal(events[0].key, 'trade:t1');
-  assert.equal(events[0].text, `Sold: #205 ${MID} 762.47 ANTS @ $0.1400 ($106.75 USDC) ${MID} lants.eth.limo`);
+  assert.equal(events[0].text, `Sold: #205 ${MID} 762.47 ANTS @ $0.1400 ($106.75 USDC) ${MID} lants.eth.limo/#position/205`);
 });
 
 test('epoch advance reports the closed epoch, with optional emission', () => {

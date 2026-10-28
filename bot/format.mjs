@@ -5,6 +5,10 @@ const MID = '\u00b7'; // middle dot separator used by the templates
 const SITE = 'lants.eth.limo';
 const DATA_SRC = 'data: antseedstats.com'; // CC BY 4.0 attribution
 
+function posLink(id) {
+  return `${SITE}/#position/${id}`;
+}
+
 function price3(v) {
   return '$' + Number(v).toFixed(3);
 }
@@ -55,25 +59,25 @@ export function floorText(from, to) {
 }
 
 export function tradeText(t) {
-  return `Sold: #${t.tokenId} ${MID} ${fmtAmount(t.amount)} ANTS @ ${price4(t.perAntUsd)} (${usd2(t.usdTotal)} USDC) ${MID} ${SITE}`;
+  return `Sold: #${t.tokenId} ${MID} ${fmtAmount(t.amount)} ANTS @ ${price4(t.perAntUsd)} (${usd2(t.usdTotal)} USDC) ${MID} ${posLink(t.tokenId)}`;
 }
 
 export function newListingText(l) {
   const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
     ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
     : '';
-  return `New listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${SITE}`;
+  return `New listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
 }
 
 export function newFloorListingText(l) {
   const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
     ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
     : '';
-  return `New floor listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${SITE}`;
+  return `New floor listing: #${l.id} ${MID} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
 }
 
 export function delistText(id) {
-  return `Delisted: #${id} ${MID} ${SITE}`;
+  return `Delisted: #${id} ${MID} ${posLink(id)}`;
 }
 
 // "X ANTS emitted" and "24h avg $Y" are both optional: only include a measure
@@ -136,4 +140,31 @@ export function epochStatsText(e) {
   if (Number.isFinite(e.burnAnts) && e.burnAnts > 0) parts.push(`${fmtCompact(e.burnAnts)} burned`);
   parts.push(DATA_SRC);
   return parts.join(` ${MID} `);
+}
+
+// Weekly market snapshot: a fixed-cadence digest that includes only the
+// measures the live sources actually supplied. Market numbers come from the
+// feed; antseedstats numbers are optional (that feed is a soft dependency).
+export function digestText(d) {
+  const lines = ['lANTS weekly', ''];
+  const market = [];
+  if (Number.isFinite(d.floorAsk)) market.push(`Floor ${price3(d.floorAsk)}`);
+  if (Number.isFinite(d.avg24h)) market.push(`24h avg ${price3(d.avg24h)}`);
+  if (Number.isInteger(d.listedCount)) market.push(`${d.listedCount} listed`);
+  if (market.length) lines.push(market.join(` ${MID} `));
+  const stats = [];
+  if (Number.isFinite(d.settled7d) && d.settled7d > 0) {
+    let s = `7d settled ${usdWhole(d.settled7d)}`;
+    if (Number.isFinite(d.sellers7d)) s += ` ${MID} ${countLabel(d.sellers7d)} sellers`;
+    stats.push(s);
+  }
+  if (Number.isFinite(d.stakedAnts) && d.stakedAnts > 0) {
+    let s = `${fmtCompact(d.stakedAnts)} ANTS staked`;
+    if (Number.isFinite(d.stakedPct)) s += ` ${MID} ${Math.round(Number(d.stakedPct))}% of stakable`;
+    stats.push(s);
+  }
+  if (stats.length) lines.push(stats.join(` ${MID} `));
+  lines.push('');
+  lines.push(`${SITE} ${MID} ${DATA_SRC}`);
+  return lines.join('\n');
 }
