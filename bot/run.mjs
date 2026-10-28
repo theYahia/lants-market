@@ -152,7 +152,8 @@ async function main(argv) {
   if (!token.ok) {
     saveState(statePath, state);
     const rtFp = creds.refreshToken ? creds.refreshToken.slice(0, 12) : 'null';
-    log(`token refresh failed: ${token.reason}${token.status ? ` (HTTP ${token.status})` : ''}; client_id=${creds.clientId} refresh_token=${rtFp}…`);
+    const cidFp = creds.clientId ? creds.clientId.slice(0, 8) : 'null';
+    log(`token refresh failed: ${token.reason}${token.status ? ` (HTTP ${token.status})` : ''}; client_id=${cidFp}… refresh_token=${rtFp}…`);
     return token.retryable ? 0 : 1;
   }
   // X rotates the refresh token; persist it write-ahead so the live token is
