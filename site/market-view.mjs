@@ -9,7 +9,7 @@ export const walletRequest = (args) => (selectedProvider ?? window.ethereum).req
 
 import {
   MARKET, SEL, encUint, encAddr, decodeWords, wordToBigInt, wordToAddr, formatUnits,
-  cancelNftListings, encCreateListing, encSetApprovalForAll, INTERNAL_LISTING_IDS,
+  cancelNftListings, INTERNAL_LISTING_IDS,
   encIndexPoolRewards, needsRewardIndex
 } from './market-config.mjs';
 import { computeMarketStats, computeImpliedFromAsks, seaportAsAskItems, ANTS_MAX_SUPPLY } from './market-stats.mjs';
@@ -18,6 +18,9 @@ import { fetchSeaportMarket } from './seaport-feed.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 import { closedPositionIdsForOwner } from './portfolio-state.mjs';
+import { openSellModal } from './sell-modal.mjs';
+import { listingMeta, feeBreakdown, usdcToWei } from './sell-model.mjs';
+import { createListingFlow } from './create-listing.mjs';
 
 // Lazily-built Privy island.  The Privy bundle is heavy, so it must never be
 // pulled in via a static import at module load (a headless watchdog that does
@@ -612,7 +615,12 @@ export async function renderMyListingsPanel() {
     row.appendChild(makeSpan('nftId', item.nftId.toString()));
 
     row.appendChild(document.createTextNode(' \u00b7 '));
-    row.appendChild(makeSpan('price', (Number(item.price) / 1e6).toFixed(2) + ' USDC'));
+    const meta = listingMeta(item);
+    row.appendChild(makeSpan('price', meta.priceUsdc == null ? '-' : meta.priceUsdc.toFixed(2) + ' USDC'));
+    row.appendChild(document.createTextNode(' \u00b7 net '));
+    row.appendChild(makeSpan('net', meta.netUsdc == null ? '-' : meta.netUsdc.toFixed(2) + ' USDC'));
+    row.appendChild(document.createTextNode(' \u00b7 ends '));
+    row.appendChild(makeSpan('ends', meta.endLabel));
 
     const stateVal = item.isLive ? 'live' :
       (item.soldTime !== 0n ? 'sold' : (item.cancelled ? 'cancelled' : 'expired'));
@@ -738,10 +746,10 @@ async function onConnect() {
     }
 
     // A + Sell click that had to connect first: now that myIds is known,
-    // open the Select-NFT dialog (list or the honest empty state).
+    // open the sell modal.
     if (pendingSellConnect) {
       pendingSellConnect = false;
-      openSelectNftModal();
+      openSellDialog();
     }
 
     const [snapRes, itemsRes, feedRes] = await Promise.allSettled([
@@ -1191,6 +1199,7 @@ export function initCancelHandler() {
       const r = await waitReceipt(tx);
       if (r && r.status === '0x1') {
         setMessage('cancelled');
+        document.dispatchEvent(new CustomEvent('listing:cancelled'));
         await loadPublicMarket();
         if (typeof renderMyListingsPanel === 'function') {
           await renderMyListingsPanel();
@@ -1689,7 +1698,7 @@ export function initCreateListing() {
       ants = wordToBigInt(decodeWords(raw)[POS_AMOUNT_WORD] ?? '0x0');
     } catch (e) { summaryEl.textContent = `Position ${id} · unavailable`; return; }
     const antsH = Number(ants) / 1e18;
-    const receive = priceHuman * 0.99;
+    const receive = feeBreakdown(priceHuman, antsH).net;
     const perAnts = antsH > 0 ? priceHuman / antsH : 0;
     summaryEl.textContent = `Position ${id} · ${antsH.toFixed(2)} ANTS · you receive ${receive.toFixed(2)} USDC · ${perAnts.toFixed(4)} USDC/ANTS`;
   }
@@ -1703,52 +1712,20 @@ export function initCreateListing() {
     if (!priceHuman || Number(priceHuman) <= 0) { say('Price must be greater than 0'); return; }
     if (secs === null) { say('Duration must be between 1 and 60 days'); return; }
     if (!(selectedProvider ?? window.ethereum)) { say('Connect a wallet first'); return; }
-    const price = BigInt(Math.round(Number(priceHuman) * 10 ** MARKET.usdcDecimals));
+    const price = usdcToWei(priceHuman);
     btn.disabled = true;
     try {
-      const accounts = await walletRequest({ method: 'eth_requestAccounts' });
-      const from = accounts && accounts[0];
-      if (!from) { say('No account'); btn.disabled = false; return; }
-      if (!(await ensureChain())) { say('Wrong network'); btn.disabled = false; return; }
-      const oRaw = await ethCallTo(MARKET.nft, SEL.ownerOf + encUint(BigInt(nftId)));
-      const owner = wordToAddr(decodeWords(oRaw)[0]);
-      if (owner.toLowerCase() !== from.toLowerCase()) { say('You do not own this NFT'); btn.disabled = false; return; }
-      say('Checking marketplace approval...');
-      const aRaw = await ethCallTo(MARKET.nft, SEL.isApprovedForAll + encAddr(from) + encAddr(MARKET.market));
-      const approved = wordToBigInt(decodeWords(aRaw)[0]) !== 0n;
-      if (!approved) {
-        say('Approving the marketplace...');
-        const aTx = await walletRequest({
-          method: 'eth_sendTransaction',
-          params: [{ from, to: MARKET.nft, data: encSetApprovalForAll(MARKET.market, true) }]
-        });
-        say('Approval sent, waiting for confirmation...');
-        const aRcpt = await waitReceipt(aTx);
-        if (!aRcpt || aRcpt.status !== '0x1') { say('Approval failed'); btn.disabled = false; return; }
-      }
-      // continue to createListing as now
-      say('Creating the listing...');
-      const data = encCreateListing({
-        nftCollection: MARKET.nft,
+      await createListingFlow({
+        request: walletRequest,
+        ensureChain,
+        waitReceipt,
         nftId: BigInt(nftId),
-        currency: MARKET.usdc,
-        price,
-        slopeMax: 0n,
-        slopeDuration: 0n,
-        fixedDuration: BigInt(secs)
+        priceWei: price,
+        durationSecs: secs,
+        onStatus: say,
       });
-      const tx = await walletRequest({
-        method: 'eth_sendTransaction',
-        params: [{ from, to: MARKET.market, data }]
-      });
-      say('Sent: ' + tx + ' — waiting for confirmation...');
-      const rcpt = await waitReceipt(tx);
-      if (rcpt && rcpt.status === '0x1') {
-        say('Listing created.');
-        await loadPublicMarket();
-      } else {
-        say('Listing failed');
-      }
+      say('Listing created.');
+      await loadPublicMarket();
     } catch (e) {
       say('Error: ' + (e && e.message ? e.message : String(e)));
     }
@@ -1817,73 +1794,29 @@ export function initOfferForm() {
   setInterval(updateCta, 500);
 }
 
-// "+ Sell": open a Select-NFT dialog over the wallet's active positions. With
-// no positions the dialog shows an honest empty state instead of the form.
-function openSelectNftModal() {
-  const modal = document.getElementById('select-nft-modal');
-  const body = document.getElementById('select-nft-body');
-  if (!modal || !body) return;
-
-  const goPortfolio = () => {
-    if (location.hash !== '#portfolio') location.hash = '#portfolio';
-  };
-
-  body.textContent = '';
-  if (!myIds.length) {
-    const title = document.createElement('p');
-    title.className = 'select-nft-empty-title';
-    title.textContent = "You don't currently own any qualifying NFTs";
-    const sub = document.createElement('p');
-    sub.className = 'select-nft-empty-sub';
-    sub.textContent = 'Get some NFTs in your wallet in order to start selling.';
-    body.appendChild(title);
-    body.appendChild(sub);
-  } else {
-    const list = document.createElement('div');
-    list.className = 'select-nft-list';
-    for (const id of myIds) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'select-nft-item';
-      item.textContent = '#' + String(id);
-      item.addEventListener('click', () => {
-        modal.hidden = true;
-        const inp = document.getElementById('cf-nftid');
-        if (inp) {
-          inp.value = String(id);
-          inp.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-        goPortfolio();
-        const form = document.getElementById('create-form');
-        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-      list.appendChild(item);
-    }
-    body.appendChild(list);
-  }
-  modal.hidden = false;
+// "+ Sell": open the sell modal over the wallet's active positions. The modal
+// owns its steps; this file only supplies the wallet helpers it calls back into.
+function openSellDialog() {
+  void openSellModal({
+    account: connectedAccount,
+    myIds,
+    loadSnapshot,
+    connect: ensurePrivy,
+    refresh: loadPublicMarket,
+    wallet: { request: walletRequest, ensureChain, waitReceipt, humanError, daysToSeconds },
+  });
 }
 
 export function initSellButton() {
   const btn = document.getElementById('sf-sell');
   if (!btn) return;
-  const modal = document.getElementById('select-nft-modal');
-  const closeModal = () => { if (modal) modal.hidden = true; };
-
   btn.addEventListener('click', () => {
     if (connectedAccount) {
-      openSelectNftModal();
+      openSellDialog();
     } else {
       pendingSellConnect = true;
       ensurePrivy();
     }
-  });
-
-  const x = modal && modal.querySelector('.offer-x');
-  if (x) x.addEventListener('click', closeModal);
-  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal && modal.hidden === false) closeModal();
   });
 }
 

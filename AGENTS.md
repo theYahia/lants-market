@@ -41,6 +41,11 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - `site/storefront*.mjs`, `site/card-actions.mjs` — default card view, filters,
   sort, Grid/List, Buy/Make offer/Share.
 - `site/position-page.mjs` — deep page view-model and DOM.
+- `site/sell-model.mjs`, `site/sell-modal-view.mjs`, `site/sell-modal.mjs`,
+  `site/create-listing.mjs` — the `+ Sell` flow: sellable classification,
+  fee/net math, pick → review → wallet create; live own lots show Cancel instead
+  of relist. `create-listing.mjs` is the shared owner/approve/createListing
+  wallet path, used by both the modal and the Portfolio form.
 - `site/seaport-feed.mjs` — competitor listing feed: the only discovery source.
 - `site/seaport-abi.mjs`, `site/seaport-order.mjs`, `site/seaport-buy.mjs` —
   Seaport 1.6 fulfill: pinned selector/struct, fail-closed validation, exact approve.

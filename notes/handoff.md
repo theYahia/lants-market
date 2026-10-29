@@ -1,4 +1,35 @@
-# Handoff — lants.eth.limo (29.10.2026, сессия 16: antseedstats demand-посты)
+# Handoff — lants.eth.limo (29.10.2026, сессия 17: sell-модалка на Listings)
+
+## Session 17 — продажа своих позиций из Listings (НЕ закоммичено)
+
+Дата: 29.10.2026. План: `.kilo/plans/1793256500238-sell-listings-ux-plan.md`.
+
+### Что сделано
+
+- **`+ Sell` открывает модалку продажи** (`site/sell-modal.mjs`): выбор sellable
+  позиции, цена вручную, срок 1–60 дней (дефолт 30), живой расчёт gross/fee 1%/net
+  и USDC/ANTS, шаг review, затем существующий путь create-listing (ownerOf,
+  isApprovedForAll/approve, `createListing`, `waitReceipt`, `loadPublicMarket`).
+- **Классификация позиций** — pure `buildSellChoices` (`site/sell-model.mjs`):
+  sellable / listed / pending / unavailable; burned, closed и withdrawn
+  отбрасываются. Live-листинги показываются строкой с Cancel через общий
+  `cancelNftListings` + делегированный `button.cancel` (`initCancelHandler`).
+- **Три модуля**: `sell-model.mjs` (математика и фильтр), `sell-modal-view.mjs`
+  (DOM шагов), `sell-modal.mjs` (состояние и кошелёк). Все ≤300 строк.
+- **My Listings** (`renderMyListingsPanel`): добавлены net (price − 1%) и ends
+  (endTime листинга); state/price/Cancel остались как были.
+- `market-view.mjs` уменьшился: старая Select-NFT модалка и её wiring удалены,
+  `openSellDialog()` передаёт зависимости. `site/index.html`: `#sell-modal`
+  заменила `#select-nft-modal`; CSS-классы `.select-nft-*` переиспользованы.
+- Build manifest: три новых модуля в `scripts/site/build-dist.mjs`.
+
+### Проверки
+
+- `npm.cmd test` = **317 (316 pass / 1 skip / 0 fail)**, включая
+  `site/sell-modal.test.mjs` (fee/net, days cap, фильтр, DOM-сценарий
+  pick → form → review → create с фейковым кошельком и RPC).
+- `npm.cmd run build` = OK, **352 файл**.
+- Браузерный смоук не выполнен (нет живого кошелька в этой сессии).
 
 ## Session 16 — demand-посты antseedstats: usage / countdown / alloc / topmodels (НЕ закоммичено)
 
