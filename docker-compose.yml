@@ -17,7 +17,7 @@ services:
       NODE_ENV: production
       NODE_USE_ENV_PROXY: "1"
       HTTPS_PROXY: http://127.0.0.1:10808
-      NO_PROXY: mainnet.base.org,base-mainnet.public.blastapi.io,lants.eth.limo,raw.githubusercontent.com,api.github.com
+      NO_PROXY: mainnet.base.org,base-mainnet.public.blastapi.io,lants.eth.limo,raw.githubusercontent.com,api.github.com,antseedmarkets.com,antseedstats.com
       STATE_FILE: /app/bot/data/state.json
       HEALTH_PORT: "18089"
       TG_BOT_TOKEN: ${TG_BOT_TOKEN}

@@ -1,7 +1,9 @@
 # lANTS alerts — Telegram reminders for claimable rewards
 
-A channel-only bot: it posts into a public Telegram channel, subscribers turn
-on the bell. No commands, no storage of subscribers, no per-user data.
+A Telegram bot with two halves: it posts reminders into a public channel
+(subscribers turn on the bell), and it answers DM commands plus personal alerts
+to anyone who `/start`s it. The DM layer stores only `chat_id` -> preferences:
+no wallet addresses, no usernames.
 
 What it posts (rare, non-spammy):
 
@@ -16,6 +18,25 @@ Everything is derived from the same sources the site uses: the epoch schedule
 (`site/epochs.mjs`), the pinned claims config re-checked against Base, and the
 published `offers.json` / `rebates/<epoch>-<pool>.*` files. No wallet, no keys
 on-chain — public RPC reads only.
+
+## DM commands
+
+Anyone who sends `/start` gets personal alerts in DM. Commands:
+
+| Command | Reply |
+|---|---|
+| `/start` | subscribe + welcome (Floor / Epoch / Set alert buttons) |
+| `/help` | command list |
+| `/floor` | floor ask, 24h avg, listed count, epoch |
+| `/position <id>` | one market-feed listing (amount, price, lock) |
+| `/epoch` | current epoch, time left, restake bonus |
+| `/setfloor <0.12>` | personal floor threshold (presets `$0.10` / `$0.12` / `$0.15` / off) |
+| `/top` | top models (gated off) |
+
+Personal alerts: the floor dropping below the subscriber's threshold (once per
+crossing, re-armed when it recovers) and epoch end (broadcast to subscribers).
+New-own-listing alerts are not wired on this branch yet: they need the on-chain
+VexyMarketplace reader, which this branch does not carry.
 
 ## Run
 
@@ -80,5 +101,9 @@ restarts never repeat a message.
 | `cron.mjs` | entrypoint: daemon loop, `--once`, `--dry-run` |
 | `epoch-check.mjs` | weekly epoch reminder decision (pure) |
 | `rebate-check.mjs` | rebate campaign watch (RPC + published files) |
-| `telegram.mjs` | sendMessage with retries |
-| `state.mjs` | dedupe state, atomic writes |
+| `telegram.mjs` | channel sendMessage with retries |
+| `state.mjs` | dedupe + DM state, atomic writes |
+| `tg-poll.mjs` | each tick: DM getUpdates, commands, personal alerts |
+| `tg-commands.mjs` / `tg-format.mjs` | pure command handlers + message texts |
+| `tg-alerts.mjs` | floor/epoch alert logic (pure) |
+| `tg-api.mjs` / `tg-state.mjs` | Bot API client + DM state helpers |

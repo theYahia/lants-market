@@ -8,11 +8,12 @@ WORKDIR /app
 
 COPY bot/ bot/
 
-# The site modules the bot reuses (pure, no DOM/bundler): epochs, the claim
-# ABI, the campaign state machine, the pinned claims config and pool names.
+# The site modules the bot reuses (pure, no DOM/bundler, fetch only): the
+# market feed parser, epochs, the claim ABI, the campaign state machine, the
+# pinned claims config and pool names.
 COPY site/epochs.mjs site/keccak.mjs site/rebate.mjs site/rebate-campaign.mjs \
      site/rebate-claims-abi.mjs site/rebate-claim-state.mjs site/rebate-claim-chain.mjs \
-     site/rebate-claims.json site/pool-names.json site/
+     site/rebate-claims.json site/pool-names.json site/seaport-feed.mjs site/
 
 ENV NODE_ENV=production
 ENV STATE_FILE=/app/bot/data/state.json

@@ -3,8 +3,9 @@
 //   node bot/cron.mjs --once   single tick, then exit (for external cron systems)
 // Flags: --once, --dry-run (decide and print, never send), --state <file>.
 //
-// A tick does two things: the weekly epoch reminder (pure time math, cheap)
-// and the rebate watch (RPC + site files, throttled to REBATE_INTERVAL_MS).
+// A tick does three things: the weekly epoch reminder (pure time math, cheap),
+// the Telegram DM poll (commands + personal floor/epoch alerts), and the rebate
+// watch (RPC + site files, throttled to REBATE_INTERVAL_MS).
 
 import process from 'node:process';
 import http from 'node:http';
@@ -14,6 +15,7 @@ import { checkRebates, loadLocalConfig, loadVerifiedConfig, OFFERS_URLS } from '
 import { loadState, saveState } from './state.mjs';
 import { sendMessage, editMessageText, pinMessage, sleep } from './telegram.mjs';
 import { welcomeText } from './welcome.mjs';
+import { pollTelegram } from './tg-poll.mjs';
 
 const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
 const REBATE_INTERVAL_MS = Number(process.env.REBATE_INTERVAL_MS || 6 * 60 * 60 * 1000);
@@ -111,7 +113,12 @@ async function tick(state) {
     }
   }
 
-  // 2. Rebate watch — throttled; only a successful run advances the timer.
+  // 2. Telegram DM: commands + personal alerts (floor threshold, epoch end).
+  // Runs every tick, before the rebate throttle's early return below.
+  await pollTelegram({ state, dryRun: DRY_RUN, log });
+  if (!DRY_RUN) saveState(STATE_FILE, state);
+
+  // 3. Rebate watch — throttled; only a successful run advances the timer.
   if (nowMs - state.lastRebateCheck < REBATE_INTERVAL_MS) return;
   try {
     const deps = buildDeps();

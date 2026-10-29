@@ -15,7 +15,11 @@ export function defaultState() {
     lastRebateCheck: 0, // epoch ms of the last successful rebate watch run
     welcomeMessageId: null, // message_id of the pinned welcome post
     welcomePinned: null, // message_id the welcome post is confirmed pinned as
-    welcomeTextHash: null // sha256 prefix of the welcome text last applied
+    welcomeTextHash: null, // sha256 prefix of the welcome text last applied
+    // Telegram DM layer (commands + personal alerts).
+    offset: 0, // getUpdates offset
+    subscribers: {}, // chat_id -> { subscribedAt, floorThreshold, floorArmedDown }
+    lastEpoch: null // last epoch seen for the DM "epoch ended" alert
   };
 }
 
@@ -34,7 +38,13 @@ export function loadState(file) {
       ...base,
       ...parsed,
       rebates:
-        parsed.rebates && typeof parsed.rebates === 'object' ? parsed.rebates : {}
+        parsed.rebates && typeof parsed.rebates === 'object' ? parsed.rebates : {},
+      subscribers:
+        parsed.subscribers && typeof parsed.subscribers === 'object' && !Array.isArray(parsed.subscribers)
+          ? parsed.subscribers
+          : {},
+      lastEpoch: Number.isInteger(parsed.lastEpoch) ? parsed.lastEpoch : base.lastEpoch,
+      offset: Number.isInteger(parsed.offset) && parsed.offset >= 0 ? parsed.offset : base.offset
     };
   } catch {
     return defaultState();
