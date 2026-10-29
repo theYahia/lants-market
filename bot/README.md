@@ -25,10 +25,9 @@ Anyone who sends `/start` gets personal alerts in DM. Commands:
 
 | Command | Reply |
 |---|---|
-| `/start` | subscribe + welcome (Floor / Epoch / Set alert buttons) |
+| `/start` | subscribe + welcome |
 | `/help` | command list |
 | `/floor` | floor ask, 24h avg, listed count, epoch |
-| `/position <id>` | one market-feed listing (amount, price, lock) |
 | `/epoch` | current epoch, time left, restake bonus |
 | `/setfloor <0.12>` | personal floor threshold (presets `$0.10` / `$0.12` / `$0.15` / off) |
 | `/top` | top models (gated off) |

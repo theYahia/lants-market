@@ -9,8 +9,6 @@ import {
   floorReply,
   floorHasData,
   unavailableText,
-  positionReply,
-  positionNotFoundText,
   epochReply,
   setfloorReply,
   floorSetAckText,
@@ -28,10 +26,6 @@ export function parseCommand(text) {
   return { name: m[1].toLowerCase(), args: (m[2] || '').trim() };
 }
 
-function findListing(market, id) {
-  return ((market && market.listings) || []).find((l) => l.id === id) || null;
-}
-
 // Message-command dispatch. context: { state, chatId, market, epochData }.
 export function handleCommand({ command, context }) {
   const { name, args } = command;
@@ -43,15 +37,6 @@ export function handleCommand({ command, context }) {
   if (name === 'floor') {
     if (!market || !floorHasData(market)) return { reply: { text: unavailableText() } };
     return { reply: floorReply(market) };
-  }
-
-  if (name === 'position') {
-    const id = Number(args);
-    if (!Number.isInteger(id)) return { reply: { text: 'Usage: /position <id>' } };
-    if (!market) return { reply: { text: unavailableText() } };
-    const lot = findListing(market, id);
-    if (!lot) return { reply: { text: positionNotFoundText() } };
-    return { reply: positionReply(lot) };
   }
 
   if (name === 'epoch') {

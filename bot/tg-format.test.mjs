@@ -11,8 +11,6 @@ import {
   unavailableText,
   floorHasData,
   floorReply,
-  positionNotFoundText,
-  positionReply,
   epochReply,
   setfloorReply,
   floorSetAckText,
@@ -22,9 +20,7 @@ import {
   epochEndedAlertText,
 } from './tg-format.mjs';
 
-const DOT = '\u00b7';
 const ARROW = '\u2192';
-const ANT = '\u{1F41C}';
 
 test('trimPrice renders 4-decimal floors without trailing zeros', () => {
   assert.equal(trimPrice(0.11), '$0.11');
@@ -53,7 +49,7 @@ test('welcomeReply greets and lists commands without a keyboard', () => {
 
 test('helpText lists every command', () => {
   const t = helpText();
-  for (const cmd of ['/start', '/floor', '/position', '/epoch', '/setfloor', '/top']) {
+  for (const cmd of ['/start', '/floor', '/epoch', '/setfloor', '/top']) {
     assert.ok(t.includes(cmd), `missing ${cmd}`);
   }
 });
@@ -69,17 +65,6 @@ test('floorHasData and floorReply render the header measures', () => {
 test('floorReply omits unknown measures', () => {
   const reply = floorReply({ floorAsk: null, avg24h: null, listedCount: 16, epoch: null });
   assert.equal(reply.text, 'Listed: 16');
-});
-
-test('positionReply renders a lot with a View button', () => {
-  const reply = positionReply({ id: 206, amount: 400, perAntUsd: 0.102, usd: 40.8, lockDays: 56 });
-  assert.equal(reply.text, `#206 ${DOT} ${ANT} 400 ANTS @ $0.102 ${DOT} $40.800 total ${DOT} lock 8w`);
-  assert.deepEqual(reply.replyMarkup.inline_keyboard[0][0], { text: `View ${ARROW}`, url: 'lants.eth.limo/#position/206' });
-});
-
-test('positionReply skips total and lock when unknown', () => {
-  const reply = positionReply({ id: 207, amount: 100, perAntUsd: 0.101, usd: null, lockDays: null });
-  assert.equal(reply.text, `#207 ${DOT} ${ANT} 100 ANTS @ $0.101`);
 });
 
 test('epochReply uses the countdown CTA when data is present', () => {

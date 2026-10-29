@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCommand, handleCommand, handleCallback } from './tg-commands.mjs';
 import { EMPTY_TG_STATE } from './tg-state.mjs';
-import { unavailableText, positionNotFoundText, floorOffAckText } from './tg-format.mjs';
+import { unavailableText, floorOffAckText } from './tg-format.mjs';
 
 const MARKET = {
   floorAsk: 0.1100001,
@@ -24,7 +24,7 @@ function context(overrides = {}) {
 
 test('parseCommand handles plain, args and botname suffix', () => {
   assert.deepEqual(parseCommand('/start'), { name: 'start', args: '' });
-  assert.deepEqual(parseCommand('/position 206'), { name: 'position', args: '206' });
+  assert.deepEqual(parseCommand('/floor 206'), { name: 'floor', args: '206' });
   assert.deepEqual(parseCommand('/start@lantsalerts_bot'), { name: 'start', args: '' });
   assert.deepEqual(parseCommand('/setfloor 0.12'), { name: 'setfloor', args: '0.12' });
   assert.equal(parseCommand('not a command'), null);
@@ -45,19 +45,6 @@ test('handleCommand /floor renders the header measures', () => {
 test('handleCommand /floor reports unavailable without a feed', () => {
   const { reply } = handleCommand({ command: { name: 'floor', args: '' }, context: context({ market: null }) });
   assert.equal(reply.text, unavailableText());
-});
-
-test('handleCommand /position finds a lot and adds a View button', () => {
-  const { reply } = handleCommand({ command: { name: 'position', args: '206' }, context: context() });
-  assert.ok(reply.text.includes('#206'));
-  assert.equal(reply.replyMarkup.inline_keyboard[0][0].text, 'View \u2192');
-});
-
-test('handleCommand /position not-found and bad-arg handling', () => {
-  const notFound = handleCommand({ command: { name: 'position', args: '999' }, context: context() });
-  assert.equal(notFound.reply.text, positionNotFoundText());
-  const bad = handleCommand({ command: { name: 'position', args: 'abc' }, context: context() });
-  assert.equal(bad.reply.text, 'Usage: /position <id>');
 });
 
 test('handleCommand /epoch renders the countdown CTA', () => {

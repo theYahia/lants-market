@@ -2,10 +2,9 @@
 // network. English content mirrors the X bot and the site; non-ASCII glyphs use
 // \u escapes so the source stays ASCII (like format.mjs).
 
-import { fmtAmount, newListingText, newFloorListingText, countdownText } from './format.mjs';
+import { newListingText, newFloorListingText, countdownText } from './format.mjs';
 
 const SITE_URL = 'https://lants.eth.limo';
-const MID = '\u00b7'; // middle dot
 const ARROW = '\u2192'; // right arrow
 const BULLET = '\u2022';
 
@@ -55,7 +54,6 @@ export function welcomeReply() {
     '',
     'Commands:',
     '/floor - floor ask and 24h average',
-    '/position <id> - position detail',
     '/epoch - current epoch and time left',
     '/setfloor - set your floor alert',
     '/help - all commands',
@@ -70,7 +68,6 @@ export function helpText() {
     'Commands:',
     '/start - subscribe to alerts',
     '/floor - floor ask, 24h avg, listed count, epoch',
-    '/position <id> - position detail',
     '/epoch - current epoch and time left',
     '/setfloor <0.12> - your personal floor threshold',
     '/top - top models (soon)',
@@ -102,20 +99,6 @@ export function floorReply(market) {
   if (Number.isInteger(market.listedCount)) lines.push(`Listed: ${market.listedCount}`);
   if (Number.isInteger(market.epoch)) lines.push(`Epoch: ${market.epoch}`);
   return { text: lines.join('\n') };
-}
-
-export function positionNotFoundText() {
-  return 'Position not found or not for sale.';
-}
-
-// lot: { id, amount, perAntUsd, usd, lockDays } from readFeed().market.listings.
-export function positionReply(lot) {
-  const parts = [`#${lot.id} ${MID} \u{1F41C} ${fmtAmount(lot.amount)} ANTS @ ${price3(lot.perAntUsd)}`];
-  if (Number.isFinite(lot.usd) && lot.usd > 0) parts.push(`${price3(lot.usd)} total`);
-  if (Number.isFinite(lot.lockDays) && lot.lockDays > 0) parts.push(`lock ${Math.round(lot.lockDays / 7)}w`);
-  const text = parts.join(` ${MID} `);
-  const replyMarkup = keyboard([[urlButton(`View ${ARROW}`, posLink(lot.id))]]);
-  return { text, replyMarkup };
 }
 
 // data: { epoch, secondsLeft, restakeBonusPct } (secondsLeft/restakeBonusPct soft).
