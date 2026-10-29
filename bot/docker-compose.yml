@@ -13,7 +13,8 @@ services:
       # Optional overrides:
       # TG_API_URL: https://tg-relay.example (behind a relay on RU boxes)
       # RPC_URLS: https://mainnet.base.org,https://base-mainnet.public.blastapi.io
-      # TICK_MS: 600000
+      # TICK_MS: 60000
+      # OWN_LISTINGS_INTERVAL_MS: 300000
       # REBATE_INTERVAL_MS: 21600000
     volumes:
       - ./data:/app/bot/data

@@ -131,8 +131,8 @@ export function toState(curr) {
  * Fetch the market feed. A failure is fatal (ok:false): without the feed the
  * epoch and digest context is unavailable and the run must not advance.
  */
-export async function readFeed({ fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
-  const feed = await fetchSeaportMarket({ fetchImpl, timeoutMs, includeNonFulfillable: true });
+export async function readFeed({ fetchImpl = globalThis.fetch, timeoutMs = 8000, parser = fetchSeaportMarket } = {}) {
+  const feed = await parser({ fetchImpl, timeoutMs, includeNonFulfillable: true });
   if (!feed.ok) return { ok: false, reason: feed.reason };
   const market = toMarket(feed);
   if (!market) return { ok: false, reason: 'market-shape' };

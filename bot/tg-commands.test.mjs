@@ -110,3 +110,26 @@ test('handleCallback unknown data acks a generic toast', () => {
   assert.equal(ack.text, 'Unknown button.');
   assert.equal(reply, null);
 });
+
+test('handleCommand /setfloor off is rejected', () => {
+  const { reply } = handleCommand({ command: { name: 'setfloor', args: 'off' }, context: context() });
+  assert.ok(reply.text.startsWith('Invalid price.'));
+});
+
+test('handleCommand replies never carry an inline keyboard', () => {
+  const commands = [
+    { name: 'start', args: '' },
+    { name: 'help', args: '' },
+    { name: 'floor', args: '' },
+    { name: 'epoch', args: '' },
+    { name: 'setfloor', args: '' },
+    { name: 'setfloor', args: '0.12' },
+    { name: 'setfloor', args: 'abc' },
+    { name: 'top', args: '' },
+    { name: 'frobnicate', args: '' },
+  ];
+  for (const command of commands) {
+    const { reply } = handleCommand({ command, context: context() });
+    assert.equal(reply.replyMarkup, undefined, `/${command.name} ${command.args}`.trim());
+  }
+});

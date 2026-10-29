@@ -50,7 +50,7 @@ npm run test:bot
 # one tick without sending anything: decides + prints what it would post
 TG_BOT_TOKEN=x TG_CHAT_ID=y npm run bot:dry
 
-# one tick, live (external cron) or daemon (default, ticks every 10 min)
+# one tick, live (external cron) or daemon (default, ticks every minute)
 npm run bot:once
 npm run bot
 ```
@@ -63,7 +63,8 @@ Environment:
 | `TG_CHAT_ID` | channel `@username` or `-100…` id (required) |
 | `TG_API_URL` | override the API base (relay on RU boxes) |
 | `RPC_URLS` | comma-separated Base RPCs (defaults: mainnet.base.org, blastapi) |
-| `TICK_MS` | daemon tick interval (default 10 min) |
+| `TICK_MS` | daemon tick interval (default 60 s) — new listing/floor alerts land within one tick |
+| `OWN_LISTINGS_INTERVAL_MS` | on-chain own-listing read throttle (default 5 min) |
 | `REBATE_INTERVAL_MS` | rebate watch throttle (default 6 h) |
 | `STATE_FILE` | dedupe state path (default `bot/data/state.json`) |
 

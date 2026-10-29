@@ -4,30 +4,32 @@
 // Flags: --once, --dry-run (decide and print, never send), --state <file>.
 //
 // A tick does three things: the weekly epoch reminder (pure time math, cheap),
-// the Telegram DM poll (commands + personal floor/epoch alerts), and the rebate
-// watch (RPC + site files, throttled to REBATE_INTERVAL_MS).
+// the Telegram DM alerts (personal floor/epoch alerts + new listings), and the
+// rebate watch (RPC + site files, throttled to REBATE_INTERVAL_MS). The tick is
+// short (default 60 s) so a new listing is announced within about a minute; the
+// on-chain own-listing read is throttled separately (OWN_LISTINGS_INTERVAL_MS)
+// so free public RPCs are not hammered on every tick.
 
 import process from 'node:process';
 import http from 'node:http';
-import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { decideEpochPost } from './epoch-check.mjs';
 import { checkRebates, loadLocalConfig, loadVerifiedConfig, OFFERS_URLS } from './rebate-check.mjs';
 import { loadState, saveState } from './state.mjs';
-import { sendMessage, editMessageText, pinMessage, sleep } from './telegram.mjs';
-import { welcomeText } from './welcome.mjs';
+import { sleep } from './telegram.mjs';
+import { readOwnListings } from './read-own-listings.mjs';
+import { rpc, fetchJson, deliver, ensureWelcomePin, makeThrottledReader, RPC_URLS } from './cron-helpers.mjs';
 import { pollCommands, runDmAlerts } from './tg-poll.mjs';
 
-const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
+export { rpc, fetchJson, deliver, ensureWelcomePin } from './cron-helpers.mjs';
+
+const TICK_MS = Number(process.env.TICK_MS || 60 * 1000);
 const REBATE_INTERVAL_MS = Number(process.env.REBATE_INTERVAL_MS || 6 * 60 * 60 * 1000);
+const OWN_LISTINGS_INTERVAL_MS = Number(process.env.OWN_LISTINGS_INTERVAL_MS || 5 * 60 * 1000);
 const HEALTH_PORT = Number(process.env.HEALTH_PORT || 0);
-// Wall-clock cap for every RPC / JSON fetch the tick performs. Without it a
-// hung public RPC blocks the tick (and, before the fix, the very first command
-// reply) indefinitely; with it the tick degrades to a logged failure instead.
-const RPC_TIMEOUT_MS = 20000;
-const RPC_URLS = (process.env.RPC_URLS || 'https://mainnet.base.org,https://base-mainnet.public.blastapi.io')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+
+const ownListingsReader = makeThrottledReader(readOwnListings, OWN_LISTINGS_INTERVAL_MS);
 
 const args = process.argv.slice(2);
 const ONCE = args.includes('--once');
@@ -36,56 +38,10 @@ const stateArgIdx = args.indexOf('--state');
 const STATE_FILE =
   (stateArgIdx !== -1 && args[stateArgIdx + 1]) ||
   process.env.STATE_FILE ||
-  new URL('./data/state.json', import.meta.url).pathname;
+  fileURLToPath(new URL('./data/state.json', import.meta.url));
 
 function log(line) {
   console.error(`[${new Date().toISOString()}] ${line}`);
-}
-
-async function rpc(method, params) {
-  let last = new Error('rpc: no endpoint');
-  for (const url of RPC_URLS) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: controller.signal
-      });
-      if (!res.ok) {
-        last = new Error('rpc HTTP ' + res.status);
-        continue;
-      }
-      const j = await res.json();
-      if (j.error) throw new Error(j.error.message || 'rpc error');
-      return j.result;
-    } catch (e) {
-      last = e;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw last;
-}
-
-async function fetchJson(urls) {
-  let last = new Error('fetchJson: no urls');
-  for (const url of urls) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
-      if (res.ok) return await res.json();
-      last = new Error('HTTP ' + res.status + ' for ' + url);
-    } catch (e) {
-      last = e;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw last;
 }
 
 function buildDeps() {
@@ -96,63 +52,63 @@ function buildDeps() {
   };
 }
 
-const SITE_LINK = [{ text: 'Open lants.eth.limo', url: 'https://lants.eth.limo' }];
-
-async function deliver(post, dryRun) {
-  if (dryRun) {
-    log('DRY-RUN would send:\n' + post.text);
-    return true;
-  }
-  try {
-    await sendMessage(post.text, { replyMarkup: SITE_LINK });
-    log('sent post (' + post.text.split('\n')[0].slice(0, 60) + ')');
-    return true;
-  } catch (e) {
-    log('telegram delivery failed: ' + e.message);
-    return false;
-  }
-}
-
-async function tick(state) {
-  const nowMs = Date.now();
+export async function tick(state, deps = {}) {
+  const nowMs = deps.nowMs ?? Date.now();
+  const dryRun = deps.dryRun ?? DRY_RUN;
+  const logFn = deps.log ?? log;
+  const deliverFn = deps.deliver ?? deliver;
+  const runDmAlertsFn = deps.runDmAlerts ?? runDmAlerts;
+  const saveStateFn = deps.saveState ?? saveState;
+  const stateFile = deps.stateFile ?? STATE_FILE;
+  const rebateIntervalMs = deps.rebateIntervalMs ?? REBATE_INTERVAL_MS;
 
   // 1. Weekly epoch reminder — pure, no network.
   const decided = decideEpochPost({ now: new Date(nowMs), state });
   if (decided.post) {
-    const sent = await deliver({ text: decided.post }, DRY_RUN);
-    if (sent && !DRY_RUN) {
+    const sent = await deliverFn({ text: decided.post }, dryRun);
+    if (sent && !dryRun) {
       state.epochPost = decided.epoch;
-      saveState(STATE_FILE, state);
+      saveStateFn(stateFile, state);
     }
   }
 
   // 2. Telegram DM alerts (floor threshold, new own listing, epoch end).
   // Commands are answered instantly by the long-poll loop in main(); the tick
-  // only evaluates alerts. Runs before the rebate throttle's early return.
-  await runDmAlerts({ state, dryRun: DRY_RUN, log });
-  if (!DRY_RUN) saveState(STATE_FILE, state);
+  // only evaluates alerts. The feed is read every tick, the on-chain own
+  // listings at most once per OWN_LISTINGS_INTERVAL_MS. Runs before the rebate
+  // throttle's early return.
+  const readOwnListingsFn = deps.readOwnListings ?? ownListingsReader;
+  await runDmAlertsFn({ state, dryRun, log: logFn, readers: { readOwnListings: readOwnListingsFn } });
+  if (!dryRun) saveStateFn(stateFile, state);
 
   // 3. Rebate watch — throttled; only a successful run advances the timer.
-  if (nowMs - state.lastRebateCheck < REBATE_INTERVAL_MS) return;
+  if (nowMs - state.lastRebateCheck < rebateIntervalMs) return;
   try {
-    const deps = buildDeps();
-    const config = await loadVerifiedConfig(deps, loadLocalConfig());
-    const offers = await deps.fetchJson(OFFERS_URLS);
-    const posts = await checkRebates({ deps, state, config, offers, nowMs });
+    const rebateDeps = (deps.buildDeps ?? buildDeps)();
+    const localConfig = (deps.loadLocalConfig ?? loadLocalConfig)();
+    const config = await (deps.loadVerifiedConfig ?? loadVerifiedConfig)(rebateDeps, localConfig);
+    const offers = await rebateDeps.fetchJson(OFFERS_URLS);
+    const posts = await (deps.checkRebates ?? checkRebates)({
+      deps: rebateDeps,
+      state,
+      config,
+      offers,
+      nowMs
+    });
     let delivered = 0;
     for (const post of posts) {
-      if (await deliver(post, DRY_RUN)) {
-        if (!DRY_RUN) post.apply(state);
+      if (await deliverFn(post, dryRun)) {
+        if (!dryRun) post.apply(state);
         delivered++;
       }
     }
-    if (!DRY_RUN) {
+    if (!dryRun) {
       state.lastRebateCheck = nowMs;
-      saveState(STATE_FILE, state);
+      saveStateFn(stateFile, state);
     }
-    log(`rebate watch: ${posts.length} due, ${delivered} sent, ${config ? 'config ok' : 'config FAILED'}`);
+    logFn(`rebate watch: ${posts.length} due, ${delivered} sent, ${config ? 'config ok' : 'config FAILED'}`);
   } catch (e) {
-    log('rebate watch failed (will retry next tick): ' + e.message);
+    logFn('rebate watch failed (will retry next tick): ' + e.message);
   }
 }
 
@@ -170,53 +126,6 @@ function startHealthServer() {
   });
   server.on('error', (e) => log('health server error: ' + e.message));
   server.listen(HEALTH_PORT, '127.0.0.1', () => log(`health server on 127.0.0.1:${HEALTH_PORT}`));
-}
-
-// Sends the welcome post once, keeps it pinned, and refreshes its text in
-// place when the welcome text changes. Idempotent across restarts: ids and
-// the text hash survive in state, the pin is retried if it failed.
-function welcomeHash() {
-  return crypto.createHash('sha256').update(welcomeText()).digest('hex').slice(0, 16);
-}
-
-async function ensureWelcomePin(state) {
-  const hash = welcomeHash();
-  if (DRY_RUN) {
-    if (!state.welcomeMessageId) log('DRY-RUN would send welcome:\n' + welcomeText());
-    else if (state.welcomeTextHash !== hash) log('DRY-RUN would edit welcome:\n' + welcomeText());
-    return;
-  }
-  if (!state.welcomeMessageId) {
-    try {
-      const res = await sendMessage(welcomeText());
-      state.welcomeMessageId = res.result.message_id;
-      state.welcomeTextHash = hash;
-      saveState(STATE_FILE, state);
-      log('sent welcome post (message_id ' + state.welcomeMessageId + ')');
-    } catch (e) {
-      log('welcome delivery failed: ' + e.message);
-      return;
-    }
-  } else if (state.welcomeTextHash !== hash) {
-    try {
-      await editMessageText(state.welcomeMessageId, welcomeText());
-      state.welcomeTextHash = hash;
-      saveState(STATE_FILE, state);
-      log('edited welcome post (message_id ' + state.welcomeMessageId + ')');
-    } catch (e) {
-      log('welcome edit failed (will retry on next restart): ' + e.message);
-      return;
-    }
-  }
-  if (state.welcomePinned === state.welcomeMessageId) return;
-  try {
-    await pinMessage(state.welcomeMessageId);
-    state.welcomePinned = state.welcomeMessageId;
-    saveState(STATE_FILE, state);
-    log('welcome post pinned');
-  } catch (e) {
-    log('pin failed (will retry on next restart): ' + e.message);
-  }
 }
 
 // Long-poll loop: answer DM commands instantly. Runs alongside the tick loop;
@@ -256,7 +165,7 @@ async function main() {
   if (!ONCE && !DRY_RUN) startDmCommandsLoop(state, () => stopping);
 
   await tick(state);
-  await ensureWelcomePin(state);
+  await ensureWelcomePin(state, { dryRun: DRY_RUN, stateFile: STATE_FILE, log });
 
   if (ONCE) {
     // External-cron mode: one short command poll, then exit.
@@ -276,7 +185,20 @@ async function main() {
   log('stopped');
 }
 
-main().catch((e) => {
-  log('fatal: ' + (e && e.stack ? e.stack : e));
-  process.exit(1);
-});
+// Compare real paths so a symlinked entrypoint still starts the bot instead of
+// silently exiting without an error (import.meta.url is already resolved).
+function invokedDirectly() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (invokedDirectly()) {
+  main().catch((e) => {
+    log('fatal: ' + (e && e.stack ? e.stack : e));
+    process.exit(1);
+  });
+}

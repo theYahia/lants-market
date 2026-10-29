@@ -41,6 +41,29 @@ test('loadState: partial file keeps defaults for missing fields', () => {
   assert.equal(loaded.lastRebateCheck, 0);
 });
 
+test('loadState: a v1 file re-baselines listings silently', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file, JSON.stringify({ version: 1, listingsBaselineDone: true }));
+  const loaded = loadState(file);
+  assert.equal(loaded.version, 2);
+  assert.equal(loaded.listingsBaselineDone, false);
+});
+
+test('loadState: a v2 file keeps a completed listings baseline', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file, JSON.stringify({ version: 2, listingsBaselineDone: true }));
+  const loaded = loadState(file);
+  assert.equal(loaded.version, 2);
+  assert.equal(loaded.listingsBaselineDone, true);
+});
+
+test('loadState: strips a leading BOM before parsing', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file, '\uFEFF' + JSON.stringify({ version: 2, epochPost: 29 }));
+  const loaded = loadState(file);
+  assert.equal(loaded.epochPost, 29);
+});
+
 test('rebateKey joins epoch and pool', () => {
   assert.equal(rebateKey(26, '44694'), '26-44694');
 });

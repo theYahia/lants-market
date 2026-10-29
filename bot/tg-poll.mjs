@@ -28,11 +28,13 @@ function queueMessage(outbox, chatId, reply) {
   outbox.push({ kind: 'message', chatId, text: reply.text, replyMarkup: reply.replyMarkup ?? null });
 }
 
-async function readContext(log) {
-  const feed = await readFeed();
+export async function readContext(log, readers = {}) {
+  const readFeedFn = readers.readFeed ?? readFeed;
+  const readAntseedStatsFn = readers.readAntseedStats ?? readAntseedStats;
+  const feed = await readFeedFn();
   if (!feed.ok) log(`tg: feed unavailable (${feed.reason}); market commands answer 'unavailable'`);
   const market = feed.ok ? feed.market : null;
-  const astats = await readAntseedStats({ prevMaxCompletedEpoch: Number.MAX_SAFE_INTEGER });
+  const astats = await readAntseedStatsFn({ prevMaxCompletedEpoch: Number.MAX_SAFE_INTEGER });
   const network = astats.ok ? astats.network : null;
   const staking = astats.ok ? astats.staking : null;
   if (!astats.ok) log(`tg: antseedstats unavailable (${astats.reason}); countdown omitted`);
@@ -44,7 +46,7 @@ async function readContext(log) {
   return { market, epochData };
 }
 
-function dispatch(updates, state, context, outbox) {
+export function dispatch(updates, state, context, outbox) {
   for (const u of updates) {
     const message = u.message || null;
     const callback = u.callback_query || null;
@@ -81,23 +83,26 @@ function dispatch(updates, state, context, outbox) {
   }
 }
 
-async function deliverOutbox(token, outbox, log) {
+export async function deliverOutbox(token, outbox, log = () => {}, api = {}) {
+  const answerCallbackQueryFn = api.answerCallbackQuery ?? answerCallbackQuery;
+  const sendMessageFn = api.sendMessage ?? sendMessage;
   for (const item of outbox) {
     if (item.kind === 'callback') {
-      const r = await answerCallbackQuery({ token, callbackQueryId: item.callbackQueryId, text: item.text });
+      const r = await answerCallbackQueryFn({ token, callbackQueryId: item.callbackQueryId, text: item.text });
       if (!r.ok) log(`tg: answerCallbackQuery failed: ${r.reason}`);
       continue;
     }
-    const r = await sendMessage({ token, chatId: item.chatId, text: item.text, replyMarkup: item.replyMarkup });
+    const r = await sendMessageFn({ token, chatId: item.chatId, text: item.text, replyMarkup: item.replyMarkup });
     if (!r.ok) log(`tg: sendMessage -> ${item.chatId} failed: ${r.reason}`);
   }
 }
 
-async function deliverAlerts(token, state, alerts, epochData, log) {
+export async function deliverAlerts(token, state, alerts, epochData, log = () => {}, api = {}) {
+  const sendMessageFn = api.sendMessage ?? sendMessage;
   const subscriberIds = Object.keys(state.subscribers || {});
   for (const a of alerts) {
     if (a.type === 'floor') {
-      const r = await sendMessage({ token, chatId: a.chatId, text: floorAlertText(a.floor, a.threshold) });
+      const r = await sendMessageFn({ token, chatId: a.chatId, text: floorAlertText(a.floor, a.threshold) });
       if (!r.ok) {
         // The one-shot threshold was cleared when the alert fired; put it back
         // so the next tick retries, unless the user has since set a new price.
@@ -113,14 +118,14 @@ async function deliverAlerts(token, state, alerts, epochData, log) {
     if (a.type === 'listing') {
       const { text, replyMarkup } = listingAlertReply(a.lot, a.isFloor);
       for (const chatId of subscriberIds) {
-        const r = await sendMessage({ token, chatId, text, replyMarkup });
+        const r = await sendMessageFn({ token, chatId, text, replyMarkup });
         if (!r.ok) log(`tg: listing -> ${chatId} failed: ${r.reason}`);
       }
       continue;
     }
     const text = epochEndedAlertText(a.closedEpoch, epochData.restakeBonusPct);
     for (const chatId of subscriberIds) {
-      const r = await sendMessage({ token, chatId, text });
+      const r = await sendMessageFn({ token, chatId, text });
       if (!r.ok) log(`tg: broadcast -> ${chatId} failed: ${r.reason}`);
     }
   }
@@ -131,14 +136,22 @@ async function deliverAlerts(token, state, alerts, epochData, log) {
  * command is answered immediately. Returns { ok, handled } where handled is the
  * number of updates dispatched (the caller persists state when > 0).
  */
-export async function pollCommands({ state, longPoll = false, dryRun = false, log = () => {} } = {}) {
+export async function pollCommands({
+  state,
+  longPoll = false,
+  dryRun = false,
+  log = () => {},
+  readers = {},
+  api = {},
+} = {}) {
   const token = process.env.TG_BOT_TOKEN || '';
   if (!token) {
     log('tg: TG_BOT_TOKEN not set; commands disabled');
     return { ok: false, handled: 0 };
   }
+  const getUpdatesFn = api.getUpdates ?? getUpdates;
   try {
-    const poll = await getUpdates({
+    const poll = await getUpdatesFn({
       token,
       offset: state.offset || 0,
       timeout: longPoll ? 25 : 0,
@@ -154,7 +167,7 @@ export async function pollCommands({ state, longPoll = false, dryRun = false, lo
     }
     if (updates.length === 0) return { ok: true, handled: 0 };
 
-    const { market, epochData } = await readContext(log);
+    const { market, epochData } = await readContext(log, readers);
     const outbox = [];
     dispatch(updates, state, { market, epochData }, outbox);
 
@@ -168,7 +181,7 @@ export async function pollCommands({ state, longPoll = false, dryRun = false, lo
       return { ok: true, handled: updates.length };
     }
 
-    await deliverOutbox(token, outbox, log);
+    await deliverOutbox(token, outbox, log, api);
     log(`tg: ${updates.length} update(s), ${outbox.length} reply(ies)`);
     return { ok: true, handled: updates.length };
   } catch (e) {
@@ -178,15 +191,22 @@ export async function pollCommands({ state, longPoll = false, dryRun = false, lo
 }
 
 /** Evaluate personal alerts (floor threshold, epoch end) once. Mutates state. */
-export async function runDmAlerts({ state, dryRun = false, log = () => {} } = {}) {
+export async function runDmAlerts({
+  state,
+  dryRun = false,
+  log = () => {},
+  readers = {},
+  api = {},
+} = {}) {
   const token = process.env.TG_BOT_TOKEN || '';
   if (!token) {
     log('tg: TG_BOT_TOKEN not set; alerts disabled');
     return;
   }
+  const readOwnListingsFn = readers.readOwnListings ?? readOwnListings;
   try {
-    const { market, epochData } = await readContext(log);
-    const ownRes = await readOwnListings();
+    const { market, epochData } = await readContext(log, readers);
+    const ownRes = await readOwnListingsFn();
     if (!ownRes.ok) log(`tg: own listings unavailable (${ownRes.reason}); listing alerts skipped`);
     const own = ownRes.ok ? ownRes.listings : null;
     const { alerts, state: next } = computeAlerts({ state, market, own });
@@ -200,7 +220,7 @@ export async function runDmAlerts({ state, dryRun = false, log = () => {} } = {}
       return;
     }
 
-    await deliverAlerts(token, state, alerts, epochData, log);
+    await deliverAlerts(token, state, alerts, epochData, log, api);
     if (alerts.length) {
       log(`tg: ${alerts.length} alert(s), ${Object.keys(state.subscribers || {}).length} subscriber(s)`);
     }

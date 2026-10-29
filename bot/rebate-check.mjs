@@ -9,6 +9,7 @@
 // files, and the pinned RebateClaims config re-checked against the chain.
 
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { validRebate } from '../site/rebate.mjs';
 import { epochBoundary } from '../site/epochs.mjs';
 import { decodeAddress, decodeCampaign, encCampaignData, SEL } from '../site/rebate-claims-abi.mjs';
@@ -32,7 +33,7 @@ export function rebateFileUrls(base, suffix) {
 }
 
 export function loadLocalConfig() {
-  const file = new URL('../site/rebate-claims.json', import.meta.url).pathname;
+  const file = fileURLToPath(new URL('../site/rebate-claims.json', import.meta.url));
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
   } catch {
@@ -41,7 +42,7 @@ export function loadLocalConfig() {
 }
 
 export function loadPoolNames() {
-  const file = new URL('../site/pool-names.json', import.meta.url).pathname;
+  const file = fileURLToPath(new URL('../site/pool-names.json', import.meta.url));
   try {
     return JSON.parse(fs.readFileSync(file, 'utf-8'));
   } catch {
