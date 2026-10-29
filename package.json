@@ -8,7 +8,6 @@
     "test": "node --test site/*.test.mjs && node scripts/site/check_authorizations.mjs",
     "test:coverage": "node --test --experimental-test-coverage site/*.test.mjs",
     "bot": "node --test bot/read-feed.test.mjs bot/read-own-listings.test.mjs bot/read-antseedstats.test.mjs bot/diff.test.mjs bot/format.test.mjs bot/state.test.mjs bot/token-store.test.mjs bot/xapi.test.mjs",
-    "bot:tg": "node --test bot/tg-api.test.mjs bot/tg-state.test.mjs bot/tg-format.test.mjs bot/tg-commands.test.mjs bot/tg-alerts.test.mjs",
     "probe:state": "node scripts/probes/net-state.cjs",
     "probe:sellers": "node scripts/probes/seller-rank.cjs"
   },
