@@ -99,6 +99,12 @@ test('matches: listing every position when listedOnly is off', () => {
   assert.equal(storefront.matches(listed(), false), true);
 });
 
+test('matches: pending positions are hidden from listings', () => {
+  assert.equal(storefront.matches({ tokenId: 1, priceUsdc: 10, status: 'pending' }), false);
+  assert.equal(storefront.matches({ tokenId: 1, priceUsdc: 10, status: 'pending' }, false), false);
+  assert.equal(storefront.matches({ tokenId: 1, priceUsdc: null, status: 'pending' }, false), false);
+});
+
 test('visibleLots: listedOnly keeps only listed lots regardless of position in the array', () => {
   // Regression: .filter(matches) passed the array index as `listedOnly`,
   // silently dropping every unlisted lot after index 0.

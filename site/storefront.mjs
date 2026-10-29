@@ -97,6 +97,7 @@ export function sortLots(lots, sort = state.sort, dir = state.dir) {
 }
 
 export function matches(lot, listedOnly = state.listedOnly) {
+  if (lot.status === 'pending') return false;
   if (listedOnly && lot.priceUsdc == null) return false;
   return true;
 }
