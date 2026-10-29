@@ -40,14 +40,14 @@ export function normalizeTgState(raw) {
   if (raw && Array.isArray(raw.listingsSeen)) {
     out.listingsSeen = raw.listingsSeen.filter((v) => Number.isInteger(v)).slice(-MAX_LISTINGS_SEEN);
   }
-  out.listingsBaselineDone = (raw && raw.listingsBaselineDone === true) || out.listingsSeen.length > 0;
+  out.listingsBaselineDone = Boolean(raw && raw.listingsBaselineDone === true);
   if (raw && Number.isInteger(raw.lastEpoch) && raw.lastEpoch >= 0) out.lastEpoch = raw.lastEpoch;
   return out;
 }
 
 export function loadTgState(path) {
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    const parsed = JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, ''));
     return normalizeTgState(parsed);
   } catch {
     return { ...EMPTY_TG_STATE };
@@ -68,9 +68,9 @@ export function upsertSubscriber(state, chatId, nowIso = new Date().toISOString(
   return state.subscribers[key];
 }
 
-// Set (or clear with null) the personal floor threshold. A fresh threshold is
-// armed to detect a drop: an already-below floor alerts once on the next run,
-// then disarms until the floor recovers at or above the threshold.
+// Set (or clear with null) the personal floor threshold. It is one-shot: an
+// already-below floor alerts once on the next run, then the threshold is
+// cleared and the subscriber must set a new price to re-arm.
 export function setFloorThreshold(state, chatId, threshold) {
   const sub = upsertSubscriber(state, chatId);
   const t = Number(threshold);

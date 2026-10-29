@@ -7,9 +7,9 @@
 //     threshold, epoch end) on the periodic tick.
 //
 // Market data comes from the fetch-only readers (read-feed, read-antseedstats).
-// Own VexyMarketplace listings are read on-chain (bot/read-own-listings.mjs,
-// fetch-only, no viem) and broadcast to subscribers; competitor Seaport orders
-// from the feed are not broadcast.
+// New-listing alerts cover both our VexyMarketplace listings (read on-chain in
+// bot/read-own-listings.mjs, fetch-only, no viem) and the competitor Seaport
+// feed; both link to our position page, which can fill either order.
 
 import { readFeed } from './read-feed.mjs';
 import { readAntseedStats } from './read-antseedstats.mjs';

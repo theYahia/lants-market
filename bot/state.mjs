@@ -5,7 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const STATE_VERSION = 1;
+// v2 adds the Seaport feed to the new-listing alerts, so a v1 state must run one
+// silent baseline (it never saw those lots) instead of announcing them all.
+export const STATE_VERSION = 2;
 
 export function defaultState() {
   return {
@@ -35,12 +37,14 @@ export function loadState(file) {
     return defaultState();
   }
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
     if (!parsed || typeof parsed !== 'object') return defaultState();
     const base = defaultState();
+    const parsedVersion = Number.isInteger(parsed.version) ? parsed.version : 0;
     return {
       ...base,
       ...parsed,
+      version: STATE_VERSION,
       rebates:
         parsed.rebates && typeof parsed.rebates === 'object' ? parsed.rebates : {},
       subscribers:
@@ -48,11 +52,11 @@ export function loadState(file) {
           ? parsed.subscribers
           : {},
       listingsSeen: Array.isArray(parsed.listingsSeen) ? parsed.listingsSeen : [],
-      // Migrate: a non-empty listingsSeen already implies a completed baseline
-      // read, so a new listing must alert on the next tick.
+      // Only a state written by this version has a complete baseline (own +
+      // Seaport lots). Anything older re-baselines silently once, so the first
+      // run after the upgrade does not burst existing listings to subscribers.
       listingsBaselineDone:
-        parsed.listingsBaselineDone === true
-        || (Array.isArray(parsed.listingsSeen) && parsed.listingsSeen.length > 0),
+        parsedVersion === STATE_VERSION && parsed.listingsBaselineDone === true,
       lastEpoch: Number.isInteger(parsed.lastEpoch) ? parsed.lastEpoch : base.lastEpoch,
       offset: Number.isInteger(parsed.offset) && parsed.offset >= 0 ? parsed.offset : base.offset
     };

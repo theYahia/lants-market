@@ -1,17 +1,15 @@
-// Read-only data layer for the @sxsiant bot.
+// Read-only data layer for the alerts bot.
 //
 // One live source: the ecosystem market feed (parsed by the shared
 // site/seaport-feed.mjs parser with includeNonFulfillable). It supplies the
-// header context the bot still needs — floor ask, 24h average, active epoch and
-// the listed count — for the epoch post and the weekly digest. Listing/trade
-// events are deliberately NOT derived from this feed: the competitor's Seaport
-// orders are theirs to post, and trades (Sold) and floor moves are no longer
+// header context — floor ask, 24h average, active epoch, listed count and the
+// Seaport lots (market.listings) — for the Telegram bot's floor/epoch answers
+// and new-listing alerts. Trades (Sold) and floor-move events are no longer
 // posted at all (see docs/twitter-content-plan.md "Removed post types").
 //
-// Our OWN marketplace listings (VexyMarketplace, the 1% seller fee) are read
-// on-chain in bot/read-own-listings.mjs, now by the Telegram bot (bot/tg-run.mjs)
-// rather than @sxsiant. An optional source supplies the closed-epoch emission
-// for the epoch post only (see fetchEmission).
+// Our OWN VexyMarketplace listings (the 1% seller fee) are read on-chain in
+// bot/read-own-listings.mjs. An optional source supplies the closed-epoch
+// emission for the epoch post only (see fetchEmission).
 
 import { fetchSeaportMarket } from '../site/seaport-feed.mjs';
 

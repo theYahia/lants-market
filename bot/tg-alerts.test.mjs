@@ -75,6 +75,46 @@ test('a non-floor new listing is not flagged as the floor', () => {
   assert.equal(alerts[0].isFloor, false);
 });
 
+test('a new Seaport feed listing alerts too', () => {
+  const state = freshState({ listingsSeen: [1], lastEpoch: 28, listingsBaselineDone: true });
+  const { alerts } = computeAlerts({
+    state,
+    market: {
+      floorAsk: 0.11,
+      epoch: 28,
+      listings: [{ id: 9, amount: 50, perAntUsd: 0.13, usd: 6.5, lockDays: 7 }],
+    },
+    own: [lot(1, 0.12)],
+  });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].type, 'listing');
+  assert.equal(alerts[0].lot.id, 9);
+  assert.equal(alerts[0].isFloor, false);
+});
+
+test('Seaport listings alert even when the own read is unavailable', () => {
+  const state = freshState({ listingsSeen: [], lastEpoch: 28, listingsBaselineDone: true });
+  const { alerts } = computeAlerts({
+    state,
+    market: { floorAsk: 0.11, epoch: 28, listings: [{ id: 9, amount: 50, perAntUsd: 0.13, usd: 6.5, lockDays: null }] },
+    own: null,
+  });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].lot.id, 9);
+});
+
+test('a listing in both sources alerts only once', () => {
+  const state = freshState({ listingsSeen: [], lastEpoch: 28, listingsBaselineDone: true });
+  const dupe = lot(7, 0.12);
+  const { alerts } = computeAlerts({
+    state,
+    market: { floorAsk: 0.12, epoch: 28, listings: [dupe] },
+    own: [dupe],
+  });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].lot.id, 7);
+});
+
 test('a failed own-listing read leaves listingsSeen untouched and alerts nothing', () => {
   const state = freshState({ listingsSeen: [1] });
   const { alerts, state: next } = computeAlerts({ state, market: { floorAsk: 0.11, epoch: 28 }, own: null });

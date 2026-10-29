@@ -1,7 +1,8 @@
-// Pure alert logic for @lantsalerts_bot: floor threshold (hysteresis), new own
-// listing (dedup by token id), epoch end (dedup by lastEpoch). No IO: takes the
-// persisted state plus the current readers and returns the alerts to deliver and
-// the next state to persist. The input state is never mutated.
+// Pure alert logic for @lantsalerts_bot: floor threshold (one-shot), new
+// listing (dedup by token id; our VexyMarketplace plus the competitor Seaport
+// feed), epoch end (dedup by lastEpoch). No IO: takes the persisted state plus
+// the current readers and returns the alerts to deliver and the next state to
+// persist. The input state is never mutated.
 
 import { markListingsSeen, advanceEpoch } from './tg-state.mjs';
 
@@ -39,19 +40,28 @@ export function computeAlerts({ state, market, own }) {
   const next = cloneState(state);
   const alerts = [];
 
-  // 1) New own listings (broadcast). The first successful read is a silent
-  // baseline: record what exists now, alert on nothing. Every later read alerts
-  // on ids that are new since then. Tracking the baseline with an explicit flag
-  // means the very first listing after an empty baseline still alerts (an empty
-  // listingsSeen alone is not treated as a cold start).
-  if (own !== null) {
+  // 1) New listings (broadcast). Two sources, deduped by token id: our own
+  // VexyMarketplace listings (own) and the competitor Seaport feed
+  // (market.listings). Both link to our position page, which can fill either
+  // order. The first successful own-listing read is a silent baseline; every
+  // later read alerts on ids that are new since then (an empty listingsSeen is
+  // not a cold start, so the first listing after an empty baseline alerts).
+  const seaport = market && Array.isArray(market.listings) ? market.listings : null;
+  if (own !== null || seaport !== null) {
+    const merged = [];
+    const seenId = new Set();
+    for (const l of [...(own || []), ...(seaport || [])]) {
+      if (!l || !Number.isInteger(l.id) || seenId.has(l.id)) continue;
+      seenId.add(l.id);
+      merged.push(l);
+    }
     const coldStart = next.listingsBaselineDone !== true;
-    const freshIds = markListingsSeen(next, own.map((l) => l.id));
-    next.listingsBaselineDone = true;
+    const freshIds = markListingsSeen(next, merged.map((l) => l.id));
+    if (own !== null) next.listingsBaselineDone = true;
     if (!coldStart) {
-      const floor = minPrice(own);
+      const floor = minPrice(merged);
       const fresh = new Set(freshIds);
-      for (const lot of own) {
+      for (const lot of merged) {
         if (!fresh.has(lot.id)) continue;
         const price = approxPrice(lot.perAntUsd);
         const isFloor = price !== null && price === floor;

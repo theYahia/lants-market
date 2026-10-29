@@ -1,8 +1,7 @@
 // Read the marketplace's OWN listings — the positions listed through our
-// VexyMarketplace interface (the 1% seller fee). This is the only listing
-// source the bot posts: the competitor's Seaport orders on antseedmarkets.com
-// are deliberately skipped (they are the competitor's to post). See
-// docs/twitter-content-plan.md "Removed post types".
+// VexyMarketplace interface (the 1% seller fee). The Telegram bot broadcasts
+// these new listings, alongside the competitor Seaport lots from the feed
+// (read-feed.mjs -> market.listings); both deep-link to our position page.
 //
 // readListings() is the canonical chain reader; this branch carries a
 // self-contained copy under bot/ (fetch-only, no viem) so the container needs
