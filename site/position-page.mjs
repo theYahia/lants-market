@@ -12,6 +12,7 @@ import { initCardActions } from './card-actions.mjs';
 import { SEAPORT_BUY_ENABLED, MARKET, SEL, encUint, decodeWords, wordToAddr } from './market-config.mjs';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const usdCompact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
 const amountFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
 function activePosition(snapshot, tokenId, curEpoch) {
@@ -26,9 +27,9 @@ function shortAddress(a) {
 /**
  * Build everything the page renders from plain data.
  *
- * @param {Object} input - { tokenId, snapshot, lots, sales, trades, minted, maxSupply }
+ * @param {Object} input - { tokenId, snapshot, lots, sales, trades, minted, maxSupply, referencePrice }
  */
-export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], trades = [], minted = null, maxSupply = null }) {
+export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], trades = [], minted = null, maxSupply = null, referencePrice = null }) {
   const curEpoch = Number(snapshot?.epoch || 0);
   const epoch = curEpoch + 1;
   const pos = activePosition(snapshot, tokenId, curEpoch);
@@ -102,8 +103,8 @@ export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], tr
     lots: enrichedLots,
     history,
     perAntUsd: best?.perAntUsd ?? null,
-    impliedMcUsd: best?.perAntUsd != null && minted != null ? best.perAntUsd * minted : null,
-    impliedFdvUsd: best?.perAntUsd != null && maxSupply != null ? best.perAntUsd * maxSupply : null,
+    impliedMcUsd: referencePrice != null && minted != null ? referencePrice * minted : null,
+    impliedFdvUsd: referencePrice != null && maxSupply != null ? referencePrice * maxSupply : null,
   };
 }
 
@@ -196,8 +197,8 @@ function renderPosition(panel, vm) {
   grid.appendChild(cell('Reward', vm.antsPerEpoch == null ? '—' : `≈${vm.antsPerEpoch.toFixed(2)} ANTS/epoch`));
   grid.appendChild(cell('Boost', vm.poolSharePct == null ? '—' : `${(vm.poolSharePct * 100).toFixed(2)}% of next-epoch weight`));
   grid.appendChild(cell('Price/ANTS', formatPerAnt(vm.perAntUsd)));
-  grid.appendChild(cell('Implied MC', vm.impliedMcUsd == null ? '—' : usd.format(vm.impliedMcUsd)));
-  grid.appendChild(cell('Implied FDV', vm.impliedFdvUsd == null ? '—' : usd.format(vm.impliedFdvUsd)));
+  grid.appendChild(cell('Implied MC', vm.impliedMcUsd == null ? '—' : usdCompact.format(vm.impliedMcUsd)));
+  grid.appendChild(cell('Implied FDV', vm.impliedFdvUsd == null ? '—' : usdCompact.format(vm.impliedFdvUsd)));
   panel.appendChild(grid);
 
   const lots = el('section', 'pp-section');
@@ -205,7 +206,7 @@ function renderPosition(panel, vm) {
   if (!vm.lots.length) {
     lots.appendChild(el('div', 'pp-empty', 'Not listed. Make an offer below.'));
   } else {
-    const grid2 = el('div', 'sf-grid');
+    const grid2 = el('div', 'sf-card-grid');
     for (const lot of vm.lots) {
       const lotEl = buildCard(lot, { seaportBuyEnabled: SEAPORT_BUY_ENABLED });
       grid2.appendChild(lotEl);
@@ -267,7 +268,11 @@ async function openPosition(tokenId) {
     return;
   }
   const ownItems = own.status === 'fulfilled' ? own.value : [];
-  const feedItems = feed.status === 'fulfilled' && feed.value.ok ? feed.value.items : [];
+  const feedOk = feed.status === 'fulfilled' && feed.value.ok;
+  const feedItems = feedOk ? feed.value.items : [];
+  const referencePrice = feedOk && Number.isFinite(feed.value.price?.avgPrice24h) && feed.value.price.avgPrice24h > 0
+    ? feed.value.price.avgPrice24h
+    : null;
   const names = poolNames.status === 'fulfilled' ? poolNames.value : {};
 
   const allLots = buildLots(ownItems, feedItems, snap, names);
@@ -279,6 +284,7 @@ async function openPosition(tokenId) {
     trades: trades.status === 'fulfilled' ? trades.value : [],
     minted: getMinted(),
     maxSupply: getMaxSupply(),
+    referencePrice,
   });
 
   if (myToken !== renderToken) return;

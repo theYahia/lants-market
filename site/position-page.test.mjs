@@ -62,6 +62,7 @@ test('view model joins position, lots, owner and implied valuation', () => {
     lots,
     minted: 1000,
     maxSupply: 10000,
+    referencePrice: 0.13,
   });
   assert.equal(vm.found, true);
   assert.equal(vm.provider, 'Apex');
@@ -70,10 +71,17 @@ test('view model joins position, lots, owner and implied valuation', () => {
   assert.equal(vm.owner, '0xAbCdEf0000000000000000000000000000000001');
   assert.equal(vm.lots.length, 2);
   assert.equal(vm.perAntUsd, 0.1); // cheapest lot
-  assert.equal(vm.impliedMcUsd, 100);
-  assert.equal(vm.impliedFdvUsd, 1000);
+  assert.equal(vm.impliedMcUsd, 130); // reference price x minted, not the ask
+  assert.equal(vm.impliedFdvUsd, 1300);
   assert.equal(vm.lockWeeks, 1); // epoch 30 - next epoch 29
   assert.equal(vm.unlock instanceof Date, true);
+});
+
+test('implied MC/FDV are null without a reference price even with lots', () => {
+  const vm = positionViewModel({ tokenId: 1, snapshot, lots, minted: 1000, maxSupply: 10000 });
+  assert.equal(vm.perAntUsd, 0.1);
+  assert.equal(vm.impliedMcUsd, null);
+  assert.equal(vm.impliedFdvUsd, null);
 });
 
 test('history merges our sales and feed trades, dedupes and sorts', () => {

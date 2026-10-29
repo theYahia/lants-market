@@ -132,6 +132,12 @@
     overflow-x: auto;
 }
 
+.sf-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+    gap: 14px;
+}
+
 .sf-table {
     width: 100%;
     min-width: 0;
@@ -431,7 +437,7 @@ a.sf-provider:hover { color: var(--accent); }
 
 .pp-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 10px;
 }
 
