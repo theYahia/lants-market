@@ -33,10 +33,12 @@ Anyone who sends `/start` gets personal alerts in DM. Commands:
 | `/setfloor <0.12>` | personal floor threshold (presets `$0.10` / `$0.12` / `$0.15` / off) |
 | `/top` | top models (gated off) |
 
-Personal alerts: the floor dropping below the subscriber's threshold (once per
-crossing, re-armed when it recovers) and epoch end (broadcast to subscribers).
-New-own-listing alerts are not wired on this branch yet: they need the on-chain
-VexyMarketplace reader, which this branch does not carry.
+Personal alerts: a new listing on our VexyMarketplace (broadcast, deduped by
+token id), the floor dropping below the subscriber's threshold (once per
+crossing, re-armed when it recovers), and epoch end (broadcast to subscribers).
+Own listings are read on-chain by the fetch-only reader in `bot/own-listings.mjs`
+(no viem, no node_modules); competitor Seaport orders from the feed are never
+broadcast.
 
 ## Run
 
@@ -107,3 +109,5 @@ restarts never repeat a message.
 | `tg-commands.mjs` / `tg-format.mjs` | pure command handlers + message texts |
 | `tg-alerts.mjs` | floor/epoch alert logic (pure) |
 | `tg-api.mjs` / `tg-state.mjs` | Bot API client + DM state helpers |
+| `own-listings.mjs` / `read-own-listings.mjs` | fetch-only on-chain VexyMarketplace reader (no viem) |
+| `market-config.mjs` / `market-stats.mjs` | ABI encoders and the BuyListing price helper for the reader |

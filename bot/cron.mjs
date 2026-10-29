@@ -15,7 +15,7 @@ import { checkRebates, loadLocalConfig, loadVerifiedConfig, OFFERS_URLS } from '
 import { loadState, saveState } from './state.mjs';
 import { sendMessage, editMessageText, pinMessage, sleep } from './telegram.mjs';
 import { welcomeText } from './welcome.mjs';
-import { pollTelegram } from './tg-poll.mjs';
+import { pollCommands, runDmAlerts } from './tg-poll.mjs';
 
 const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
 const REBATE_INTERVAL_MS = Number(process.env.REBATE_INTERVAL_MS || 6 * 60 * 60 * 1000);
@@ -113,9 +113,10 @@ async function tick(state) {
     }
   }
 
-  // 2. Telegram DM: commands + personal alerts (floor threshold, epoch end).
-  // Runs every tick, before the rebate throttle's early return below.
-  await pollTelegram({ state, dryRun: DRY_RUN, log });
+  // 2. Telegram DM alerts (floor threshold, new own listing, epoch end).
+  // Commands are answered instantly by the long-poll loop in main(); the tick
+  // only evaluates alerts. Runs before the rebate throttle's early return.
+  await runDmAlerts({ state, dryRun: DRY_RUN, log });
   if (!DRY_RUN) saveState(STATE_FILE, state);
 
   // 3. Rebate watch — throttled; only a successful run advances the timer.
@@ -205,6 +206,19 @@ async function ensureWelcomePin(state) {
   }
 }
 
+// Long-poll loop: answer DM commands instantly. Runs alongside the tick loop;
+// both share the in-memory state and persist after they change something. On a
+// transient getUpdates error it backs off briefly instead of spinning.
+function startDmCommandsLoop(state, shouldStop) {
+  (async () => {
+    while (!shouldStop()) {
+      const r = await pollCommands({ state, longPoll: true, log });
+      if (r.handled > 0) saveState(STATE_FILE, state);
+      if (!r.ok) await sleep(3000);
+    }
+  })().catch((e) => log('tg command loop crashed: ' + (e && e.message ? e.message : e)));
+}
+
 async function main() {
   const state = loadState(STATE_FILE);
   log(
@@ -214,7 +228,12 @@ async function main() {
 
   await tick(state);
   await ensureWelcomePin(state);
-  if (ONCE) return;
+  if (ONCE) {
+    // External-cron mode: one short command poll, then exit.
+    await pollCommands({ state, longPoll: false, dryRun: DRY_RUN, log });
+    if (!DRY_RUN) saveState(STATE_FILE, state);
+    return;
+  }
 
   startHealthServer();
 
@@ -224,6 +243,11 @@ async function main() {
   };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
+
+  // Instant replies: a dedicated long-poll loop answers DMs while the tick loop
+  // handles channel posts and personal alerts. Skipped in dry-run so a test run
+  // never consumes real updates.
+  if (!DRY_RUN) startDmCommandsLoop(state, () => stopping);
 
   while (!stopping) {
     await sleep(TICK_MS);

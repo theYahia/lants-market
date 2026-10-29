@@ -19,6 +19,7 @@ export function defaultState() {
     // Telegram DM layer (commands + personal alerts).
     offset: 0, // getUpdates offset
     subscribers: {}, // chat_id -> { subscribedAt, floorThreshold, floorArmedDown }
+    listingsSeen: [], // token ids already announced as new own listings
     lastEpoch: null // last epoch seen for the DM "epoch ended" alert
   };
 }
@@ -43,6 +44,7 @@ export function loadState(file) {
         parsed.subscribers && typeof parsed.subscribers === 'object' && !Array.isArray(parsed.subscribers)
           ? parsed.subscribers
           : {},
+      listingsSeen: Array.isArray(parsed.listingsSeen) ? parsed.listingsSeen : [],
       lastEpoch: Number.isInteger(parsed.lastEpoch) ? parsed.lastEpoch : base.lastEpoch,
       offset: Number.isInteger(parsed.offset) && parsed.offset >= 0 ? parsed.offset : base.offset
     };

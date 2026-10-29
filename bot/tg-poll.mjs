@@ -1,19 +1,24 @@
-// Telegram DM layer for the alerts bot. Each daemon tick it polls pending
-// updates, answers commands/buttons and delivers personal alerts (floor below
-// a subscriber's threshold, epoch end) to private chats. Channel posting stays
-// in cron.mjs; this module only talks to DMs.
+// Telegram DM layer for the alerts bot.
+//
+// Two responsibilities, deliberately split so the bot answers instantly:
+//   - pollCommands(): one getUpdates call. The daemon runs it in a continuous
+//     long-poll loop (timeout=25s) so DMs get an immediate reply.
+//   - runDmAlerts(): evaluates personal alerts (floor below a subscriber's
+//     threshold, epoch end) on the periodic tick.
 //
 // Market data comes from the fetch-only readers (read-feed, read-antseedstats).
-// Own-VexyMarketplace listing alerts are intentionally not wired here yet: that
-// needs the on-chain reader, which this channel branch does not carry.
+// Own VexyMarketplace listings are read on-chain (bot/read-own-listings.mjs,
+// fetch-only, no viem) and broadcast to subscribers; competitor Seaport orders
+// from the feed are not broadcast.
 
 import { readFeed } from './read-feed.mjs';
 import { readAntseedStats } from './read-antseedstats.mjs';
+import { readOwnListings } from './read-own-listings.mjs';
 import { getUpdates, sendMessage, answerCallbackQuery } from './tg-api.mjs';
 import { parseCommand, handleCommand, handleCallback } from './tg-commands.mjs';
 import { computeAlerts } from './tg-alerts.mjs';
 import { upsertSubscriber } from './tg-state.mjs';
-import { helpText, floorAlertText, epochEndedAlertText } from './tg-format.mjs';
+import { helpText, floorAlertText, epochEndedAlertText, listingAlertReply } from './tg-format.mjs';
 
 function isPrivate(chat) {
   return !chat || !chat.type || chat.type === 'private';
@@ -100,6 +105,14 @@ async function deliverAlerts(token, state, alerts, epochData, log) {
       }
       continue;
     }
+    if (a.type === 'listing') {
+      const { text, replyMarkup } = listingAlertReply(a.lot, a.isFloor);
+      for (const chatId of subscriberIds) {
+        const r = await sendMessage({ token, chatId, text, replyMarkup });
+        if (!r.ok) log(`tg: listing -> ${chatId} failed: ${r.reason}`);
+      }
+      continue;
+    }
     const text = epochEndedAlertText(a.closedEpoch, epochData.restakeBonusPct);
     for (const chatId of subscriberIds) {
       const r = await sendMessage({ token, chatId, text });
@@ -109,52 +122,94 @@ async function deliverAlerts(token, state, alerts, epochData, log) {
 }
 
 /**
- * One DM poll. Mutates `state` (offset, subscribers, floor arming, lastEpoch).
- * Never throws: a failed tick is logged and the daemon keeps going.
+ * One getUpdates call + command replies. Long-poll when `longPoll` is set so a
+ * command is answered immediately. Returns { ok, handled } where handled is the
+ * number of updates dispatched (the caller persists state when > 0).
  */
-export async function pollTelegram({ state, dryRun = false, log = () => {} } = {}) {
+export async function pollCommands({ state, longPoll = false, dryRun = false, log = () => {} } = {}) {
   const token = process.env.TG_BOT_TOKEN || '';
   if (!token) {
-    log('tg: TG_BOT_TOKEN not set; DM poll skipped');
-    return;
+    log('tg: TG_BOT_TOKEN not set; commands disabled');
+    return { ok: false, handled: 0 };
   }
   try {
-    const poll = await getUpdates({ token, offset: state.offset || 0 });
+    const poll = await getUpdates({
+      token,
+      offset: state.offset || 0,
+      timeout: longPoll ? 25 : 0,
+      timeoutMs: longPoll ? 40000 : 30000,
+    });
     if (!poll.ok) {
       log(`tg: getUpdates failed: ${poll.reason}${poll.status ? ` (HTTP ${poll.status})` : ''}`);
-      return;
+      return { ok: false, handled: 0 };
     }
     const updates = poll.updates;
     for (const u of updates) {
       if (Number.isInteger(u.update_id)) state.offset = Math.max(state.offset || 0, u.update_id + 1);
     }
+    if (updates.length === 0) return { ok: true, handled: 0 };
 
     const { market, epochData } = await readContext(log);
     const outbox = [];
     dispatch(updates, state, { market, epochData }, outbox);
 
-    const { alerts, state: next } = computeAlerts({ state, market, own: null });
-    Object.assign(state, next);
-
     if (dryRun) {
-      log(`tg dry-run: ${updates.length} update(s), ${outbox.length} reply(ies), ${alerts.length} alert(s)`);
+      log(`tg dry-run: ${updates.length} update(s), ${outbox.length} reply(ies)`);
       for (const item of outbox) {
         log(item.kind === 'message'
           ? `tg reply -> ${item.chatId}: ${item.text}`
           : `tg callback-answer -> ${item.callbackQueryId}: ${item.text ?? '(no text)'}`);
       }
+      return { ok: true, handled: updates.length };
+    }
+
+    await deliverOutbox(token, outbox, log);
+    log(`tg: ${updates.length} update(s), ${outbox.length} reply(ies)`);
+    return { ok: true, handled: updates.length };
+  } catch (e) {
+    log(`tg: pollCommands failed: ${e && e.message ? e.message : e}`);
+    return { ok: false, handled: 0 };
+  }
+}
+
+/** Evaluate personal alerts (floor threshold, epoch end) once. Mutates state. */
+export async function runDmAlerts({ state, dryRun = false, log = () => {} } = {}) {
+  const token = process.env.TG_BOT_TOKEN || '';
+  if (!token) {
+    log('tg: TG_BOT_TOKEN not set; alerts disabled');
+    return;
+  }
+  try {
+    const { market, epochData } = await readContext(log);
+    const ownRes = await readOwnListings();
+    if (!ownRes.ok) log(`tg: own listings unavailable (${ownRes.reason}); listing alerts skipped`);
+    const own = ownRes.ok ? ownRes.listings : null;
+    const { alerts, state: next } = computeAlerts({ state, market, own });
+    Object.assign(state, next);
+
+    if (dryRun) {
+      log(`tg dry-run: ${alerts.length} alert(s)`);
       for (const a of alerts) {
         log(a.type === 'floor' ? `tg alert floor -> ${a.chatId}` : `tg alert ${a.type} -> subscribers`);
       }
       return;
     }
 
-    await deliverOutbox(token, outbox, log);
     await deliverAlerts(token, state, alerts, epochData, log);
-    if (updates.length || alerts.length) {
-      log(`tg: ${updates.length} update(s), ${alerts.length} alert(s), ${Object.keys(state.subscribers || {}).length} subscriber(s)`);
+    if (alerts.length) {
+      log(`tg: ${alerts.length} alert(s), ${Object.keys(state.subscribers || {}).length} subscriber(s)`);
     }
   } catch (e) {
-    log(`tg: poll failed: ${e && e.message ? e.message : e}`);
+    log(`tg: runDmAlerts failed: ${e && e.message ? e.message : e}`);
   }
+}
+
+/** One-shot: short poll for commands, then evaluate alerts (used by --once and tests). */
+export async function pollTelegram({ state, dryRun = false, log = () => {} } = {}) {
+  if (!process.env.TG_BOT_TOKEN) {
+    log('tg: TG_BOT_TOKEN not set; DM poll skipped');
+    return;
+  }
+  await pollCommands({ state, longPoll: false, dryRun, log });
+  await runDmAlerts({ state, dryRun, log });
 }
