@@ -30,6 +30,10 @@ const SELECTORS = {
 // BuyListing(uint256 indexed listingId, address indexed nftCollection, uint256 indexed nftId, address buyer, address currency, uint256 price, uint256 fee)
 const BUY_LISTING_TOPIC0 = '0x4df3ab58a4d7c1b893e008bf1c2ae97dc5350248466a12507651a1ae285f650c';
 
+// Cap per RPC request so a hung public endpoint degrades to "try the next one"
+// instead of blocking the tick (and, transitively, the DM command loop).
+const RPC_TIMEOUT_MS = 20000;
+
 let minted = null;
 let maxSupply = null;
 
@@ -78,6 +82,8 @@ export async function ethCallTo(to, data, fetchImpl = fetch) {
     'https://mainnet.base.org',
   ];
   for (const rpc of READ_RPCS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
       const response = await fetchImpl(rpc, {
         method: 'POST',
@@ -88,12 +94,15 @@ export async function ethCallTo(to, data, fetchImpl = fetch) {
           method: 'eth_call',
           params: [{ to, data }, 'latest'],
         }),
+        signal: controller.signal,
       });
       if (!response.ok) continue;
       const json = await response.json();
       if (typeof json.result === 'string') return json.result;
     } catch (e) {
       // try next RPC
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw new Error('all public RPCs failed');
@@ -104,30 +113,42 @@ async function ethCall(data, fetchImpl) {
 }
 
 async function fetchLatestBlock(rpc, fetchImpl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
   try {
     const response = await fetchImpl(rpc, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+      signal: controller.signal,
     });
     if (!response.ok) return null;
     const json = await response.json();
     return typeof json.result === 'string' ? BigInt(json.result) : null;
   } catch (e) {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 async function ethGetLogs(rpc, params, fetchImpl) {
-  const response = await fetchImpl(rpc, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }),
-  });
-  if (!response.ok) throw new Error('bad status ' + response.status);
-  const json = await response.json();
-  if (json.error) throw new Error(json.error.message);
-  return json.result;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(rpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [params] }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error('bad status ' + response.status);
+    const json = await response.json();
+    if (json.error) throw new Error(json.error.message);
+    return json.result;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Fetch the actual paid prices of sold lots from BuyListing logs over a bounded

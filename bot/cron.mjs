@@ -20,6 +20,10 @@ import { pollCommands, runDmAlerts } from './tg-poll.mjs';
 const TICK_MS = Number(process.env.TICK_MS || 10 * 60 * 1000);
 const REBATE_INTERVAL_MS = Number(process.env.REBATE_INTERVAL_MS || 6 * 60 * 60 * 1000);
 const HEALTH_PORT = Number(process.env.HEALTH_PORT || 0);
+// Wall-clock cap for every RPC / JSON fetch the tick performs. Without it a
+// hung public RPC blocks the tick (and, before the fix, the very first command
+// reply) indefinitely; with it the tick degrades to a logged failure instead.
+const RPC_TIMEOUT_MS = 20000;
 const RPC_URLS = (process.env.RPC_URLS || 'https://mainnet.base.org,https://base-mainnet.public.blastapi.io')
   .split(',')
   .map((s) => s.trim())
@@ -41,11 +45,14 @@ function log(line) {
 async function rpc(method, params) {
   let last = new Error('rpc: no endpoint');
   for (const url of RPC_URLS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: controller.signal
       });
       if (!res.ok) {
         last = new Error('rpc HTTP ' + res.status);
@@ -56,6 +63,8 @@ async function rpc(method, params) {
       return j.result;
     } catch (e) {
       last = e;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw last;
@@ -64,12 +73,16 @@ async function rpc(method, params) {
 async function fetchJson(urls) {
   let last = new Error('fetchJson: no urls');
   for (const url of urls) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
       if (res.ok) return await res.json();
       last = new Error('HTTP ' + res.status + ' for ' + url);
     } catch (e) {
       last = e;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw last;
@@ -210,6 +223,7 @@ async function ensureWelcomePin(state) {
 // both share the in-memory state and persist after they change something. On a
 // transient getUpdates error it backs off briefly instead of spinning.
 function startDmCommandsLoop(state, shouldStop) {
+  log('tg: command long-poll loop started');
   (async () => {
     while (!shouldStop()) {
       const r = await pollCommands({ state, longPoll: true, log });
@@ -226,15 +240,6 @@ async function main() {
       `rpc=${RPC_URLS.join('|')})`
   );
 
-  await tick(state);
-  await ensureWelcomePin(state);
-  if (ONCE) {
-    // External-cron mode: one short command poll, then exit.
-    await pollCommands({ state, longPoll: false, dryRun: DRY_RUN, log });
-    if (!DRY_RUN) saveState(STATE_FILE, state);
-    return;
-  }
-
   startHealthServer();
 
   let stopping = false;
@@ -244,10 +249,21 @@ async function main() {
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
 
-  // Instant replies: a dedicated long-poll loop answers DMs while the tick loop
-  // handles channel posts and personal alerts. Skipped in dry-run so a test run
-  // never consumes real updates.
-  if (!DRY_RUN) startDmCommandsLoop(state, () => stopping);
+  // Instant replies: start the long-poll loop BEFORE the first tick, so a
+  // command is answered immediately even while the tick is still reading the
+  // feed / RPC (which can take seconds). Skipped in --once (one explicit poll
+  // below) and --dry-run (never consumes real updates).
+  if (!ONCE && !DRY_RUN) startDmCommandsLoop(state, () => stopping);
+
+  await tick(state);
+  await ensureWelcomePin(state);
+
+  if (ONCE) {
+    // External-cron mode: one short command poll, then exit.
+    await pollCommands({ state, longPoll: false, dryRun: DRY_RUN, log });
+    if (!DRY_RUN) saveState(STATE_FILE, state);
+    return;
+  }
 
   while (!stopping) {
     await sleep(TICK_MS);
