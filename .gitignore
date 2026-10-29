@@ -19,6 +19,8 @@ __pycache__/
 scripts/site/*.png
 # twitter bot runtime state (persisted in CI via Actions cache)
 bot/state.json
+# telegram bot runtime state (persisted in CI via Actions cache)
+bot/tg-state.json
 # rotated refresh token handed to the workflow via `gh secret set`
 bot/.rotated-token
 # temporary mint helpers (run once, then deleted)

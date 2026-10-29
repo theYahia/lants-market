@@ -1,0 +1,70 @@
+name: telegram-bot
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Poll and print replies/alerts without sending or writing state'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: telegram-bot
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore telegram state
+        id: state-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: bot/tg-state.json
+          key: telegram-bot-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            telegram-bot-state-${{ github.ref_name }}-
+
+      - name: Run telegram bot
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node bot/tg-run.mjs 2>&1 | tee tg-run.log
+
+      - name: Save telegram state
+        if: always() && hashFiles('bot/tg-state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: bot/tg-state.json
+          key: telegram-bot-state-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "Telegram bot run finished with status ${{ job.status }}."
+            echo ""
+            echo "dry_run=${{ inputs.dry_run }}"
+            echo '```'
+            cat tg-run.log 2>/dev/null || echo "(no tg-run.log)"
+            echo '```'
+            echo ""
+            if [ -f bot/tg-state.json ]; then
+              echo "tg-state.json written ($(wc -c < bot/tg-state.json) bytes)"
+            else
+              echo "tg-state.json NOT written"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
