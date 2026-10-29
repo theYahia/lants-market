@@ -179,10 +179,17 @@ export function diffAntseedStats(prev, curr, opts = {}) {
     requests24h: curr.requests24h,
   };
 
+  // All-time high of settled7d posts regardless of ±5%. When a record fires it
+  // already announces the new value, so the plain 7d settled post is skipped in
+  // the same run (never post the same number twice).
+  const max7d = prev.max7d ?? curr.settled7d;
+  const record7dDue = curr.settled7d > max7d;
+
   for (const [field, label, settlesField, sellersField, buyersField] of [
     ['settled7d', '7d', 'settles7d', 'sellers7d', 'buyers7d'],
     ['settled30d', '30d', 'settles30d', 'sellers30d', 'buyers30d'],
   ]) {
+    if (field === 'settled7d' && record7dDue) continue;
     if (!changedBy(posted[field], curr[field])) continue;
     events.push({
       type: 'settled',
@@ -253,10 +260,9 @@ export function diffAntseedStats(prev, curr, opts = {}) {
     }
   }
 
-  // All-time high of settled7d posts regardless of ±5%. Rounded to $100 for a
+  // All-time high of settled7d (see record7dDue above). Rounded to $100 for a
   // stable dedup key across runs.
-  const max7d = prev.max7d ?? curr.settled7d;
-  if (curr.settled7d > max7d) {
+  if (record7dDue) {
     events.push({
       type: 'record7d',
       field: 'max7d',

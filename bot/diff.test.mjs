@@ -290,6 +290,29 @@ test('diffAntseedStats: a new settled7d high posts a record regardless of ±5%',
   assert.equal(events.filter((e) => e.type === 'settled').length, 0);
 });
 
+test('diffAntseedStats: a new high suppresses the plain 7d settled post', () => {
+  const prev = {
+    settled7d: 12000,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+    max7d: 12000,
+  };
+  const curr = {
+    settled7d: 13772,
+    settles7d: 29664,
+    sellers7d: 72,
+    buyers7d: 307,
+    settled30d: 30000,
+    stakedAnts: 1500000,
+    stakedPct: 73,
+    burns: [],
+  };
+  const events = diffAntseedStats(prev, curr);
+  assert.ok(events.find((e) => e.type === 'record7d'));
+  assert.equal(events.filter((e) => e.type === 'settled').length, 0);
+});
+
 test('diffAntseedStats: no record when the high equals the stored max7d', () => {
   const prev = {
     settled7d: 12000,
