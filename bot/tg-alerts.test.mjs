@@ -1,4 +1,4 @@
-// bot/tg-alerts.test.mjs - pure alert logic (floor hysteresis, listing dedup,
+// bot/tg-alerts.test.mjs - pure alert logic (floor one-shot, listing dedup,
 // epoch dedup). Verifies the input state is never mutated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,11 +22,29 @@ test('cold start records own listings and epoch silently', () => {
   });
   assert.deepEqual(alerts, []);
   assert.deepEqual(next.listingsSeen, [1, 2]);
+  assert.equal(next.listingsBaselineDone, true);
   assert.equal(next.lastEpoch, 28);
 });
 
+test('the first listing after an empty baseline still alerts', () => {
+  // A completed baseline with zero listings leaves listingsSeen empty; the next
+  // listing is genuinely new and must alert (empty listingsSeen is not a cold
+  // start once the baseline has run).
+  const state = freshState({ listingsSeen: [], listingsBaselineDone: true });
+  const { alerts, state: next } = computeAlerts({
+    state,
+    market: { floorAsk: 0.11, epoch: 28 },
+    own: [lot(5, 0.11)],
+  });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].type, 'listing');
+  assert.equal(alerts[0].lot.id, 5);
+  assert.equal(alerts[0].isFloor, true);
+  assert.deepEqual(next.listingsSeen, [5]);
+});
+
 test('new own listings alert once and dedup by token id', () => {
-  const state = freshState({ listingsSeen: [1], lastEpoch: 28 });
+  const state = freshState({ listingsSeen: [1], lastEpoch: 28, listingsBaselineDone: true });
   const first = computeAlerts({
     state,
     market: { floorAsk: 0.11, epoch: 28 },
@@ -47,7 +65,7 @@ test('new own listings alert once and dedup by token id', () => {
 });
 
 test('a non-floor new listing is not flagged as the floor', () => {
-  const state = freshState({ listingsSeen: [1], lastEpoch: 28 });
+  const state = freshState({ listingsSeen: [1], lastEpoch: 28, listingsBaselineDone: true });
   const { alerts } = computeAlerts({
     state,
     market: { floorAsk: 0.14, epoch: 28 },

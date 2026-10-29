@@ -13,6 +13,7 @@ export const EMPTY_TG_STATE = {
   subscribers: {},
   listingsSeen: [],
   lastEpoch: null,
+  listingsBaselineDone: false,
 };
 
 function normalizeSubscriber(sub) {
@@ -39,6 +40,7 @@ export function normalizeTgState(raw) {
   if (raw && Array.isArray(raw.listingsSeen)) {
     out.listingsSeen = raw.listingsSeen.filter((v) => Number.isInteger(v)).slice(-MAX_LISTINGS_SEEN);
   }
+  out.listingsBaselineDone = (raw && raw.listingsBaselineDone === true) || out.listingsSeen.length > 0;
   if (raw && Number.isInteger(raw.lastEpoch) && raw.lastEpoch >= 0) out.lastEpoch = raw.lastEpoch;
   return out;
 }

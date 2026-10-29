@@ -34,6 +34,7 @@ test('saveTgState writes JSON and loadTgState round-trips it', () => {
     subscribers: { '123': { subscribedAt: '2026-01-01T00:00:00.000Z', floorThreshold: 0.12, floorArmedDown: true } },
     listingsSeen: [1, 2],
     lastEpoch: 27,
+    listingsBaselineDone: true,
   };
   saveTgState(path, state);
   const raw = JSON.parse(readFileSync(path, 'utf8'));

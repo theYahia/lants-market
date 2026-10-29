@@ -20,7 +20,10 @@ export function defaultState() {
     offset: 0, // getUpdates offset
     subscribers: {}, // chat_id -> { subscribedAt, floorThreshold, floorArmedDown }
     listingsSeen: [], // token ids already announced as new own listings
-    lastEpoch: null // last epoch seen for the DM "epoch ended" alert
+    lastEpoch: null, // last epoch seen for the DM "epoch ended" alert
+    // Set after the first successful own-listing read. Until then that first
+    // read is a silent baseline; afterwards any new listing id alerts.
+    listingsBaselineDone: false
   };
 }
 
@@ -45,6 +48,11 @@ export function loadState(file) {
           ? parsed.subscribers
           : {},
       listingsSeen: Array.isArray(parsed.listingsSeen) ? parsed.listingsSeen : [],
+      // Migrate: a non-empty listingsSeen already implies a completed baseline
+      // read, so a new listing must alert on the next tick.
+      listingsBaselineDone:
+        parsed.listingsBaselineDone === true
+        || (Array.isArray(parsed.listingsSeen) && parsed.listingsSeen.length > 0),
       lastEpoch: Number.isInteger(parsed.lastEpoch) ? parsed.lastEpoch : base.lastEpoch,
       offset: Number.isInteger(parsed.offset) && parsed.offset >= 0 ? parsed.offset : base.offset
     };

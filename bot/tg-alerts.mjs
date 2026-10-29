@@ -29,6 +29,7 @@ function cloneState(state) {
     subscribers,
     listingsSeen: (state.listingsSeen || []).slice(),
     lastEpoch: state.lastEpoch,
+    listingsBaselineDone: state.listingsBaselineDone === true,
   };
 }
 
@@ -38,11 +39,15 @@ export function computeAlerts({ state, market, own }) {
   const next = cloneState(state);
   const alerts = [];
 
-  // 1) New own listings (broadcast). On a cold start (empty listingsSeen) the
-  // current set is recorded silently, mirroring the X-bot first-run baseline.
+  // 1) New own listings (broadcast). The first successful read is a silent
+  // baseline: record what exists now, alert on nothing. Every later read alerts
+  // on ids that are new since then. Tracking the baseline with an explicit flag
+  // means the very first listing after an empty baseline still alerts (an empty
+  // listingsSeen alone is not treated as a cold start).
   if (own !== null) {
-    const coldStart = next.listingsSeen.length === 0;
+    const coldStart = next.listingsBaselineDone !== true;
     const freshIds = markListingsSeen(next, own.map((l) => l.id));
+    next.listingsBaselineDone = true;
     if (!coldStart) {
       const floor = minPrice(own);
       const fresh = new Set(freshIds);
