@@ -1,16 +1,16 @@
-// site/theme.mjs - theme switcher: lANTS <-> Vexy FI.
+// site/theme.mjs - theme switcher: lANTS <-> ant.
 // Self-contained: reads/writes data-theme on <html> and persists the choice
 // in localStorage under "lants.theme". No network or init side effects.
 
 export const THEMES = {
   lants: { label: 'lANTS' },
-  vexy: { label: 'Vexy' },
+  ant: { label: 'ant' },
 };
 
 const STORAGE_KEY = 'lants.theme';
 
 export function resolveTheme(raw) {
-  return raw === 'vexy' ? 'vexy' : 'lants';
+  return raw === 'ant' ? 'ant' : 'lants';
 }
 
 function readSavedTheme() {

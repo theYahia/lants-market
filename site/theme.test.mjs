@@ -5,9 +5,9 @@ import { setupDom, teardown } from './dom-test-helper.mjs';
 import { THEMES, resolveTheme, applyTheme } from './theme.mjs';
 
 test('THEMES: exposes the two dark themes with labels', () => {
-  assert.deepEqual(Object.keys(THEMES).sort(), ['lants', 'vexy']);
+  assert.deepEqual(Object.keys(THEMES).sort(), ['ant', 'lants']);
   assert.equal(THEMES.lants.label, 'lANTS');
-  assert.equal(THEMES.vexy.label, 'Vexy');
+  assert.equal(THEMES.ant.label, 'ant');
 });
 
 test('resolveTheme: defaults to lants for missing input', () => {
@@ -23,16 +23,16 @@ test('resolveTheme: defaults to lants for garbage input', () => {
 });
 
 test('resolveTheme: maps exact names', () => {
-  assert.equal(resolveTheme('vexy'), 'vexy');
+  assert.equal(resolveTheme('ant'), 'ant');
   assert.equal(resolveTheme('lants'), 'lants');
 });
 
 test('applyTheme: sets data-theme and persists the choice', () => {
   const { document, window } = setupDom();
   try {
-    applyTheme('vexy');
-    assert.equal(document.documentElement.getAttribute('data-theme'), 'vexy');
-    assert.equal(window.localStorage.getItem('lants.theme'), 'vexy');
+    applyTheme('ant');
+    assert.equal(document.documentElement.getAttribute('data-theme'), 'ant');
+    assert.equal(window.localStorage.getItem('lants.theme'), 'ant');
 
     applyTheme('garbage');
     assert.equal(document.documentElement.getAttribute('data-theme'), 'lants');
