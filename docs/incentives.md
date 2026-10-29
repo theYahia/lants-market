@@ -7,6 +7,10 @@ sellers pay stakers for that weight, the way protocols pay veCRV / veAERO voters
 offers are still plain JSON with the payer paying themselves; rebate offers (below) run through the platform's
 shared claims contract.
 
+The tab is split by audience: **For stakers** (board + calculator), **For buyers** (buyer points and spend
+calculator), **For providers** (seller rewards and boost), then **Offers**. Each section reads the same
+snapshot, so the three sides of the AntSeed points ledger are visible in one place.
+
 ## The board
 
 Pools ranked by what each one paid its stakers in completed epochs since M001 (epoch 22):
@@ -58,10 +62,15 @@ The ▾ button in a row opens the seller's history from [antscan.co/api/sellers]
 
 The same panel shows the pool's buyer cashback. It also shows the purchase amount at which one buyer reaches the cap for the epoch: `0.05 × buyerEpochBudget(e) / (ANTS per $1)`.
 
-## Buyer ANTS per $1
+## For buyers: buyer ANTS per $1
 
-The column "Buyer ANTS per $1, epoch e so far" is:
+The **For buyers** table is the home of the buyer column that used to sit on the board. It shows
+"Buyer ANTS per $1, epoch e so far" and the spend in USD at which one buyer reaches the 5% cap. The rate is:
 `floor(buyerEpochBudget(e) × poolWeightAtEpoch(pool, e) × 1e6 / totalWeightedBuyerPointsByEpoch(e))`.
+
+The calculator below the table takes a pool and a spend (USD) and returns
+`buyerAntsForSpend = min(5% × buyerBudget, buyerBudget × spendMicro × poolWeight / totalWeightedBuyerPoints)`,
+the same number the protocol pays for that purchase this epoch, plus "5% cap reached at $X".
 
 This is how the protocol pays buyers:
 
@@ -76,6 +85,26 @@ The number falls during the epoch as sales add to the total. At the start of an 
 - `0`: there is no pool.
 
 Check: our buyer reward for epoch 23 was 3,487.06 ANTS, the same as this formula gives.
+
+## For providers: seller points and boost
+
+A provider (seller) earns the seller budget share of its pool's weighted seller points. For epoch `e`:
+
+```
+sellerReward(pool) = min(5% × sellerEpochBudget(e),
+                         sellerEpochBudget(e) × weightedPoolPointsByEpoch(e, pool)
+                           / totalWeightedPoolPointsByEpoch(e))
+```
+
+`weightedPoolPointsByEpoch(e, pool)` is the pool's recognized sales × pool weight — the same ledger stakers use.
+The 5% bound is `MAX_REWARD_SHARE_BPS` of the seller budget. While the current epoch has almost no seller points
+(`T(e) < 5% × T(e−1)`), the table shows the final previous epoch, and the header says so.
+
+**Boost** is the pool weight (`poolWeightAtEpoch(pool, N)`), the multiplier the protocol applies to points per $1
+for both the seller and its buyers. In human form it is `weight / 104` ANTS staked at max lock, the same number the
+board shows. A pool with no weight next epoch earns no seller points and gives its buyers no buyer points.
+
+The **For providers** section carries the "Post an offer on GitHub" action and the "Selling, but no pool" block.
 
 ## Selling, but no pool
 
@@ -101,7 +130,9 @@ w2     = w1 + r1 × 104
 X      = min(cap, sellerBudget × weekly × w2 / T)
 ```
 
-Here `T` is the network's total weighted seller points and `cap` is 5 % of the seller budget.
+Here `T = totalWeightedPoolPointsByEpoch(e)` is the network's total weighted **seller** points (the seller ledger,
+not the buyer one) and `cap` is 5 % of the seller budget. A snapshot without the seller ledger leaves the column
+empty instead of guessing.
 
 **What it assumes:** sales stay at the seller's weekly average, `T` does not change, and the first reward is restaked at max lock. Example: CatGPT ≈ 12,037 ANTS per epoch.
 
@@ -227,6 +258,11 @@ buyers (the biggest spenders first). Payouts always go to the buyer's address on
 "Spend with this seller (USD)" and shows "You get $Z back". The claim panel shows the campaign status
 (`awaiting launch` → `funded $X of $Y` → `awaiting finalize` → `claims open · claim by <date>` → `sweepable`)
 and the buttons.
+
+**$1 live test.** Campaign id 0 for Apex (pool 52894), epoch 28, cap $1: the campaign was funded on 15.10 and the
+full escrow cycle works. Epoch 28 closes 29.10 09:54 UTC; the payout tree is computed from that epoch's data
+(`node site/rebate-payout.mjs --epoch 28 --pool 52894`), finalize by 01.11, claims open for 14 days. The result is
+not published yet (no `rebates/28-52894.*`).
 
 ### Stake-gated discount, honest terms
 

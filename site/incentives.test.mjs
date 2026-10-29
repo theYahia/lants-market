@@ -223,4 +223,12 @@ test('poolModel: aggregates R/We/WN and derives B, S, k and est', () => {
   assert.equal(m.estForPool('1', 104), 1000);
 });
 
+test('incentives.mjs re-exports the points and audience helpers', () => {
+  for (const name of ['sellerPointsUsage', 'sellerRewardCell', 'buyerAntsForSpend', 'buyerCapSpend', 'poolBoost']) {
+    assert.equal(typeof inc[name], 'function', name);
+  }
+  assert.equal(typeof inc.buildBuyersSection, 'function');
+  assert.equal(typeof inc.buildProvidersSection, 'function');
+});
+
 console.log('incentives_ok=1');

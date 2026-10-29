@@ -1175,6 +1175,23 @@ body.view-position .market-strip,body.view-position .tabs,body.view-position .pa
   font-size:var(--fs-13);
   line-height:1.5;
 }
+/* Cards nested inside an audience section keep their layout but not a second frame. */
+.inc-section .inc-calc,
+.inc-section .inc-nopool{
+  margin-top:16px;
+  background:transparent;
+  border:0;
+  border-radius:0;
+  padding:0;
+}
+.inc-providers-section .inc-nopool{margin-top:20px;}
+.inc-provider-cta{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px 16px;
+  margin-top:14px;
+}
 
 .inc-board-table{
   table-layout:auto;

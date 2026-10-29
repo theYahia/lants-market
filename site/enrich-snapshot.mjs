@@ -238,17 +238,26 @@ async function main() {
       { address: USAGE_REWARDS_ADDRESS, abi: USAGE_ABI, functionName: 'buyerEpochBudget', args: [BigInt(h)] },
       { address: USAGE_REWARDS_ADDRESS, abi: USAGE_ABI, functionName: 'sellerEpochBudget', args: [BigInt(h)] },
       { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'totalWeightedBuyerPointsByEpoch', args: [BigInt(h)] },
+      { address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'totalWeightedPoolPointsByEpoch', args: [BigInt(h)] },
+      ...boardPools.map(a => ({ address: ACCOUNTING_ADDRESS, abi: ACCOUNTING_ABI, functionName: 'weightedPoolPointsByEpoch', args: [BigInt(h), BigInt(a)] })),
       ...boardPools.map(a => ({ address: POOLS_ADDRESS, abi: POOLS_ABI, functionName: 'poolWeightAtEpoch', args: [BigInt(a), BigInt(h)] }))
     ]
     const usageRes = await xmulticall(usageHeadContracts)
-    const buyerBudget = usageRes[0], sellerBudget = usageRes[1], totalPoints = usageRes[2]
-    if (!buyerBudget.ok || !sellerBudget.ok || !totalPoints.ok) {
+    const buyerBudget = usageRes[0], sellerBudget = usageRes[1], totalPoints = usageRes[2], totalPoolPoints = usageRes[3]
+    if (!buyerBudget.ok || !sellerBudget.ok || !totalPoints.ok || !totalPoolPoints.ok) {
       throw new Error('usage head failed for epoch ' + h)
     }
+    const weightedPoolPoints = {}
+    boardPools.forEach((a, idx) => {
+      const r = usageRes[4 + idx]
+      if (!r.ok) throw new Error('usage weightedPoolPoints failed for pool ' + a + ' epoch ' + h)
+      const w = String(r.value)
+      if (w !== '0') weightedPoolPoints[a] = w
+    })
     const poolWeights = {}
     let poolWeightErrors = 0
     boardPools.forEach((a, idx) => {
-      const r = usageRes[3 + idx]
+      const r = usageRes[4 + boardPools.length + idx]
       if (!r.ok) {
         poolWeightErrors++
         return
@@ -261,7 +270,9 @@ async function main() {
       buyerBudget: String(buyerBudget.value),
       sellerBudget: String(sellerBudget.value),
       totalWeightedBuyerPoints: String(totalPoints.value),
-      poolWeights
+      totalWeightedPoolPoints: String(totalPoolPoints.value),
+      poolWeights,
+      weightedPoolPoints
     }
   }
 

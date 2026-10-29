@@ -1,6 +1,7 @@
 // Incentives dashboard entry point: loads the snapshot/offers/names in parallel,
-// renders a skeleton while loading, then assembles hero, board, calculator, offers
-// and the "no pool" section. Re-exports the pure helpers the tests import.
+// renders a skeleton while loading, then assembles the network hero and three
+// audience sections (stakers, buyers, providers), followed by offers.
+// Re-exports the pure helpers the tests import.
 import { rewardMode } from './metrics.mjs';
 import { epochBoundary } from './epochs.mjs';
 import {
@@ -13,16 +14,20 @@ import {
 } from './incentives-data.mjs';
 import { buildBoard } from './incentives-board.mjs';
 import { buildCalculator } from './incentives-calc.mjs';
-import { buildNoPool } from './incentives-nopool.mjs';
+import { buildBuyersSection } from './incentives-buyers.mjs';
+import { buildProvidersSection } from './incentives-providers.mjs';
 import { buildOfferSection } from './incentives-offers.mjs';
 import { buildHero, buildMetrics, buildHeroActions, buildSection } from './incentives-hero.mjs';
 
 export { isValidOffer, offerLine, offerCard, buildOfferRows, buildOfferSection } from './incentives-offers.mjs';
 export { nextBudget, networkMetrics, formatCountdown, formatUtc, formatDate, cashbackUsage, cashbackCell, cashbackHead } from './incentives-data.mjs';
+export { sellerPointsUsage, sellerRewardCell, buyerAntsForSpend, buyerCapSpend, poolBoost, listPools, formatAntsWei } from './incentives-points.mjs';
 export { poolModel } from './incentives-pool-model.mjs';
-export { buildHero, buildMetrics, buildSection, buildHeroActions, infoIcon } from './incentives-hero.mjs';
+export { buildHero, buildMetrics, buildSection, buildHeroActions, buildPostOfferButton, infoIcon } from './incentives-hero.mjs';
 export { buildBoard } from './incentives-board.mjs';
 export { buildCalculator } from './incentives-calc.mjs';
+export { buildBuyersSection } from './incentives-buyers.mjs';
+export { buildProvidersSection } from './incentives-providers.mjs';
 export { buildNoPool } from './incentives-nopool.mjs';
 
 async function init() {
@@ -77,26 +82,31 @@ async function init() {
     hero.appendChild(metrics);
     hero.appendChild(buildHeroActions(N));
 
-    const board = buildBoard(snapshot, mode, offers, N, poolNames);
-    const boardSection = buildSection(
-      'Pool board',
+    // For stakers: the pool board plus the reward calculator.
+    const stakerBody = document.createElement('div');
+    stakerBody.className = 'inc-staker-body';
+    stakerBody.appendChild(buildBoard(snapshot, mode, offers, N, poolNames));
+    stakerBody.appendChild(buildCalculator(snapshot, mode, offers, N, poolNames));
+    const stakerSection = buildSection(
+      'For stakers',
       'Stake into a seller pool to earn ANTS next epoch; offer USDC to attract stakers to yours.',
-      board,
-      'inc-board-section'
+      stakerBody,
+      'inc-stakers-section'
     );
 
-    const calculator = buildCalculator(snapshot, mode, offers, N, poolNames);
+    // For buyers and providers: the rest of the points model, by audience.
+    const buyersSection = buildBuyersSection(snapshot, mode, poolNames);
+    const providersSection = buildProvidersSection(snapshot, mode, poolNames, offers, N);
+
+    // Offers stay last: rebate-claim.mjs mounts on the .inc-offers selector.
     const offerSection = buildOfferSection(offers, N, poolNames);
-    const nopoolDiv = buildNoPool(snapshot, poolNames);
 
     container.innerHTML = '';
     container.appendChild(hero);
-    container.appendChild(boardSection);
-    container.appendChild(calculator);
+    container.appendChild(stakerSection);
+    container.appendChild(buyersSection);
+    container.appendChild(providersSection);
     container.appendChild(offerSection);
-    if (nopoolDiv) {
-      container.appendChild(nopoolDiv);
-    }
   } catch (err) {
     console.error(err);
     container.innerHTML = '<p>Failed to load incentive data.</p>';

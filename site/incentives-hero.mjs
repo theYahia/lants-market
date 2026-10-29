@@ -91,7 +91,7 @@ export function buildSection(title, lead, body, className) {
   return section;
 }
 
-function buildPostOfferButton(displayEpoch) {
+export function buildPostOfferButton(displayEpoch) {
   const wrap = document.createElement('div');
   wrap.className = 'inc-post-offer-wrap';
 

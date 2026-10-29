@@ -15,13 +15,16 @@ export function buildNoPool(snapshot, poolNames) {
 
   const usage = snapshot.usageByEpoch?.[String(e)] || {};
   const sb = BigInt(usage.sellerBudget || '0');
-  const t = BigInt(usage.totalWeightedBuyerPoints || '0');
+  // The seller estimate divides by total weighted SELLER points; older snapshots
+  // only carry the buyer ledger, so the column stays empty there.
+  const hasSellerLedger = usage.totalWeightedPoolPoints !== undefined;
+  const t = hasSellerLedger ? BigInt(usage.totalWeightedPoolPoints || '0') : 0n;
   const cap = sb * BigInt(snapshot.maxRewardShareBps || 0) / 10000n;
   const w1 = (BigInt(snapshot.starterInitEndEpoch || 0) - BigInt(e + 1)) * 10n ** 18n;
   const WEEK = 604800n;
 
   const estimateForSeller = (s) => {
-    if (t === 0n) return null;
+    if (!hasSellerLedger || t === 0n) return null;
     const periodRaw = BigInt(s.lastSeenAt) - BigInt(s.firstSeenAt);
     const period = periodRaw < WEEK ? WEEK : periodRaw;
     const weekly = s.earned * WEEK / period;

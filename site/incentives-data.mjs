@@ -99,6 +99,23 @@ export function cashbackCell(snapshot, pool) {
   return { wei, text: (wei / 10n ** 18n).toLocaleString('en-US') };
 }
 
+// Spend in USD at which one buyer reaches MAX_REWARD_SHARE_BPS of the buyer budget.
+// null when the snapshot cannot price the pool (no ledger, no weight, no cap).
+export function buyerCapSpend(snapshot, pool) {
+  const cb = cashbackUsage(snapshot);
+  if (!cb) return null;
+  const u = cb.usage;
+  const t = BigInt(u.totalWeightedBuyerPoints || '0');
+  if (t === 0n) return null;
+  const budget = BigInt(u.buyerBudget || '0');
+  const w = BigInt((u.poolWeights || {})[pool] || '0');
+  const perDollar = budget * w * 1000000n / t;
+  if (perDollar === 0n) return null;
+  const capWei = budget * BigInt(snapshot.maxRewardShareBps ?? 0) / 10000n;
+  if (capWei === 0n) return null;
+  return Number((capWei + perDollar - 1n) / perDollar);
+}
+
 export function cashbackHead(snapshot) {
   const cb = cashbackUsage(snapshot);
   if (!cb) return { heading: 'Buyer ANTS per $1', tip: 'ANTS a buyer earns for each $1 spent with this seller this epoch. 0 = no pool: neither the seller nor its buyers earn ANTS.' };
@@ -116,15 +133,10 @@ export function sellerDetailText(snapshot, pool, offerText) {
   const cbUsage = cashbackUsage(snapshot);
   if (cbUsage && cbUsage.epoch === Number(snapshot.epoch) && cb.wei > 0n) {
     const cur = snapshot.usageByEpoch[String(Number(snapshot.epoch))];
-    const t = BigInt(cur.totalWeightedBuyerPoints || '0');
-    if (t > 0n) {
-      const w = BigInt((cur.poolWeights || {})[pool] || '0');
-      const wei = BigInt(cur.buyerBudget || '0') * w * 1000000n / t;
-      if (wei > 0n) {
-        const cap = BigInt(cur.buyerBudget || '0') * BigInt(snapshot.maxRewardShareBps ?? 0) / 10000n / 10n ** 18n;
-        const D = (cap * 10n ** 18n + wei - 1n) / wei;
-        detailText += ` · Cap of ${cap.toLocaleString('en-US')} ANTS reached at ≈ $${String(D)}`;
-      }
+    const cap = BigInt(cur.buyerBudget || '0') * BigInt(snapshot.maxRewardShareBps ?? 0) / 10000n / 10n ** 18n;
+    const D = buyerCapSpend(snapshot, pool);
+    if (D !== null) {
+      detailText += ` · Cap of ${cap.toLocaleString('en-US')} ANTS reached at ≈ $${String(D)}`;
     }
   }
   const offer = ` · Offer: ${offerText}`;

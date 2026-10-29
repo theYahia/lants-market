@@ -172,4 +172,79 @@ test('board Calculate action selects the pool in the calculator', () => {
   container.remove();
 });
 
+const ANTS = 10n ** 18n;
+const pointsSnap = {
+  epoch: '23',
+  maxRewardShareBps: '500',
+  positions: [
+    { agentId: '44694', weightsByEpoch: { '24': String(104n * ANTS) } },
+    { agentId: '52894', weightsByEpoch: { '24': '0' } },
+  ],
+  poolWeightByEpoch: {
+    44694: { '24': String(104n * ANTS) },
+    52894: { '24': '0' },
+  },
+  usageByEpoch: {
+    23: {
+      buyerBudget: String(1000n * ANTS),
+      sellerBudget: String(1000n * ANTS),
+      totalWeightedBuyerPoints: '1000000000',
+      totalWeightedPoolPoints: '10000',
+      poolWeights: { 44694: '1', 52894: '1' },
+      weightedPoolPoints: { 44694: '100', 52894: '0' },
+    },
+  },
+};
+
+test('buildBoard: staker board drops the buyer column', () => {
+  const board = inc.buildBoard(SNAPSHOT, { mode: 'live', epoch: '23' }, null, 24, {});
+  const heads = [...board.querySelectorAll('thead th')].map((th) => th.textContent);
+  assert.equal(heads.length, 4);
+  assert.ok(!heads.some((h) => /Buyer ANTS per \$1/.test(h)));
+  const firstRow = board.querySelector('tbody tr.board-row');
+  assert.equal(firstRow.children.length, 4);
+});
+
+test('buildBuyersSection: per-$1 table and spend calculator', () => {
+  const section = inc.buildBuyersSection(pointsSnap, { mode: 'live', epoch: '23' }, { 44694: 'Apex' });
+  assert.ok(section.classList.contains('inc-section'));
+  assert.equal(section.querySelector('.inc-section-title').textContent, 'For buyers');
+  const rows = [...section.querySelectorAll('tbody tr.buyer-row')];
+  assert.equal(rows.length, 2);
+  const apex = rows.find((r) => r.dataset.pool === '44694');
+  assert.match(apex.textContent, /Apex/);
+  assert.match(apex.textContent, /\$50/);
+  const calc = section.querySelector('.inc-buyer-calc');
+  assert.ok(calc);
+  assert.ok(calc.querySelector('select#inc-buyer-pool'));
+  const spend = calc.querySelector('input#inc-buyer-spend');
+  assert.equal(spend.value, '100');
+  assert.match(calc.querySelector('.inc-calc-result-value').textContent, /ANTS this epoch/);
+});
+
+test('buildBuyersSection: old snapshot renders em dashes, does not throw', () => {
+  const section = inc.buildBuyersSection(SNAPSHOT, { mode: 'live', epoch: '23' }, {});
+  assert.ok(section.querySelector('tbody tr.buyer-row'));
+  assert.equal(section.querySelector('.inc-calc-result-value').textContent, '\u2014');
+});
+
+test('buildProvidersSection: reward, boost, offer CTA and no-pool block', () => {
+  const section = inc.buildProvidersSection(pointsSnap, { mode: 'live', epoch: '23' }, { 44694: 'Apex' }, null, 24);
+  assert.equal(section.querySelector('.inc-section-title').textContent, 'For providers');
+  const rows = [...section.querySelectorAll('tbody tr.provider-row')];
+  assert.equal(rows.length, 2);
+  const apex = rows.find((r) => r.dataset.pool === '44694');
+  assert.match(apex.textContent, /Apex/);
+  assert.equal(apex.querySelectorAll('td')[1].textContent, '10'); // 1000 x 100 / 10000
+  assert.match(apex.querySelectorAll('td')[2].textContent, /ANTS staked/);
+  assert.ok(section.querySelector('a.inc-post-offer'));
+});
+
+test('buildProvidersSection: old snapshot renders em dashes, does not throw', () => {
+  const section = inc.buildProvidersSection(SNAPSHOT, { mode: 'live', epoch: '23' }, {}, null, 24);
+  const rows = [...section.querySelectorAll('tbody tr.provider-row')];
+  assert.ok(rows.length > 0);
+  assert.equal(rows[0].querySelectorAll('td')[1].textContent, '\u2014');
+});
+
 console.log('incentives_dom_ok=1');

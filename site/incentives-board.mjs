@@ -1,7 +1,7 @@
 // The pool board: seller rows with next-epoch staked ANTS, estimated reward,
 // cashback and the best offer. Returns a horizontally-scrollable wrapper around
 // the sortable table.
-import { nextBudget, cashbackCell, cashbackHead, sellerDetailText } from './incentives-data.mjs';
+import { nextBudget, sellerDetailText } from './incentives-data.mjs';
 import { poolModel } from './incentives-pool-model.mjs';
 import { isValidOffer } from './incentives-offers.mjs';
 import { validRebate, rebateLabel } from './rebate.mjs';
@@ -188,15 +188,6 @@ export function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
   for (const { pool, est } of rankedWithIndex) rows.push(buildRow(pool, est));
   for (const pool of unranked) rows.push(buildRow(pool, null));
 
-  for (const tr of rows) {
-    const cb = cashbackCell(snapshot, tr.dataset.pool);
-    const tdCb = document.createElement('td');
-    tdCb.className = 'inc-cb-col';
-    tdCb.textContent = cb.text;
-    tr.dataset.cashback = String(cb.wei);
-    tr.insertBefore(tdCb, tr.lastElementChild);
-  }
-
   const table = document.createElement('table');
   table.className = 'inc-board-table';
   const thead = document.createElement('thead');
@@ -216,13 +207,9 @@ export function buildBoard(snapshot, mode, offers, displayEpoch, poolNames) {
     'What this pool paid its stakers in the completed epochs shown, newest first.',
     'Best USDC offer per 1,000 ANTS for this pool in the next epoch.'
   ];
-  const cbHead = cashbackHead(snapshot);
-  headings.splice(3, 0, cbHead.heading);
-  tips.splice(3, 0, cbHead.tip);
-  const sortKeys = ['name', 'est', 'paid', 'cashback', 'offer'];
+  const sortKeys = ['name', 'est', 'paid', 'offer'];
   for (let i = 0; i < headings.length; i++) {
     const th = document.createElement('th');
-    if (i === 3) th.className = 'inc-cb-col';
     const button = document.createElement('button');
     button.className = 'inc-sort';
     button.textContent = headings[i];
