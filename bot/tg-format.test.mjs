@@ -49,7 +49,7 @@ test('welcomeReply greets and lists commands without a keyboard', () => {
 
 test('helpText lists every command', () => {
   const t = helpText();
-  for (const cmd of ['/start', '/floor', '/epoch', '/setfloor', '/top']) {
+  for (const cmd of ['/start', '/floor', '/epoch', '/setfloor']) {
     assert.ok(t.includes(cmd), `missing ${cmd}`);
   }
 });
@@ -83,13 +83,15 @@ test('epochReply returns unavailable without an epoch', () => {
   assert.equal(epochReply({}).text, unavailableText());
 });
 
-test('setfloorReply shows the current threshold and the presets', () => {
+test('setfloorReply instructs to type a price and has no keyboard', () => {
   const withValue = setfloorReply({ floorThreshold: 0.12 });
   assert.ok(withValue.text.includes('$0.12'));
-  assert.equal(withValue.replyMarkup.inline_keyboard[0].length, 3);
-  assert.deepEqual(withValue.replyMarkup.inline_keyboard[0][1], { text: '$0.12', callback_data: 'setfloor:0.12' });
+  assert.ok(withValue.text.includes('/setfloor <price>'));
+  assert.equal(withValue.replyMarkup, undefined);
   const without = setfloorReply({ floorThreshold: null });
   assert.ok(without.text.includes('No floor threshold'));
+  assert.ok(without.text.includes('/setfloor 0.12'));
+  assert.equal(without.replyMarkup, undefined);
 });
 
 test('floor set/off acknowledgements and the alert line', () => {

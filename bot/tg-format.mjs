@@ -69,10 +69,10 @@ export function helpText() {
     '/start - subscribe to alerts',
     '/floor - floor ask, 24h avg, listed count, epoch',
     '/epoch - current epoch and time left',
-    '/setfloor <0.12> - your personal floor threshold',
-    '/top - top models (soon)',
+    '/setfloor <price> - alert when the floor drops below your price',
+    '/setfloor off - turn the floor alert off',
     '',
-    'Alerts arrive in DM: new listing, floor below your threshold, epoch end.',
+    'Alerts arrive in DM: a new listing, the floor dropping below your price, an epoch ending.',
     SITE_URL,
   ].join('\n');
 }
@@ -116,18 +116,23 @@ export function epochReply(data) {
 
 // sub: { floorThreshold } of the subscriber.
 export function setfloorReply(sub) {
-  const current = sub && Number.isFinite(sub.floorThreshold)
-    ? `Your floor threshold: ${trimPrice(sub.floorThreshold)}`
-    : 'No floor threshold set.';
-  const replyMarkup = keyboard([
-    [
-      inlineButton('$0.10', 'setfloor:0.10'),
-      inlineButton('$0.12', 'setfloor:0.12'),
-      inlineButton('$0.15', 'setfloor:0.15'),
-    ],
-    [inlineButton('\u2716 Off', 'floor:off')],
-  ]);
-  return { text: current, replyMarkup };
+  if (sub && Number.isFinite(sub.floorThreshold)) {
+    return {
+      text: [
+        `Your floor alert: notified when the floor drops below ${trimPrice(sub.floorThreshold)}.`,
+        '',
+        'Change it with /setfloor <price>, e.g. /setfloor 0.10',
+        'Turn it off with /setfloor off',
+      ].join('\n'),
+    };
+  }
+  return {
+    text: [
+      'No floor threshold set.',
+      '',
+      'Send the price you want to be alerted at, e.g. /setfloor 0.12',
+    ].join('\n'),
+  };
 }
 
 export function floorSetAckText(threshold) {

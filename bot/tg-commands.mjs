@@ -45,14 +45,18 @@ export function handleCommand({ command, context }) {
 
   if (name === 'setfloor') {
     const sub = upsertSubscriber(context.state, context.chatId);
-    if (args !== '') {
-      const v = Number(args);
+    const arg = (args || '').trim().toLowerCase();
+    if (arg === 'off' || arg === 'none') {
+      disableFloorAlert(context.state, context.chatId);
+      return { reply: { text: floorOffAckText() } };
+    }
+    if (arg !== '') {
+      const v = Number(arg);
       if (Number.isFinite(v) && v > 0) {
         setFloorThreshold(context.state, context.chatId, v);
         return { reply: { text: floorSetAckText(v) } };
       }
-      const menu = setfloorReply(sub);
-      return { reply: { text: 'Invalid value. ' + menu.text, replyMarkup: menu.replyMarkup } };
+      return { reply: { text: 'Invalid price.\n\n' + setfloorReply(sub).text } };
     }
     return { reply: setfloorReply(sub) };
   }

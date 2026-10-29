@@ -60,12 +60,21 @@ test('handleCommand /setfloor with a value mutates state and confirms', () => {
   assert.equal(ctx.state.subscribers['42'].floorArmedDown, true);
 });
 
-test('handleCommand /setfloor without args shows the menu', () => {
+test('handleCommand /setfloor without args instructs to type a price', () => {
   const ctx = context();
   ctx.state.subscribers['42'] = { subscribedAt: 'x', floorThreshold: 0.15, floorArmedDown: false };
   const { reply } = handleCommand({ command: { name: 'setfloor', args: '' }, context: ctx });
   assert.ok(reply.text.includes('$0.15'));
-  assert.equal(reply.replyMarkup.inline_keyboard[0].length, 3);
+  assert.ok(reply.text.includes('/setfloor <price>'));
+  assert.equal(reply.replyMarkup, undefined);
+});
+
+test('handleCommand /setfloor off disables the alert', () => {
+  const ctx = context();
+  ctx.state.subscribers['42'] = { subscribedAt: 'x', floorThreshold: 0.15, floorArmedDown: false };
+  const { reply } = handleCommand({ command: { name: 'setfloor', args: 'off' }, context: ctx });
+  assert.equal(reply.text, floorOffAckText());
+  assert.equal(ctx.state.subscribers['42'].floorThreshold, null);
 });
 
 test('handleCommand /top is gated off', () => {
@@ -101,7 +110,7 @@ test('handleCallback cmd buttons answer without a toast and reply', () => {
   const epochCb = handleCallback({ data: 'cmd:epoch', context: context() });
   assert.ok(epochCb.reply.text.includes('Epoch 28'));
   const setfloorCb = handleCallback({ data: 'cmd:setfloor', context: context() });
-  assert.ok(setfloorCb.reply.replyMarkup.inline_keyboard.length > 0);
+  assert.ok(setfloorCb.reply.text.includes('No floor threshold'));
 });
 
 test('handleCallback unknown data acks a generic toast', () => {

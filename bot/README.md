@@ -29,7 +29,8 @@ Anyone who sends `/start` gets personal alerts in DM. Commands:
 | `/help` | command list |
 | `/floor` | floor ask, 24h avg, listed count, epoch |
 | `/epoch` | current epoch, time left, restake bonus |
-| `/setfloor <0.12>` | personal floor threshold (presets `$0.10` / `$0.12` / `$0.15` / off) |
+| `/setfloor <price>` | alert when the floor drops below your price |
+| `/setfloor off` | turn the floor alert off |
 | `/top` | top models (gated off) |
 
 Personal alerts: a new listing on our VexyMarketplace (broadcast, deduped by
