@@ -42,17 +42,13 @@ test('button and keyboard builders shape the Telegram payload', () => {
   assert.deepEqual(keyboard([[{ text: 'a', callback_data: 'b' }]]), { inline_keyboard: [[{ text: 'a', callback_data: 'b' }]] });
 });
 
-test('welcomeReply greets and offers the command keyboard', () => {
+test('welcomeReply greets and lists commands without a keyboard', () => {
   const { text, replyMarkup } = welcomeReply();
   assert.ok(text.includes('Welcome'));
   assert.ok(text.includes('/floor'));
   assert.ok(text.includes('/setfloor'));
-  assert.equal(replyMarkup.inline_keyboard.length, 2);
-  assert.deepEqual(replyMarkup.inline_keyboard[0], [
-    { text: 'Floor', callback_data: 'cmd:floor' },
-    { text: 'Epoch', callback_data: 'cmd:epoch' },
-  ]);
-  assert.deepEqual(replyMarkup.inline_keyboard[1][0], { text: 'Set alert', callback_data: 'cmd:setfloor' });
+  assert.ok(text.includes('Commands:'));
+  assert.equal(replyMarkup, undefined);
 });
 
 test('helpText lists every command', () => {

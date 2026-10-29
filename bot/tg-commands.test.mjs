@@ -31,10 +31,10 @@ test('parseCommand handles plain, args and botname suffix', () => {
   assert.deepEqual(parseCommand('/floor x y'), { name: 'floor', args: 'x y' });
 });
 
-test('handleCommand /start returns the welcome keyboard', () => {
+test('handleCommand /start returns the welcome text without a keyboard', () => {
   const { reply } = handleCommand({ command: { name: 'start', args: '' }, context: context() });
   assert.ok(reply.text.includes('Welcome'));
-  assert.ok(reply.replyMarkup.inline_keyboard.length > 0);
+  assert.equal(reply.replyMarkup, undefined);
 });
 
 test('handleCommand /floor renders the header measures', () => {

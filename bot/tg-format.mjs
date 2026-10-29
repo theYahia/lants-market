@@ -53,13 +53,16 @@ export function welcomeReply() {
     `${BULLET} the floor dropping below your threshold`,
     `${BULLET} an epoch ending (claim / restake)`,
     '',
-    `Commands: /floor ${MID} /position <id> ${MID} /epoch ${MID} /setfloor. More: /help.`,
+    'Commands:',
+    '/floor - floor ask and 24h average',
+    '/position <id> - position detail',
+    '/epoch - current epoch and time left',
+    '/setfloor - set your floor alert',
+    '/help - all commands',
+    '',
+    SITE_URL,
   ].join('\n');
-  const replyMarkup = keyboard([
-    [inlineButton('Floor', 'cmd:floor'), inlineButton('Epoch', 'cmd:epoch')],
-    [inlineButton('Set alert', 'cmd:setfloor')],
-  ]);
-  return { text, replyMarkup };
+  return { text };
 }
 
 export function helpText() {
