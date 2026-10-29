@@ -99,8 +99,13 @@ async function deliverAlerts(token, state, alerts, epochData, log) {
     if (a.type === 'floor') {
       const r = await sendMessage({ token, chatId: a.chatId, text: floorAlertText(a.floor, a.threshold) });
       if (!r.ok) {
+        // The one-shot threshold was cleared when the alert fired; put it back
+        // so the next tick retries, unless the user has since set a new price.
         const sub = state.subscribers[String(a.chatId)];
-        if (sub) sub.floorArmedDown = true;
+        if (sub && sub.floorThreshold === null) {
+          sub.floorThreshold = a.threshold;
+          sub.floorArmedDown = true;
+        }
         log(`tg: floor alert -> ${a.chatId} failed: ${r.reason}`);
       }
       continue;

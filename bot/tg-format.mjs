@@ -69,10 +69,9 @@ export function helpText() {
     '/start - subscribe to alerts',
     '/floor - floor ask, 24h avg, listed count, epoch',
     '/epoch - current epoch and time left',
-    '/setfloor <price> - alert when the floor drops below your price',
-    '/setfloor off - turn the floor alert off',
+    '/setfloor <price> - one alert when the floor drops below your price',
     '',
-    'Alerts arrive in DM: a new listing, the floor dropping below your price, an epoch ending.',
+    'Alerts arrive in DM: a new listing, the floor dropping below your price (once), an epoch ending.',
     SITE_URL,
   ].join('\n');
 }
@@ -119,10 +118,9 @@ export function setfloorReply(sub) {
   if (sub && Number.isFinite(sub.floorThreshold)) {
     return {
       text: [
-        `Your floor alert: notified when the floor drops below ${trimPrice(sub.floorThreshold)}.`,
+        `Your floor alert is armed: you'll be notified once when the floor drops below ${trimPrice(sub.floorThreshold)}.`,
         '',
         'Change it with /setfloor <price>, e.g. /setfloor 0.10',
-        'Turn it off with /setfloor off',
       ].join('\n'),
     };
   }
@@ -130,7 +128,7 @@ export function setfloorReply(sub) {
     text: [
       'No floor threshold set.',
       '',
-      'Send the price you want to be alerted at, e.g. /setfloor 0.12',
+      'Send the price you want to be alerted at (one alert), e.g. /setfloor 0.12',
     ].join('\n'),
   };
 }

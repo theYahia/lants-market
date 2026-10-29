@@ -29,13 +29,13 @@ Anyone who sends `/start` gets personal alerts in DM. Commands:
 | `/help` | command list |
 | `/floor` | floor ask, 24h avg, listed count, epoch |
 | `/epoch` | current epoch, time left, restake bonus |
-| `/setfloor <price>` | alert when the floor drops below your price |
-| `/setfloor off` | turn the floor alert off |
+| `/setfloor <price>` | one alert when the floor drops below your price (then it switches off) |
 | `/top` | top models (gated off) |
 
 Personal alerts: a new listing on our VexyMarketplace (broadcast, deduped by
-token id), the floor dropping below the subscriber's threshold (once per
-crossing, re-armed when it recovers), and epoch end (broadcast to subscribers).
+token id), the floor dropping below the subscriber's price (one-shot: it fires
+once, then switches itself off until a new price is set), and epoch end
+(broadcast to subscribers).
 Own listings are read on-chain by the fetch-only reader in `bot/own-listings.mjs`
 (no viem, no node_modules); competitor Seaport orders from the feed are never
 broadcast.

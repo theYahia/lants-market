@@ -45,11 +45,7 @@ export function handleCommand({ command, context }) {
 
   if (name === 'setfloor') {
     const sub = upsertSubscriber(context.state, context.chatId);
-    const arg = (args || '').trim().toLowerCase();
-    if (arg === 'off' || arg === 'none') {
-      disableFloorAlert(context.state, context.chatId);
-      return { reply: { text: floorOffAckText() } };
-    }
+    const arg = (args || '').trim();
     if (arg !== '') {
       const v = Number(arg);
       if (Number.isFinite(v) && v > 0) {

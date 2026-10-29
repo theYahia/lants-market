@@ -69,14 +69,6 @@ test('handleCommand /setfloor without args instructs to type a price', () => {
   assert.equal(reply.replyMarkup, undefined);
 });
 
-test('handleCommand /setfloor off disables the alert', () => {
-  const ctx = context();
-  ctx.state.subscribers['42'] = { subscribedAt: 'x', floorThreshold: 0.15, floorArmedDown: false };
-  const { reply } = handleCommand({ command: { name: 'setfloor', args: 'off' }, context: ctx });
-  assert.equal(reply.text, floorOffAckText());
-  assert.equal(ctx.state.subscribers['42'].floorThreshold, null);
-});
-
 test('handleCommand /top is gated off', () => {
   const { reply } = handleCommand({ command: { name: 'top', args: '' }, context: context() });
   assert.equal(reply.text, 'Top models are not available yet.');

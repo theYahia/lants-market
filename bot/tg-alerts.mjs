@@ -68,19 +68,20 @@ export function computeAlerts({ state, market, own }) {
     }
   }
 
-  // 3) Floor below a personal threshold (personal, hysteresis). A missing floor
-  // never fires an alert: no false "floor dropped" on a feed hiccup.
+  // 3) Floor below a personal threshold (one-shot). When the floor drops below
+  // the subscriber's price the alert fires once and the threshold is cleared
+  // (the alert switches itself off); the subscriber arms it again by setting a
+  // new price. A missing floor never fires: no false "floor dropped" on a feed
+  // hiccup.
   if (market && Number.isFinite(market.floorAsk)) {
     const floor = approxPrice(market.floorAsk);
     if (floor !== null) {
       for (const [chatId, sub] of Object.entries(next.subscribers)) {
         if (!Number.isFinite(sub.floorThreshold)) continue;
-        if (floor >= sub.floorThreshold) {
-          sub.floorArmedDown = true;
-        } else if (sub.floorArmedDown === true) {
-          alerts.push({ type: 'floor', chatId, floor, threshold: sub.floorThreshold });
-          sub.floorArmedDown = false;
-        }
+        if (floor >= sub.floorThreshold) continue;
+        alerts.push({ type: 'floor', chatId, floor, threshold: sub.floorThreshold });
+        sub.floorThreshold = null;
+        sub.floorArmedDown = false;
       }
     }
   }

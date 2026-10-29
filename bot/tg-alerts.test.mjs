@@ -80,25 +80,28 @@ test('epoch regression never resets the cursor', () => {
   assert.equal(next.lastEpoch, 28);
 });
 
-test('floor alert fires once below threshold then disarms until re-armed', () => {
+test('floor alert fires once below the threshold then switches itself off', () => {
   const state = freshState({
     subscribers: { '42': { subscribedAt: 'x', floorThreshold: 0.12, floorArmedDown: true } },
   });
   const first = computeAlerts({ state, market: { floorAsk: 0.11 }, own: null });
   assert.deepEqual(first.alerts, [{ type: 'floor', chatId: '42', floor: 0.11, threshold: 0.12 }]);
-  assert.equal(first.state.subscribers['42'].floorArmedDown, false);
+  assert.equal(first.state.subscribers['42'].floorThreshold, null);
 
-  // Floor still below threshold: no repeat alert.
+  // Alert is off now: a still-low floor must not repeat.
   const second = computeAlerts({ state: first.state, market: { floorAsk: 0.11 }, own: null });
   assert.deepEqual(second.alerts, []);
 
-  // Floor recovers at/above threshold: re-arm, no alert.
-  const third = computeAlerts({ state: second.state, market: { floorAsk: 0.12 }, own: null });
+  // Floor recovers: still off, no alert.
+  const third = computeAlerts({ state: second.state, market: { floorAsk: 0.20 }, own: null });
   assert.deepEqual(third.alerts, []);
-  assert.equal(third.state.subscribers['42'].floorArmedDown, true);
 
-  // Floor drops again: alert once more.
-  const fourth = computeAlerts({ state: third.state, market: { floorAsk: 0.105 }, own: null });
+  // User sets a new price: fires again below it.
+  const rearmed = {
+    ...third.state,
+    subscribers: { '42': { subscribedAt: 'x', floorThreshold: 0.12, floorArmedDown: true } },
+  };
+  const fourth = computeAlerts({ state: rearmed, market: { floorAsk: 0.105 }, own: null });
   assert.deepEqual(fourth.alerts, [{ type: 'floor', chatId: '42', floor: 0.105, threshold: 0.12 }]);
 });
 
@@ -106,19 +109,19 @@ test('floor rounding prevents flicker around the threshold', () => {
   const state = freshState({
     subscribers: { '42': { subscribedAt: 'x', floorThreshold: 0.12, floorArmedDown: true } },
   });
-  // 0.11999 rounds to 0.12 -> not below, re-armed, no alert.
+  // 0.11999 rounds to 0.12 -> not below, no alert, threshold kept.
   const { alerts, state: next } = computeAlerts({ state, market: { floorAsk: 0.11999 }, own: null });
   assert.deepEqual(alerts, []);
-  assert.equal(next.subscribers['42'].floorArmedDown, true);
+  assert.equal(next.subscribers['42'].floorThreshold, 0.12);
 });
 
-test('a missing floor never fires and never changes arming', () => {
+test('a missing floor never fires and never clears the threshold', () => {
   const state = freshState({
     subscribers: { '42': { subscribedAt: 'x', floorThreshold: 0.12, floorArmedDown: true } },
   });
   const { alerts, state: next } = computeAlerts({ state, market: { floorAsk: null }, own: null });
   assert.deepEqual(alerts, []);
-  assert.equal(next.subscribers['42'].floorArmedDown, true);
+  assert.equal(next.subscribers['42'].floorThreshold, 0.12);
 });
 
 test('subscribers without a threshold are skipped', () => {
