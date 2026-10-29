@@ -68,6 +68,12 @@ assert.strictEqual(stats5.fdvUsd, null);
 assert.strictEqual(stats5.fdvText, '—');
 assert.strictEqual(stats5.n, 0);
 
+// Test 5b: competitor volume extends the all-time total, never the 24h/7d windows.
+const stats5b = computeMarketStats([], null, [], now, ANTS_MAX_SUPPLY, 123.45);
+assert.strictEqual(stats5b.totalVolumeUsd, 123.45);
+assert.strictEqual(stats5b.volumeUsd, 0);
+assert.strictEqual(stats5b.volume7dUsd, 0);
+
 // computeImpliedFromAsks ----------------------------------------------------
 
 // Test 6: live external asks -> VWAP, floor, MC, FDV.

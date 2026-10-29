@@ -175,6 +175,7 @@ test('sell modal: pick, form, review and wallet create', async () => {
     assert.match(document.body.textContent, /#3 starts next epoch/);
 
     items[0].click();
+    assert.match(document.body.textContent, /1\u201360 days/);
     const price = document.getElementById('sell-modal-body').querySelector('input[type=number]');
     price.value = '2';
     price.dispatchEvent(new window.Event('input', { bubbles: true }));
@@ -192,6 +193,19 @@ test('sell modal: pick, form, review and wallet create', async () => {
     assert.equal(calls.sends.length, 1);
     assert.equal(calls.refreshed, 1);
     assert.match(document.body.textContent, /Listing created/);
+  } finally {
+    restore();
+  }
+});
+
+test('sell modal: a preselected id jumps straight to the price form', async () => {
+  const sell = await import(BASE_URL);
+  const { deps } = makeDeps({ preselectedId: '1' });
+  const restore = stubRpc();
+  try {
+    await sell.openSellModal(deps);
+    assert.match(document.body.textContent, /Position #1/);
+    assert.ok(document.querySelector('#sell-modal-body input[type=number]'));
   } finally {
     restore();
   }

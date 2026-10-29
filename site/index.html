@@ -216,7 +216,7 @@
                 <div class="pf-value">&mdash;</div>
               </div>
               <div class="pf-cell">
-                <div class="pf-label">Staker Rewards (ANTS)</div>
+                <div class="pf-label">Staker Rewards (ANTS)<span class="info" tabindex="0" data-tip="Includes rewards from finished epochs that are not indexed yet.">ⓘ</span></div>
                 <div class="pf-value">&mdash;</div>
               </div>
             </div>
@@ -236,24 +236,24 @@
             </div>
           </section>
 
-          <section class="manage-forms" id="manage-forms">
-            <h3>List a position</h3>
+          <details class="manage-forms" id="list-position-details">
+            <summary>List a position</summary>
             <form id="create-form">
               <div class="cf-note">Staking rewards for the open epoch can't be claimed before listing and pass to the buyer with the NFT. Claim now for non-transferable ANTS, or restake to mint a sellable position.</div>
               <div class="cf-note">Marketplace fee is 1%: the seller receives the price minus 1%.</div>
               <div class="cf-row cf-row-4">
                 <label class="cf-field"><span>NFT id<span class="info" data-tip="The lANTS position (NFT) to sell. Filled automatically when you pick one from the portfolio or split a position.">ⓘ</span></span><input id="cf-nftid" type="number" min="0" step="1" placeholder="106"></label>
                 <label class="cf-field"><span>Price (USDC)<span class="info" data-tip="Total asking price in USDC for the whole position.">ⓘ</span></span><input id="cf-price" type="number" min="0.01" step="0.01" placeholder="2.00"></label>
-                <label class="cf-field"><span>Duration (days)<span class="info" data-tip="How long the listing stays open, 1 to 60 days.">ⓘ</span></span><input id="cf-days" type="number" min="1" max="60" step="1" value="30"></label>
+                <label class="cf-field"><span>Duration (days)<span class="info" data-tip="How long the listing stays open, 1 to 60 days.">ⓘ</span></span><input id="cf-days" type="number" min="1" max="60" step="1" value="30"><span class="cf-note">1–60 days</span></label>
                 <button id="cf-submit" type="button">Create listing</button>
               </div>
               <div id="cf-summary" class="cf-summary"></div>
               <div id="create-status" class="cf-status"></div>
             </form>
-          </section>
+          </details>
 
-          <section class="manage-forms" id="manage-section">
-            <h3>Manage a position</h3>
+          <details class="manage-forms" id="manage-position-details">
+            <summary>Manage a position</summary>
             <form id="manage-form">
               <div class="cf-note">Split, move to another seller pool, or enable max-lock. New positions start at the next epoch and can't exit until then (PositionChangePending).</div>
               <div class="cf-grid">
@@ -278,7 +278,7 @@
               <button id="br-submit" type="button">Stake buyer reward</button>
               <div id="br-status" class="cf-status"></div>
             </form>
-          </section>
+          </details>
         </div>
 
         <!-- Footer -->

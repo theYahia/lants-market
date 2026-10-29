@@ -36,10 +36,18 @@ async function init() {
 
   container.classList.add('inc-dashboard');
 
+  const buildPreparingBanner = () => {
+    const banner = document.createElement('div');
+    banner.className = 'inc-preparing';
+    banner.textContent = 'PREPARING \u2014 work in progress';
+    return banner;
+  };
+
   // Skeleton: hero with "—" cards while the data loads.
   const skeleton = buildHero('Incentives', 'Loading…', '');
   skeleton.appendChild(buildMetrics(null, null, null, '—', null));
   container.innerHTML = '';
+  container.appendChild(buildPreparingBanner());
   container.appendChild(skeleton);
 
   try {
@@ -102,6 +110,7 @@ async function init() {
     const offerSection = buildOfferSection(offers, N, poolNames);
 
     container.innerHTML = '';
+    container.appendChild(buildPreparingBanner());
     container.appendChild(hero);
     container.appendChild(stakerSection);
     container.appendChild(buyersSection);
@@ -109,7 +118,11 @@ async function init() {
     container.appendChild(offerSection);
   } catch (err) {
     console.error(err);
-    container.innerHTML = '<p>Failed to load incentive data.</p>';
+    container.innerHTML = '';
+    container.appendChild(buildPreparingBanner());
+    const error = document.createElement('p');
+    error.textContent = 'Failed to load incentive data.';
+    container.appendChild(error);
   }
 }
 

@@ -88,6 +88,7 @@ function renderForm(body, state, h) {
   daysInput.step = '1';
   daysInput.value = state.days;
   daysField.appendChild(daysInput);
+  daysField.appendChild(el('span', 'cf-note', '1\u201360 days'));
   row.appendChild(priceField);
   row.appendChild(daysField);
 

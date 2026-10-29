@@ -15,9 +15,11 @@ import {
 import { computeMarketStats, computeImpliedFromAsks, seaportAsAskItems, ANTS_MAX_SUPPLY } from './market-stats.mjs';
 import { readListings, ethCallTo, getMinted, getMaxSupply } from './own-listings.mjs';
 import { fetchSeaportMarket } from './seaport-feed.mjs';
+import { fetchAllTimeUsdcVolume } from './market-volume.mjs';
 import { isMaxLock, expectedReward, exitSlash, floorPrice, exitBurn, lockCellFromLive } from './metrics.mjs';
 import { freshTip, freshNote } from './portfolio-fresh.mjs';
 import { closedPositionIdsForOwner } from './portfolio-state.mjs';
+import { readFinishedEpoch, readPositionReward, readStakerRewardTotals } from './portfolio-rewards.mjs';
 import { openSellModal } from './sell-modal.mjs';
 import { listingMeta, feeBreakdown, usdcToWei } from './sell-model.mjs';
 import { createListingFlow } from './create-listing.mjs';
@@ -310,6 +312,27 @@ async function loadSeaportFeed() {
   return feed;
 }
 
+// All-time volume from the competitor's trades feed is added on top of our own
+// sales; when the feed is unavailable the tile falls back to our sales only.
+let competitorVolumeCache = null;
+
+async function loadCompetitorVolume(ownVolumeUsd) {
+  const now = Date.now();
+  if (competitorVolumeCache && now - competitorVolumeCache.at < 600000) {
+    setTile('m-positions', fmtUsd(ownVolumeUsd + competitorVolumeCache.usd));
+    return;
+  }
+  let usd = 0;
+  try {
+    const r = await fetchAllTimeUsdcVolume();
+    if (r && r.ok) usd = r.usd;
+  } catch (e) {
+    // keep own-only on a failed feed read
+  }
+  competitorVolumeCache = { at: now, usd };
+  setTile('m-positions', fmtUsd(ownVolumeUsd + usd));
+}
+
 function updateTiles(items, snapshot, seaportFeed = EMPTY_SEAPORT_FEED) {
   const nowSec = Math.floor(Date.now() / 1000);
   const s = computeMarketStats(items || [], snapshot || null, INTERNAL_LISTING_IDS, nowSec);
@@ -346,6 +369,7 @@ function updateTiles(items, snapshot, seaportFeed = EMPTY_SEAPORT_FEED) {
   // Total volume: all-time external sales (internal trades excluded).
   setTile('m-positions', fmtUsd(s.totalVolumeUsd));
   setTileNote('m-positions', '');
+  void loadCompetitorVolume(s.totalVolumeUsd);
 
   // Avg price (24H), Implied MC and Implied FDV come from the reference price.
   const hasReference = impl.referencePrice != null;
@@ -664,12 +688,12 @@ async function onConnect() {
     }
 
     // portfolio-wallet
-    const REWARDS_CONTRACT = MARKET.stakerRewards;
     const POSITIONS_CONTRACT = MARKET.nft;
-    const { stakerPositionCount, stakerTotalActiveStake, stakerPositionIds, pendingIndexedStakerReward } = SEL;
+    const { stakerPositionCount, stakerTotalActiveStake, stakerPositionIds } = SEL;
 
     const account = accounts && accounts[0];
     connectedAccount = account;
+    let finishedEpoch = null;
     if (account) {
       setConnectedButton(account);
 
@@ -720,14 +744,10 @@ async function onConnect() {
           }
           myIds = ids;
 
-          // Sum pending rewards
-          let rewardsSum = 0n;
-          for (const id of ids) {
-            const rewardRaw = await ethCallTo(REWARDS_CONTRACT, pendingIndexedStakerReward + encUint256(id));
-            if (rewardRaw !== '0x') {
-              rewardsSum += BigInt(rewardRaw);
-            }
-          }
+          // Sum indexed + finished-epoch rewards, matching the claim buttons.
+          finishedEpoch = await readFinishedEpoch({ ethCallTo, MARKET });
+          const totals = await readStakerRewardTotals(ids, finishedEpoch, OPEN_FINISHED_EPOCHS, { ethCallTo, SEL, MARKET });
+          const rewardsSum = totals.indexedWei + totals.finishedWei;
 
           if (pfValues.length >= 3) {
             pfValues[0].textContent = String(count);
@@ -762,7 +782,7 @@ async function onConnect() {
     const seaportFeed = feedRes.status === 'fulfilled' ? feedRes.value : EMPTY_SEAPORT_FEED;
     if (!snapshot) throw new Error('snapshot unavailable');
     render(snapshot, items, seaportFeed);
-    if (connectedAccount) await renderMyPositions(connectedAccount, myIds, snapshot);
+    if (connectedAccount) await renderMyPositions(connectedAccount, myIds, snapshot, finishedEpoch);
     await renderMyListingsPanel();
   } catch (e) {
     // surface any eth_call / connect error, never stay silent
@@ -1246,7 +1266,7 @@ async function indexPoolRewardsIfNeeded(target, rowEl, originalText, from, nextL
 const OPEN_FINISHED_EPOCHS = 2;
 const CLOSED_FINISHED_EPOCHS = 8;
 
-export async function renderMyPositions(account, ids, snapshot) {
+export async function renderMyPositions(account, ids, snapshot, finishedEpoch) {
   const container = document.getElementById('pf-positions');
   if (!container) return;
 
@@ -1263,14 +1283,10 @@ export async function renderMyPositions(account, ids, snapshot) {
   const allIds = [...ids.filter((id) => !closedSet.has(String(id))), ...closedIds.map((id) => BigInt(id))];
 
   // Live current epoch so the just-finished epoch can be checked on-chain,
-  // not against a possibly stale snapshot.
-  let finishedEpoch = null;
-  try {
-    const epochRaw = await ethCallTo(MARKET.nft, '0x76671808'); // currentEpoch()
-    const epochWords = decodeWords(epochRaw);
-    if (epochWords.length > 0) finishedEpoch = wordToBigInt(epochWords[0]) - 1n;
-  } catch (e) {
-    console.error('Error reading current epoch', e);
+  // not against a possibly stale snapshot. Callers that already read it pass it
+  // in; direct callers (smoke scripts) fall back to a fresh read here.
+  if (finishedEpoch === undefined) {
+    finishedEpoch = await readFinishedEpoch({ ethCallTo, MARKET });
   }
 
   // Epoch the portfolio LOCK column targets (the next epoch), read live so a
@@ -1437,59 +1453,15 @@ export async function renderMyPositions(account, ids, snapshot) {
       actions.appendChild(manageBtn);
     }
 
-    // Restake button: shows the pending indexed staker reward, formatted in ANTS with two decimals.
-    // Reads from the snapshot `pendingIndexedStakerReward` field when present, otherwise falls back
-    // to the chain via the same selector used in the portfolio summary above.
-    let restakeAnts = 0;
-    if (pos && pos.pendingIndexedStakerReward != null) {
-      restakeAnts = Number(pos.pendingIndexedStakerReward) / 1e18;
-    } else {
-      try {
-        const rewardRaw = await ethCallTo(MARKET.stakerRewards, SEL.restakePendingReward + encUint(id));
-        if (rewardRaw !== '0x') {
-          restakeAnts = Number(wordToBigInt(decodeWords(rewardRaw)[0] || rewardRaw)) / 1e18;
-        }
-      } catch (e) {
-        console.error('Error reading pending reward for position', id, e);
-      }
-    }
-    if (!Number.isFinite(restakeAnts) || restakeAnts < 0) restakeAnts = 0;
-
-    // The just-finished epochs may hold rewards nobody has indexed yet: the
-    // platform keeper indexes pools some time after the boundary. Read the
-    // finished-epoch pending live so Claim/Restake can index it on click
-    // instead of waiting for the keeper. The click indexes the same number of
-    // epochs, so the button shows the amount the wallet will claim after it.
+    // Restake / Claim buttons: indexed and finished-epoch rewards read together
+    // (shared with the portfolio summary) so the buttons show the amount the
+    // wallet will claim after indexing the just-finished epochs.
     const scanEpochs = isClosed ? CLOSED_FINISHED_EPOCHS : OPEN_FINISHED_EPOCHS;
-    let finishedWei = 0n;
-    if (finishedEpoch != null && agentId != null) {
-      for (let k = 0; k < scanEpochs; k++) {
-        const ep = finishedEpoch - BigInt(k);
-        if (ep <= 0n) continue;
-        try {
-          const finRaw = await ethCallTo(MARKET.stakerRewards, SEL.pendingStakerReward + encUint(id) + encUint(ep));
-          const finWords = decodeWords(finRaw);
-          if (finWords.length > 0) finishedWei += wordToBigInt(finWords[0]);
-        } catch (e) {
-          console.error('Error reading finished-epoch reward for position', id, e);
-        }
-      }
-    }
+    const { indexedWei, finishedWei } = await readPositionReward(id, finishedEpoch, scanEpochs, { ethCallTo, SEL, MARKET });
+    let restakeAnts = Number(indexedWei) / 1e18;
+    if (!Number.isFinite(restakeAnts) || restakeAnts < 0) restakeAnts = 0;
     const needsIndex = needsRewardIndex(finishedWei);
     const finishedAnts = Number(finishedWei) / 1e18;
-    if (needsIndex) {
-      // The snapshot's indexed value can be stale; read it live so the button
-      // shows the amount the wallet will actually claim after indexing.
-      try {
-        const rewardRaw = await ethCallTo(MARKET.stakerRewards, SEL.restakePendingReward + encUint(id));
-        if (rewardRaw !== '0x') {
-          const freshIndexed = Number(wordToBigInt(decodeWords(rewardRaw)[0] || rewardRaw)) / 1e18;
-          if (Number.isFinite(freshIndexed) && freshIndexed >= 0) restakeAnts = freshIndexed;
-        }
-      } catch (e) {
-        console.error('Error reading live indexed reward for position', id, e);
-      }
-    }
     row.dataset.needsIndex = needsIndex ? '1' : '0';
     row.dataset.indexEpochs = String(scanEpochs);
 
@@ -1563,16 +1535,24 @@ export async function renderMyPositions(account, ids, snapshot) {
       if (target.classList.contains('pf-browse')) {
         e.preventDefault();
         document.querySelector('a.hdr-link[href="#tabs"]')?.click();
-      } else if (target.classList.contains('pf-list') || target.classList.contains('pf-manage')) {
-        const id = target.dataset.id;
-        const fieldId = target.classList.contains('pf-list') ? '#cf-nftid' : '#mf-posid';
-        const formId = target.classList.contains('pf-list') ? '#create-form' : '#manage-form';
-        const inp = document.querySelector(fieldId);
-        if (inp) {
-          inp.value = id;
-          inp.dispatchEvent(new Event('input', { bubbles: true }));
+      } else if (target.classList.contains('pf-list')) {
+        // List opens the sell modal with the position preselected, instead of
+        // scrolling to the bottom form.
+        if (connectedAccount) openSellDialog(target.dataset.id);
+        else {
+          pendingSellConnect = true;
+          ensurePrivy();
         }
-        document.querySelector(formId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (target.classList.contains('pf-manage')) {
+        // Manage reveals the collapsed form and focuses its position field.
+        const details = document.querySelector('#manage-position-details');
+        if (details) details.open = true;
+        const inp = document.querySelector('#mf-posid');
+        if (inp) {
+          inp.value = target.dataset.id;
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       } else if (target.classList.contains('restake')) {
         const rowEl = target.closest('.pf-pos-row');
         if (!rowEl) return;
@@ -1797,7 +1777,7 @@ export function initOfferForm() {
 
 // "+ Sell": open the sell modal over the wallet's active positions. The modal
 // owns its steps; this file only supplies the wallet helpers it calls back into.
-function openSellDialog() {
+function openSellDialog(preselectedId) {
   void openSellModal({
     account: connectedAccount,
     myIds,
@@ -1805,6 +1785,7 @@ function openSellDialog() {
     connect: ensurePrivy,
     refresh: loadPublicMarket,
     wallet: { request: walletRequest, ensureChain, waitReceipt, humanError, daysToSeconds },
+    preselectedId,
   });
 }
 

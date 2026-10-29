@@ -224,6 +224,12 @@ function init() {
     loadStorefront();
   });
   loadStorefront();
+  // Re-read the listings table every 60s so new lots and price moves surface
+  // without a manual refresh. Hidden tabs and in-flight loads are skipped.
+  setInterval(() => {
+    if (document.hidden || loading) return;
+    loadStorefront();
+  }, 60000);
 }
 
 init();

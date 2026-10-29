@@ -37,9 +37,11 @@ function resolveAmountWei(item, snapshot) {
  * @param {Array<string|number>} internalIds - Listing IDs considered internal.
  * @param {number} nowSec - Current timestamp in seconds.
  * @param {number} [maxSupply=ANTS_MAX_SUPPLY] - Resolved ANTS max supply.
+ * @param {number} [competitorVolumeUsd=0] - All-time external USDC volume from
+ *   the competitor feed, added to our own sales (no overlap, see C1).
  * @returns {Object} Statistics object.
  */
-export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupply = ANTS_MAX_SUPPLY) {
+export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupply = ANTS_MAX_SUPPLY, competitorVolumeUsd = 0) {
   const SECS_IN_DAY = 86400;
   const VOLUME_DAYS = 1;   // 24h volume, matching the native marketplace header
   const FDV_DAYS = 30;
@@ -88,6 +90,12 @@ export function computeMarketStats(items, snapshot, internalIds, nowSec, maxSupp
   // total USDC paid / total ANTS sold, scaled to the full supply.
   const fdvUsd = vwapAnts > 0 ? (vwapUsd / vwapAnts) * maxSupply : null;
   const n = externalSales30;
+
+  // Competitor volume is all-time only: it never enters the 24h/7d windows.
+  const competitor = Number(competitorVolumeUsd);
+  if (Number.isFinite(competitor) && competitor > 0) {
+    totalVolumeUsd += competitor;
+  }
 
   // Human-readable formatting
   const volumeText = new Intl.NumberFormat('en-US', {

@@ -20,6 +20,7 @@ const state = {
   busy: false,
   deps: null,
   wired: false,
+  preselectedId: null,
 };
 
 function render() {
@@ -135,6 +136,7 @@ export async function openSellModal(deps) {
   state.status = '';
   state.error = '';
   state.busy = false;
+  state.preselectedId = deps.preselectedId != null ? String(deps.preselectedId) : null;
   modal.hidden = false;
   render();
 
@@ -178,6 +180,13 @@ async function loadChoices() {
   state.selected = null;
   state.step = result.listingsFailed ? 'retry' : 'pick';
   render();
+  // A row's "List" button hands in a token id: jump straight to its price form.
+  const preselected = state.preselectedId;
+  state.preselectedId = null;
+  if (preselected != null && !result.listingsFailed) {
+    const target = state.choices.find((c) => c.tokenId === String(preselected) && c.state === 'sellable');
+    if (target) await pickPosition(target.tokenId);
+  }
 }
 
 async function refreshChoices() {
