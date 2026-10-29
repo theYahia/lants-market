@@ -12,9 +12,8 @@ import {
   parsePrices,
   maxCompletedEpoch,
   readAntseedStats,
-  toAntseedSnapshot,
-  toAntseedState,
 } from './read-antseedstats.mjs';
+import { toAntseedSnapshot, toAntseedState, countdownBucket } from './antseed-snapshot.mjs';
 
 const load = (name) =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8'));
@@ -40,6 +39,21 @@ test('parseNetworkSummary extracts settled windows, counts and epoch', () => {
   assert.equal(res.network.sellers30d, 88);
 });
 
+test('parseNetworkSummary extracts demand: buyers, usage, generative, seconds_left', () => {
+  const res = parseNetworkSummary(networkFixture);
+  assert.equal(res.ok, true);
+  assert.equal(res.network.buyers24h, 166);
+  assert.equal(res.network.buyers7d, 309);
+  assert.equal(res.network.buyers30d, 515);
+  assert.equal(res.network.requests24h, 193584);
+  assert.equal(res.network.tokens24h, 9768431978);
+  assert.equal(res.network.videos24h, 600);
+  assert.ok(Math.abs(res.network.coverage24h - 0.9468809073724007) < 1e-9);
+  assert.equal(res.network.generativeVideos7d, 3017);
+  assert.ok(Math.abs(res.network.generativeSpendUsd7d - 2368.63) < 1e-6);
+  assert.equal(res.network.secondsLeft, 75873);
+});
+
 test('parseSupply extracts totals, stake partition and sorted burns', () => {
   const res = parseSupply(supplyFixture);
   assert.equal(res.ok, true);
@@ -63,6 +77,15 @@ test('parseStaking extracts active stake and budget', () => {
   assert.equal(res.staking.rewardEpoch, 27);
 });
 
+test('parseStaking extracts restake bonus, claimable, stakers and positions', () => {
+  const res = parseStaking(stakingFixture);
+  assert.equal(res.ok, true);
+  assert.equal(res.staking.restakeBonusPct, 5);
+  assert.ok(Math.abs(res.staking.claimableAnts - 75155.60177575015) < 1e-6);
+  assert.equal(res.staking.stakers, 117);
+  assert.equal(res.staking.positions, 388);
+});
+
 test('parseEpochs normalizes and sorts the epoch list', () => {
   const res = parseEpochs(epochsFixture);
   assert.equal(res.ok, true);
@@ -84,6 +107,19 @@ test('parseEpochDetail exposes emission, burn and points for one epoch', () => {
   assert.equal(res.epoch.model, 'recognized');
   assert.equal(res.epoch.burnAnts, null);
   assert.ok(Math.abs(res.epoch.sellerPointsUsd - 10735.66) < 1e-6);
+});
+
+test('parseEpochDetail extracts economics buckets (cap-pct descending) and burn', () => {
+  const res = parseEpochDetail(epoch28Fixture);
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.epoch.economics.buckets, [
+    { key: 'sellerPools', capPct: 40 },
+    { key: 'usage', capPct: 20 },
+    { key: 'team', capPct: 15 },
+    { key: 'reserve', capPct: 15 },
+    { key: 'verification', capPct: 10 },
+  ]);
+  assert.deepEqual(res.epoch.economics.burn, { capAnts: 1500000, projectedAnts: 1500000 });
 });
 
 test('parseModels keeps model id and display name', () => {
@@ -120,6 +156,49 @@ test('readAntseedStats merges sections and reports per-section failures', async 
     '/api/v1/network/summary': networkFixture,
     '/api/v1/ants/supply': supplyFixture,
     '/api/v1/epochs': epochsFixture,
+    '/api/v1/staking/pools': stakingFixture,
+  };
+  const fetchImpl = async (url) => {
+    const body = byPath[new URL(url).pathname];
+    return body ? { ok: true, json: async () => body } : { ok: false, status: 500 };
+  };
+  const res = await readAntseedStats({ fetchImpl, prevMaxCompletedEpoch: 27 });
+  assert.equal(res.ok, true);
+  assert.equal(res.reasons.network, null);
+  assert.ok(Math.abs(res.network.settled24h - 2418.38) < 1e-6);
+  assert.equal(res.supply.burns.length, 4);
+  assert.equal(res.epochs.length, 29);
+  assert.equal(res.reasons.staking, null);
+  assert.equal(res.staking.restakeBonusPct, 5);
+  assert.equal(res.epochDetail, null);
+  assert.equal(res.reasons.epochDetail, 'skipped');
+});
+
+test('readAntseedStats fetches epoch detail when the completed epoch advances', async () => {
+  const detail = { data: { epoch: 27, status: 'complete', economics: { buckets: [{ key: 'usage', cap_pct: 20 }], burn: { cap_ants: 1500000, projected_ants: 1500000 } } } };
+  const byPath = {
+    '/api/v1/network/summary': networkFixture,
+    '/api/v1/ants/supply': supplyFixture,
+    '/api/v1/epochs': epochsFixture,
+    '/api/v1/staking/pools': stakingFixture,
+    '/api/v1/epochs/27': detail,
+  };
+  const fetchImpl = async (url) => {
+    const body = byPath[new URL(url).pathname];
+    return body ? { ok: true, json: async () => body } : { ok: false, status: 500 };
+  };
+  const res = await readAntseedStats({ fetchImpl, prevMaxCompletedEpoch: 26 });
+  assert.equal(res.ok, true);
+  assert.equal(res.reasons.epochDetail, null);
+  assert.equal(res.epochDetail.epoch, 27);
+  assert.deepEqual(res.epochDetail.economics.buckets, [{ key: 'usage', capPct: 20 }]);
+});
+
+test('readAntseedStats soft-fails staking and epoch detail instead of aborting', async () => {
+  const byPath = {
+    '/api/v1/network/summary': networkFixture,
+    '/api/v1/ants/supply': supplyFixture,
+    '/api/v1/epochs': epochsFixture,
   };
   const fetchImpl = async (url) => {
     const body = byPath[new URL(url).pathname];
@@ -127,10 +206,11 @@ test('readAntseedStats merges sections and reports per-section failures', async 
   };
   const res = await readAntseedStats({ fetchImpl });
   assert.equal(res.ok, true);
-  assert.equal(res.reasons.network, null);
-  assert.ok(Math.abs(res.network.settled24h - 2418.38) < 1e-6);
-  assert.equal(res.supply.burns.length, 4);
-  assert.equal(res.epochs.length, 29);
+  assert.ok(res.network);
+  assert.equal(res.staking, null);
+  assert.equal(res.reasons.staking, 'http');
+  assert.equal(res.epochDetail, null);
+  assert.equal(res.reasons.epochDetail, 'http');
 });
 
 test('readAntseedStats soft-fails a section instead of aborting the run', async () => {
@@ -168,8 +248,10 @@ test('toAntseedSnapshot and toAntseedState build diff + persist shapes', () => {
   assert.equal(state.burnedAnts, 6);
   assert.equal(state.settles7d, 10);
   assert.equal(state.sellers7d, 2);
-  assert.deepEqual(state.posted, { settled7d: 2, settled30d: 3, stakedAnts: 2 });
+  assert.deepEqual(state.posted, { settled7d: 2, settled30d: 3, stakedAnts: 2, requests24h: null });
   assert.equal(state.max7d, 2);
+  assert.deepEqual(state.countdownPosted, {});
+  assert.equal(state.lastTopModelsAt, null);
 });
 
 test('toAntseedState preserves the posted baseline and max7d from prev', () => {
@@ -181,6 +263,7 @@ test('toAntseedState preserves the posted baseline and max7d from prev', () => {
     sellers7d: 1,
     settles30d: 1,
     sellers30d: 1,
+    requests24h: 200000,
     burns: [],
     epochs: [],
   };
@@ -189,6 +272,35 @@ test('toAntseedState preserves the posted baseline and max7d from prev', () => {
     max7d: 13000,
   };
   const state = toAntseedState(snapshot, prev);
-  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 });
+  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000 });
   assert.equal(state.max7d, 13000);
+});
+
+test('toAntseedState seeds requests24h and countdown on upgrade, preserving prev', () => {
+  const snapshot = {
+    settled7d: 13000,
+    settled30d: 30000,
+    stakedAnts: 1600000,
+    requests24h: 200000,
+    epoch: 28,
+    secondsLeft: 5400,
+    burns: [],
+    epochs: [],
+  };
+  const prev = {
+    posted: { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000 },
+    max7d: 13000,
+  };
+  const state = toAntseedState(snapshot, prev);
+  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000 });
+  assert.deepEqual(state.countdownPosted, { 28: '6h' });
+});
+
+test('countdownBucket buckets seconds left into 6h/1h boundaries', () => {
+  assert.equal(countdownBucket(null), null);
+  assert.equal(countdownBucket(80000), null);
+  assert.equal(countdownBucket(21600), '6h');
+  assert.equal(countdownBucket(10800), '6h');
+  assert.equal(countdownBucket(3600), '1h');
+  assert.equal(countdownBucket(600), '1h');
 });

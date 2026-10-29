@@ -45,9 +45,11 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - `site/seaport-abi.mjs`, `site/seaport-order.mjs`, `site/seaport-buy.mjs` —
   Seaport 1.6 fulfill: pinned selector/struct, fail-closed validation, exact approve.
 - `site/render.mjs` — legacy positions table used by List view; prefer not to modify.
-- `bot/` — `@sxsiant` automation: `read-feed.mjs` (shared feed parser + trades),
-  `diff.mjs` (change-only), `xapi.mjs` (OAuth refresh + tweet), `run.mjs` (`--dry-run`).
-  State is gitignored `bot/state.json`; CI uses `.github/workflows/twitter-bot.yml`.
+- `bot/` — `@sxsiant` automation: `read-feed.mjs` (market feed context only),
+  `read-own-listings.mjs` (our own VexyMarketplace listings, the only listing
+  source), `diff.mjs` (change-only), `xapi.mjs` (OAuth refresh + tweet),
+  `run.mjs` (`--dry-run`). State is gitignored `bot/state.json`; CI uses
+  `.github/workflows/twitter-bot.yml`.
 
 ## Invariants
 
@@ -73,6 +75,14 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - Files copied into `dist/` must be ASCII (Cyrillic is rejected; binary images are
   exempt). New JS modules stay ≤300 lines; `market-view.mjs` and `render.mjs` must
   not grow.
+- The bot posts only our OWN listings (VexyMarketplace), epoch closes and
+  attributed antseedstats data. It never posts `Sold` or `Floor move` events:
+  those are the competitor's market-ticker story, not our inventory (rationale in
+  `docs/twitter-content-plan.md` "Removed post types"). Do not reintroduce them.
+- The bot never posts APY / boost-yield numbers from antseedstats
+  (`staking/pools.rows[].apy_*_pct`): the 2y figure is the "inflated yield" the
+  invariants ban. Demand-side top-models uses the models first page only, gated
+  behind `TOP_MODELS_ENABLED` (`bot/diff.mjs`); do not post the full catalog.
 
 ## Deploy & hygiene
 

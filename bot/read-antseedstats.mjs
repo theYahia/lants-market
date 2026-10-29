@@ -68,6 +68,9 @@ export function parseNetworkSummary(json) {
   if (windows === null || epoch === null) return { ok: false, reason: 'schema' };
   const usd = (key) => (isObject(windows[key]) ? finiteNumber(windows[key].settled_usd) : null);
   const count = (key, field) => (isObject(windows[key]) ? finiteNumber(windows[key][field]) : null);
+  const usage = isObject(json.data.paid_usage_24h) ? json.data.paid_usage_24h : null;
+  const generative = isObject(json.data.generative_7d) ? json.data.generative_7d : null;
+  const epochData = isObject(json.data.epoch) ? json.data.epoch : null;
   return {
     ok: true,
     network: {
@@ -80,6 +83,16 @@ export function parseNetworkSummary(json) {
       sellers24h: count('24h', 'sellers'),
       sellers7d: count('7d', 'sellers'),
       sellers30d: count('30d', 'sellers'),
+      buyers24h: count('24h', 'buyers'),
+      buyers7d: count('7d', 'buyers'),
+      buyers30d: count('30d', 'buyers'),
+      requests24h: usage ? finiteNumber(usage.requests) : null,
+      tokens24h: usage ? finiteNumber(usage.tokens) : null,
+      videos24h: usage ? finiteNumber(usage.videos) : null,
+      coverage24h: usage ? finiteNumber(usage.coverage) : null,
+      generativeVideos7d: generative ? finiteNumber(generative.videos) : null,
+      generativeSpendUsd7d: generative ? finiteNumber(generative.spend_usd) : null,
+      secondsLeft: epochData ? finiteNumber(epochData.seconds_left) : null,
       epoch,
     },
   };
@@ -120,6 +133,10 @@ export function parseStaking(json) {
       totalStakeAnts: finiteNumber(d.total_stake_ants),
       budgetAnts: finiteNumber(d.budget_ants),
       rewardEpoch: isInt(d.reward_epoch) ? d.reward_epoch : null,
+      restakeBonusPct: finiteNumber(d.restake_bonus_pct),
+      claimableAnts: finiteNumber(d.claimable_ants),
+      stakers: isInt(d.stakers) ? d.stakers : null,
+      positions: isInt(d.positions) ? d.positions : null,
     },
   };
 }
@@ -159,8 +176,27 @@ export function parseEpochDetail(json) {
       burnAnts: finiteNumber(d.burn_ants),
       sellerPointsUsd: finiteNumber(d.seller_points_usd),
       buyerPointsUsd: finiteNumber(d.buyer_points_usd),
+      economics: parseEconomics(d.economics),
     },
   };
+}
+
+// Emission allocation buckets (key/capPct) plus the burn figures. Buckets keep
+// the API order (cap_pct descending) so the alloc post reads biggest-first.
+function parseEconomics(economics) {
+  if (!isObject(economics)) return null;
+  const buckets = [];
+  for (const b of Array.isArray(economics.buckets) ? economics.buckets : []) {
+    if (!isObject(b) || typeof b.key !== 'string') continue;
+    const capPct = finiteNumber(b.cap_pct);
+    if (capPct === null) continue;
+    buckets.push({ key: b.key, capPct });
+  }
+  buckets.sort((a, b) => b.capPct - a.capPct);
+  const burn = isObject(economics.burn)
+    ? { capAnts: finiteNumber(economics.burn.cap_ants), projectedAnts: finiteNumber(economics.burn.projected_ants) }
+    : null;
+  return { buckets, burn };
 }
 
 export function parseModels(json) {
@@ -206,78 +242,33 @@ export function maxCompletedEpoch(epochs) {
   return max;
 }
 
-// Read the sections the current post types need: settled windows (network),
-// burn + staked (supply) and the epoch list (enriched close). The models /
-// prices / staking / epoch-detail parsers are kept (tested) but not fetched:
-// their endpoints paginate at 100 and full pages (limit=1000) time out on the
-// free tier, so new-model and price-change posts are deferred until pagination
-// is worth the reliability cost.
-export async function readAntseedStats({ fetchImpl = globalThis.fetch, timeoutMs = 10000 } = {}) {
+// Read the sections the current post types need: settled windows + demand
+// (network), burn + staked (supply), the epoch list (enriched close), staking
+// (restake bonus) and, when the completed epoch advances, its detail (alloc).
+// Staking and epoch-detail are soft: a failure only skips those post types.
+export async function readAntseedStats({ fetchImpl = globalThis.fetch, timeoutMs = 10000, prevMaxCompletedEpoch = 0 } = {}) {
   if (typeof fetchImpl !== 'function') return { ok: false, reason: 'no-fetch' };
   const network = await getSection(fetchImpl, ENDPOINTS.summary, timeoutMs, parseNetworkSummary);
   const supply = await getSection(fetchImpl, ENDPOINTS.supply, timeoutMs, parseSupply);
   const epochs = await getSection(fetchImpl, ENDPOINTS.epochs, timeoutMs, parseEpochs);
+  const staking = await getSection(fetchImpl, ENDPOINTS.staking, timeoutMs, parseStaking);
+  const completed = epochs.ok ? maxCompletedEpoch(epochs.epochs) : 0;
+  const epochDetail = completed > prevMaxCompletedEpoch
+    ? await getSection(fetchImpl, `${ENDPOINTS.epochs}/${completed}`, timeoutMs, parseEpochDetail)
+    : { ok: false, reason: 'skipped' };
   return {
     ok: true,
     network: network.ok ? network.network : null,
     supply: supply.ok ? supply.supply : null,
     epochs: epochs.ok ? epochs.epochs : null,
+    staking: staking.ok ? staking.staking : null,
+    epochDetail: epochDetail.ok ? epochDetail.epoch : null,
     reasons: {
       network: network.ok ? null : network.reason,
       supply: supply.ok ? null : supply.reason,
       epochs: epochs.ok ? null : epochs.reason,
+      staking: staking.ok ? null : staking.reason,
+      epochDetail: epochDetail.ok ? null : epochDetail.reason,
     },
-  };
-}
-
-// Full snapshot for diffing.
-export function toAntseedSnapshot(result) {
-  return {
-    settled24h: result.network ? result.network.settled24h : null,
-    settled7d: result.network ? result.network.settled7d : null,
-    settled30d: result.network ? result.network.settled30d : null,
-    settles24h: result.network ? result.network.settles24h : null,
-    settles7d: result.network ? result.network.settles7d : null,
-    settles30d: result.network ? result.network.settles30d : null,
-    sellers24h: result.network ? result.network.sellers24h : null,
-    sellers7d: result.network ? result.network.sellers7d : null,
-    sellers30d: result.network ? result.network.sellers30d : null,
-    stakedAnts: result.supply ? result.supply.stakedAnts : null,
-    stakedPct: result.supply ? result.supply.stakedPct : null,
-    burnedAnts: result.supply ? result.supply.burnedAnts : null,
-    burns: result.supply ? result.supply.burns : [],
-    epochs: result.epochs ? result.epochs : [],
-  };
-}
-
-// Compact form persisted in state.json. `prev` carries the run-dependent
-// post-baselines (posted, max7d) that a fresh snapshot does not know about.
-export function toAntseedState(snapshot, prev = null) {
-  return {
-    settled24h: snapshot.settled24h,
-    settled7d: snapshot.settled7d,
-    settled30d: snapshot.settled30d,
-    settles7d: snapshot.settles7d,
-    sellers7d: snapshot.sellers7d,
-    settles30d: snapshot.settles30d,
-    sellers30d: snapshot.sellers30d,
-    stakedAnts: snapshot.stakedAnts,
-    stakedPct: snapshot.stakedPct,
-    burnedAnts: snapshot.burnedAnts,
-    burns: snapshot.burns,
-    maxCompletedEpoch: maxCompletedEpoch(snapshot.epochs),
-    // Continuous metrics post only past a move from the last POSTED value; a
-    // state without posted (old state / cold start) is seeded from the current
-    // snapshot with no post.
-    posted: prev?.posted ?? {
-      settled7d: snapshot.settled7d,
-      settled30d: snapshot.settled30d,
-      stakedAnts: snapshot.stakedAnts,
-    },
-    // All-time high of settled7d; a new high always posts (record key).
-    max7d: prev?.max7d ?? snapshot.settled7d,
-    // Timestamps of the last successful post per continuous metric, used for
-    // the per-metric cooldown (24h settled, 48h staked).
-    postedAt: prev?.postedAt ?? {},
   };
 }

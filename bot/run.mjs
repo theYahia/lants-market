@@ -14,8 +14,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFeed, fetchEmission, toState } from './read-feed.mjs';
+import { readOwnListings } from './read-own-listings.mjs';
 import { diffFeed, diffAntseedStats } from './diff.mjs';
-import { readAntseedStats, toAntseedSnapshot, toAntseedState } from './read-antseedstats.mjs';
+import { readAntseedStats } from './read-antseedstats.mjs';
+import { toAntseedSnapshot, toAntseedState } from './antseed-snapshot.mjs';
 import { loadState, saveState, enqueue, dropStale, markEmitted, orderEvents, capStats, withinCooldown } from './state.mjs';
 import { digestText } from './format.mjs';
 import { saveRotatedToken } from './token-store.mjs';
@@ -23,7 +25,11 @@ import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.m
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
-const STATS_PER_RUN = 1;
+// Posting limits. Owner request 29.10: lift them while watching what the bot
+// produces. STATS_PER_RUN 0 = no per-run stats cap; STATS_THROTTLE false =
+// ignore the per-metric cooldown windows. Restore 1/true to throttle again.
+const STATS_PER_RUN = 0;
+const STATS_THROTTLE = false;
 const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function log(msg) {
@@ -84,14 +90,16 @@ async function main(argv) {
     log(`feed unavailable (${feed.reason}); skipping run, no post`);
     return 0;
   }
-  if (feed.tradesReason) log(`trades unavailable (${feed.tradesReason}); trade posts skipped`);
+
+  const own = await readOwnListings();
+  if (!own.ok) log(`own listings unavailable (${own.reason}); listing posts skipped`);
 
   const curr = {
-    floorAsk: feed.market.floorAsk,
     avg24h: feed.market.avg24h,
     epoch: feed.market.epoch,
-    listings: feed.market.listings,
-    trades: feed.trades || [],
+    // On an own-listings outage reuse the previous listing set unchanged, so an
+    // outage never reads as "everything delisted".
+    listings: own.ok ? own.listings : (state.last ? state.last.listings : []),
   };
 
   let emission = null;
@@ -105,22 +113,29 @@ async function main(argv) {
     else log(`epoch emission unavailable (${res.reason}); epoch post omits it`);
   }
 
-  const feedEvents = diffFeed(state.last, curr, { emission });
-
-  const astats = await readAntseedStats();
+  // On a cold start there is no completed-epoch baseline: skip the epoch-detail
+  // fetch (the diff discards it anyway until the first baseline is written).
+  const prevMaxCompletedEpoch = state.antseed ? state.antseed.maxCompletedEpoch ?? 0 : Number.MAX_SAFE_INTEGER;
+  const astats = await readAntseedStats({ prevMaxCompletedEpoch });
   let antseedEvents = [];
   let antseedSnapshot = null;
+  let restakeBonusPct = null;
   if (!astats.ok) {
     log(`antseedstats unavailable (${astats.reason}); antseedstats posts skipped`);
   } else {
     antseedSnapshot = toAntseedSnapshot(astats);
+    restakeBonusPct = antseedSnapshot.restakeBonusPct;
     for (const [section, reason] of Object.entries(astats.reasons)) {
       if (reason) log(`antseedstats ${section} unavailable (${reason}); ${section} posts skipped`);
     }
-    antseedEvents = diffAntseedStats(state.antseed, antseedSnapshot);
+    antseedEvents = diffAntseedStats(state.antseed, antseedSnapshot, { nowMs });
   }
 
-  antseedEvents = antseedEvents.filter((e) => !withinCooldown(e, state.antseed, nowMs));
+  const feedEvents = diffFeed(state.last, curr, { emission, restakeBonusPct });
+
+  if (STATS_THROTTLE) {
+    antseedEvents = antseedEvents.filter((e) => !withinCooldown(e, state.antseed, nowMs));
+  }
 
   let digestEvent = null;
   if (!state.lastDigestAt || nowMs - state.lastDigestAt >= DIGEST_INTERVAL_MS) {
@@ -136,6 +151,8 @@ async function main(argv) {
         sellers7d: antseedSnapshot ? antseedSnapshot.sellers7d : null,
         stakedAnts: antseedSnapshot ? antseedSnapshot.stakedAnts : null,
         stakedPct: antseedSnapshot ? antseedSnapshot.stakedPct : null,
+        usage: antseedSnapshot ? { requests: antseedSnapshot.requests24h, tokens: antseedSnapshot.tokens24h } : null,
+        generative: antseedSnapshot ? { videos: antseedSnapshot.generativeVideos7d, spendUsd: antseedSnapshot.generativeSpendUsd7d } : null,
       }),
       meta: null,
     };
@@ -152,10 +169,9 @@ async function main(argv) {
     return 0;
   }
 
-  // Advance both snapshots and queue regardless of whether we post, so events
-  // are never re-detected and never lost. A trades outage must not erase the
-  // known trade ids, or the next successful run reposts the whole history.
-  state.last = toState(feed, state.last ? state.last.tradeIds : null);
+  // Advance the snapshot regardless of whether we post, so events are never
+  // re-detected and never lost.
+  state.last = toState(curr);
   if (antseedSnapshot) state.antseed = toAntseedState(antseedSnapshot, state.antseed);
   state.pending = pending;
 
@@ -206,7 +222,7 @@ async function main(argv) {
   log(`authenticated as @${me.username} (id ${me.userId})`);
 
   const sliced = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
-  const toPost = capStats(sliced, STATS_PER_RUN);
+  const toPost = STATS_PER_RUN > 0 ? capStats(sliced, STATS_PER_RUN) : sliced;
   let posted = 0;
   for (const post of toPost) {
     const res = await postTweet({ accessToken: token.accessToken, text: post.text });
@@ -223,10 +239,17 @@ async function main(argv) {
     // Advance the antseedstats post-baseline only for the events that actually
     // went out; a capped run leaves the baseline untouched for the queue.
     if (state.antseed && post.meta?.field) {
-      if (post.meta.field === 'max7d') state.antseed.max7d = post.meta.value;
-      else {
-        state.antseed.posted[post.meta.field] = post.meta.value;
-        state.antseed.postedAt[post.meta.field] = nowMs;
+      const { field, value } = post.meta;
+      if (field === 'max7d') {
+        state.antseed.max7d = value;
+      } else if (field === 'countdown') {
+        state.antseed.countdownPosted = state.antseed.countdownPosted || {};
+        state.antseed.countdownPosted[String(value.epoch)] = value.bucket;
+      } else if (field === 'lastTopModelsAt') {
+        state.antseed.lastTopModelsAt = value;
+      } else {
+        state.antseed.posted[field] = value;
+        state.antseed.postedAt[field] = nowMs;
       }
     }
     posted += 1;

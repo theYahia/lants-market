@@ -28,8 +28,11 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 
 - Phase 0 (now → debut deploy): 2–3 manual posts/week. Data + education only. No promises.
 - Phase 1 (after T1–T8 deploy): launch thread once, then steady data cadence.
-- Phase 2 (bot, later): automated data posts only (floor moves, trades, listings, epoch summaries),
-  dedup + change-only, max 1/day. Manual posts stay manual (no label on them).
+- Phase 2 (bot, live): automated data posts only (our own listings, epoch closes,
+  antseedstats metrics), dedup + change-only. No per-day or per-run cap while the owner
+  watches live behaviour (29.10): `STATS_PER_RUN = 0`, `STATS_THROTTLE = false`,
+  no `MAX_POSTS_PER_RUN`. Weekly digest still fires at most once per 7 days.
+  Manual posts stay manual (no label on them).
 - Best window: 14:00–17:00 UTC (17:00–20:00 MSK) — morning US + evening EU, per the AntSeed
   contest playbook found on disk. Not on Moscow nights, not weekends unless an epoch closes.
 
@@ -44,19 +47,19 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 
 ### P0.2 Education — what is a lANTS position?
 
-> A lANTS position is ANTS locked behind a provider, with a timer.
-> Staked, time-locked, and it raises the provider's boost while it lives.
-> 483 exist today. 15 are for sale.
+> A lANTS position is ANTS staked and time-locked behind a provider.
+> While it lives it earns the holder a staking reward — and it raises the
+> provider's boost. 483 exist today, 15 are for sale.
 > lants.eth.limo
 
 ### P0.3 Education — APR is staking reward, not the boost (honesty post)
 
-> APR on a position = its staking reward. That's it.
-> The boost it gives the provider is separate — it raises buyer points, not the
-> holder's yield. Mixing them is how fake yield metrics happen.
+> The APR on a position is its staking reward only.
+> The boost it gives the provider is a separate thing: it raises the provider's
+> points, not the holder's yield. Summing them is how fake yield metrics happen.
 > We show both, labelled, never summed.
 
-### P0.4 Education �� the three price numbers
+### P0.4 Education — the three price numbers
 
 > $0.094 / $0.102 / $0.140 — why three numbers?
 > avg of past sales when the network announced, 24h avg now, lowest ask now.
@@ -92,14 +95,92 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 9. Roadmap: incentives proof page (public payout rules + verifiable trees), phase-4 market layer.
 10. CTA: lants.eth.limo — open the market.
 
-## Phase 2 — automated posts (spec for the future bot)
+## Phase 2 — automated posts (bot, live)
 
 Change-only, dedup by `(type, value)`; never repeat an identical value as new.
+Listing posts cover ONLY our own marketplace listings (VexyMarketplace, the 1%
+seller fee). The competitor's Seaport orders on antseedmarkets.com are theirs
+to post, never ours.
 
-- Floor move: `Floor: $0.140 → $0.132 (−5.7%) · lants.eth.limo`
-- Trade: `Sold: #205 · 762.47 ANTS @ $0.1399 ($106.75 USDC) · lants.eth.limo`
-- New listing: `New listing: #206 · 400 ANTS @ $0.150 · lock 8w · lants.eth.limo`
-- Epoch close (Thursday): `Epoch 29 closed · X ANTS emitted · 24h avg $Y · lants.eth.limo`
+Emoji convention: one leading emoji per post —
+🆕 listing · 🎯 floor listing · 🗑️ delisted · 🏁 epoch close · 🔥 burn ·
+💰 settled · 🌱 staked · 🏆 record · 🎁 epoch rewards · 📊 weekly digest ·
+📡 usage · ⏳ countdown · 🧮 allocation · 🏅 top models.
+Two markers also sit inside the text: 🐜 before an ANTS amount (listing size,
+epoch emission, burn, epoch rewards) and 🌱 for staking/growth (staked post,
+the Restake bullet). No other emoji inside the text, the Twitter length limit
+(280) is the hard constraint — `epochText` drops its measures rather than exceed it.
+
+- New listing: `🆕 New listing: #206 · 400 ANTS @ $0.150 · lock 8w · lants.eth.limo/#position/206`
+- New floor listing: `🎯 New floor listing: #206 · 400 ANTS @ $0.120 · lock 8w · lants.eth.limo/#position/206`
+- Delisted: `🗑️ Delisted: #205 · lants.eth.limo/#position/205`
+- Epoch close (Thursday), a claim/restake call to action:
+  ```
+  🏁 Epoch 29 has ended · X ANTS emitted · 24h avg $Y
+
+  Staker rewards for epoch 29 are claimable now:
+  • Claim — ANTS to your wallet
+  • Restake — compound into a new position 🌱 (+5% power bonus)
+
+  Buyer rewards for epoch 29 can be staked into a seller pool.
+
+  https://lants.eth.limo
+  ```
+  The measures on the first line are optional (only when the source supplied them);
+  the `(+N% power bonus)` appears only when the staking endpoint supplied it.
+- antseedstats: burn, settled (7d/30d, now with a buyer count), staked, record,
+  epoch rewards, weekly digest, plus the demand-side posts below.
+
+### Demand-side posts (network usage side of AntSeed)
+
+The `network/summary`, `epochs/{id}` and `staking/pools` endpoints already expose
+the demand side the bot used to ignore. Added 29.10:
+
+- Usage (24h): `📡 AntSeed 24h: 232.7K requests · 13.4B tokens · 610 videos · 96% attributed · data: antseedstats.com`
+  — change-only, ±5% on `paid_usage_24h.requests` vs the last posted value.
+- Epoch countdown: `⏳ Epoch 28 ends in ~3h — claim staker rewards or restake with a +5% power bonus 🌱` + site URL.
+  Once per epoch per bucket (`6h`, `1h`), from `epoch.seconds_left` + `staking.pools.restake_bonus_pct`.
+- Emission allocation: `🧮 Epoch 28 emission: 40% seller pools · 20% usage · 15% team · 15% reserve · 10% verification · data: antseedstats.com`
+  — on completed-epoch advance, from `epochs/{id}.economics.buckets`.
+- Top models: `🏅 Most-used AI on AntSeed (7d): Claude Opus 5.5 · GPT-6 Astra · Kimi K3 · data: antseedstats.com`
+  — weekly, top 3 by usage from the models first page. **Gated off**
+  (`TOP_MODELS_ENABLED = false`) until the `models` sort semantics are verified.
+- Buyers folded into the existing settled post: `… 27,841 settlements · 70 sellers · 306 buyers · …`.
+- Usage + generative folded into the weekly digest (two plain lines, no emoji).
+
+## Removed post types (do not reintroduce)
+
+Two former event types were removed on 29.10.2026 because they made @sxsiant a
+second "market ticker" behind @antseedbot instead of a destination for buyers:
+
+- **Sold** — removed. The competitor already posts every sale with more context
+  ("X% above 24h avg"). A sold position is a dead end for us: the deep link led
+  to a position that no longer exists, so the post never converted. Sale volume
+  now lives only in the weekly digest.
+- **Floor move** — removed. A floor change on the aggregate (antseedmarkets) feed
+  is the competitor's story, not our inventory. Our own floor is only relevant
+  when a new own listing sets it ("New floor listing").
+
+Reintroducing either means posting the competitor's activity as our own. The bot
+now posts only: our own listings, epoch closes, and the antseedstats data we
+attribute. If a future change adds them back, this decision must be revisited.
+
+## Rejected post types (antseedstats demand, do not implement)
+
+Considered 29.10 and rejected; one line each. See `notes/handoff.md` Session 16.
+
+- **APY** — `staking/pools.rows[].apy_*_pct` (the 2y figure is exactly the
+  "inflated yield" the invariants ban). Never post APY.
+- **Standalone buyers** — folded into the settled post (one less continuous stream).
+- **Standalone coverage** — kept only as the trailing "N% attributed" in the usage post.
+- **Standalone generative** — folded into the weekly digest.
+- **Standalone claimable** — folded into countdown / epoch CTA.
+- **Full models catalog** — pagination (page 100) unreliable on the free tier; only
+  "top 3 by usage" from the first page is used, and only after sort semantics are verified.
+- **Prices per-listing / new seller / price change** — 1631 live rows are the network's
+  sellers (not our inventory) and duplicates the competitor's story.
+- **Internal plumbing** — `buyer_ants_per_usd_projected`, `degraded`, `tokens_in`/`tokens_out`,
+  `economics.stake`, `usage.pct_of_target` — too technical, not user-facing.
 
 ## Repost strategy (main account @TheTieTieTies)
 

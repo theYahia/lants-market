@@ -1,15 +1,18 @@
 // Read-only data layer for the @sxsiant bot.
 //
-// Two live sources (plan section 5): the competitor market feed and its trade
-// history. The market feed is parsed by the shared site/seaport-feed.mjs parser
-// (D5) with includeNonFulfillable, so the bot sees every priced listing, not
-// just the lots this site can execute. A third, optional source supplies the
+// One live source: the ecosystem market feed (parsed by the shared
+// site/seaport-feed.mjs parser with includeNonFulfillable). It supplies the
+// header context the bot still needs — floor ask, 24h average, active epoch and
+// the listed count — for the epoch post and the weekly digest. Listing/trade
+// events are deliberately NOT derived from this feed: the competitor's Seaport
+// orders are theirs to post, and trades (Sold) and floor moves are no longer
+// posted at all (see docs/twitter-content-plan.md "Removed post types").
+//
+// Our OWN marketplace listings (VexyMarketplace, the 1% seller fee) are read
+// on-chain in bot/read-own-listings.mjs. An optional source supplies the
 // closed-epoch emission for the epoch post only (see fetchEmission).
 
-import { fetchSeaportMarket, SEAPORT_MARKET_ORIGIN } from '../site/seaport-feed.mjs';
-
-const TRADES_PATH = '/api/lants/trades';
-const MAX_TRADE_PAGES = 5;
+import { fetchSeaportMarket } from '../site/seaport-feed.mjs';
 
 // Same live snapshot URLs the site header uses (market-view.mjs LIVE_URLS).
 const SNAPSHOT_URLS = [
@@ -42,44 +45,6 @@ function parseWei(v) {
   return 0n;
 }
 
-// One trade -> normalized sale, or null when it cannot be reported honestly.
-// Only USDC fills are reported: priceWei is atomic USDC (6 decimals) and the
-// tweet template quotes USDC. ETH/WETH offers have no ANTS amount to show.
-export function normalizeTrade(raw) {
-  if (!isObject(raw)) return null;
-  if (typeof raw.id !== 'string' || raw.id === '') return null;
-  if (!Number.isInteger(raw.tokenId) || raw.tokenId < 0) return null;
-  const currency = typeof raw.currency === 'string' ? raw.currency.toUpperCase() : null;
-  if (currency !== 'USDC') return null;
-  const amount = finiteNumber(raw.amount);
-  if (!(amount > 0)) return null;
-  const priceWei = parseWei(raw.priceWei);
-  if (priceWei <= 0n) return null;
-  const usdTotal = Number(priceWei) / 1e6;
-  if (!(usdTotal > 0)) return null;
-  const tradeType = raw.tradeType === 'listing' || raw.tradeType === 'offer' ? raw.tradeType : null;
-  if (tradeType === null) return null;
-  return {
-    id: raw.id,
-    tokenId: raw.tokenId,
-    amount,
-    usdTotal,
-    perAntUsd: usdTotal / amount,
-    tradeType,
-    currency,
-  };
-}
-
-export function parseTrades(json) {
-  if (!isObject(json) || !Array.isArray(json.trades)) return { ok: false, reason: 'schema' };
-  const trades = [];
-  for (const raw of json.trades) {
-    const t = normalizeTrade(raw);
-    if (t) trades.push(t);
-  }
-  return { ok: true, trades };
-}
-
 async function getJson(fetchImpl, url, timeoutMs) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let timer = null;
@@ -103,34 +68,6 @@ async function getJson(fetchImpl, url, timeoutMs) {
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-export async function fetchTrades({ fetchImpl = globalThis.fetch, timeoutMs = 8000, pageSize = 100 } = {}) {
-  if (typeof fetchImpl !== 'function') return { ok: false, reason: 'no-fetch' };
-  const seen = new Set();
-  const rawSeen = new Set();
-  const trades = [];
-  for (let page = 1; page <= MAX_TRADE_PAGES; page += 1) {
-    const url = `${SEAPORT_MARKET_ORIGIN}${TRADES_PATH}?page=${page}&pageSize=${pageSize}`;
-    const res = await getJson(fetchImpl, url, timeoutMs);
-    if (!res.ok) return { ok: false, reason: res.reason };
-    const parsed = parseTrades(res.json);
-    if (!parsed.ok) return { ok: false, reason: parsed.reason };
-    for (const t of parsed.trades) {
-      if (seen.has(t.id)) continue;
-      seen.add(t.id);
-      trades.push(t);
-    }
-    // Count every raw trade id (kept or dropped) so pagination is driven by the
-    // feed's real totals, not by how many USDC fills survived normalization.
-    for (const raw of res.json.trades) {
-      if (raw && typeof raw.id === 'string') rawSeen.add(raw.id);
-    }
-    const total = Number.isInteger(res.json.total) ? res.json.total : null;
-    const reachedTotal = total !== null && rawSeen.size >= total;
-    if (reachedTotal || res.json.trades.length < pageSize) break;
-  }
-  return { ok: true, trades };
 }
 
 // Market feed -> typed bot state. Floor and 24h average may be null (empty
@@ -184,32 +121,23 @@ export async function fetchEmission({ fetchImpl = globalThis.fetch, timeoutMs = 
   return { ok: false, reason: 'network' };
 }
 
-// Compact state persisted between runs (ids + price; curr carries full objects).
-// When the trades feed was down, keep the previously known ids instead of
-// resetting to [] (otherwise the next successful run reposts the whole history).
-export function toState(feed, prevTradeIds = null) {
-  const tradeIds = feed.trades == null
-    ? (Array.isArray(prevTradeIds) ? prevTradeIds : [])
-    : feed.trades.map((t) => t.id);
+// Compact state persisted between runs: the active epoch and our own listings
+// (id + price). The full lot objects are carried only by the run's snapshot.
+export function toState(curr) {
   return {
-    floorAsk: feed.market.floorAsk,
-    avg24h: feed.market.avg24h,
-    epoch: feed.market.epoch,
-    listings: feed.market.listings.map((l) => ({ id: l.id, perAntUsd: l.perAntUsd })),
-    tradeIds,
+    epoch: curr.epoch,
+    listings: (curr.listings || []).map((l) => ({ id: l.id, perAntUsd: l.perAntUsd })),
   };
 }
 
 /**
- * Fetch both feeds. Market feed failure is fatal (ok:false) per plan section 8;
- * a trades failure only drops trade posts.
+ * Fetch the market feed. A failure is fatal (ok:false): without the feed the
+ * epoch and digest context is unavailable and the run must not advance.
  */
 export async function readFeed({ fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
   const feed = await fetchSeaportMarket({ fetchImpl, timeoutMs, includeNonFulfillable: true });
   if (!feed.ok) return { ok: false, reason: feed.reason };
   const market = toMarket(feed);
   if (!market) return { ok: false, reason: 'market-shape' };
-  const tradesRes = await fetchTrades({ fetchImpl, timeoutMs });
-  if (!tradesRes.ok) return { ok: true, market, trades: null, tradesReason: tradesRes.reason };
-  return { ok: true, market, trades: tradesRes.trades };
+  return { ok: true, market };
 }

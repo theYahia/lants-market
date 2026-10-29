@@ -1,7 +1,5 @@
 // Pure change-only diff: previous feed state + current feed state -> posts.
 // Dedup keys follow plan section 6:
-//   floor   -> (floor value)
-//   trade   -> (trade id)
 //   listing -> (token id + listed flag)
 //   epoch   -> (closed epoch number)
 // antseedstats types (diffAntseedStats):
@@ -9,10 +7,14 @@
 //   epochstats -> (epoch)
 // No IO here; state.mjs applies the persisted dedup/queue.
 
-import { floorText, tradeText, newListingText, newFloorListingText, delistText, epochText, burnText, settledText, stakedText, epochStatsText, recordText, pct } from './format.mjs';
+import { newListingText, newFloorListingText, delistText, epochText, burnText, settledText, stakedText, epochStatsText, recordText, usageText, countdownText, allocText, topModelsText, pct } from './format.mjs';
 import { maxCompletedEpoch } from './read-antseedstats.mjs';
 
-const asIdSet = (list) => new Set((list || []).map((v) => String(v)));
+// Top-models post is gated off until the models first-page sort semantics are
+// verified against the glossary (open question 1 in the plan). Flip to true
+// only after confirming `usage` windowing; until then curr.topModels stays null.
+const TOP_MODELS_ENABLED = false;
+const TOP_MODELS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Prices are keyed at 4-decimal precision: the feed's floats flicker at the
 // last digit (0.1399999993 vs 0.14) and a raw key would spray fake relists.
@@ -39,13 +41,25 @@ function changedBy(prevValue, currValue) {
   return prevValue > 0 && currValue > 0 && Math.abs(currValue - prevValue) / prevValue >= CHANGE_THRESHOLD;
 }
 
+// Lowest approx price among a listing map's values, or null when empty/unknown.
+function minPrice(map) {
+  let min = null;
+  for (const v of map.values()) {
+    if (v === null) continue;
+    if (min === null || v < min) min = v;
+  }
+  return min;
+}
+
 /**
- * @param {object|null} prev  { floorAsk, avg24h, epoch, listings:[{id,perAntUsd}|id], tradeIds:[id] }
- * @param {object} curr       { floorAsk, avg24h, epoch, listings:[lot], trades:[trade] }
- * @param {{emission?:(number|null)}} opts
+ * Change-only diff over our OWN marketplace listings (see read-own-listings.mjs).
+ *
+ * @param {object|null} prev  { epoch, listings:[{id,perAntUsd}|id] }
+ * @param {object} curr       { avg24h, epoch, listings:[lot] }
+ * @param {{emission?:(number|null), restakeBonusPct?:(number|null)}} opts
  * @returns {Array<{type:string,key:string,text:string}>}
  */
-export function diffFeed(prev, curr, { emission = null } = {}) {
+export function diffFeed(prev, curr, { emission = null, restakeBonusPct = null } = {}) {
   const events = [];
   // No baseline yet: a first run records state only, it does not announce the
   // whole current market as "new".
@@ -54,16 +68,28 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
 
   const prevMap = listingMap(p.listings);
   const currMap = listingMap(curr.listings || []);
+  const prevFloor = minPrice(prevMap);
+  const currFloor = minPrice(currMap);
 
-  // Floor move, suppressed when a brand-new listing itself sets the new floor
-  // (that case posts one combined "New floor listing" instead of Floor+Listing).
-  let floorEvent = null;
-  if (p.floorAsk != null && curr.floorAsk != null && p.floorAsk !== curr.floorAsk) {
-    floorEvent = {
-      type: 'floor',
-      key: `floor:${curr.floorAsk}`,
-      text: floorText(p.floorAsk, curr.floorAsk),
-    };
+  // Brand-new lots, and the single deepest one that undercuts the previous
+  // floor. Two new lots in one run must not both claim "New floor listing":
+  // only the lowest one actually sets the floor, the rest are plain listings.
+  const newLots = [];
+  for (const lot of curr.listings || []) {
+    const id = String(lot.id);
+    if (prevMap.has(id)) continue;
+    newLots.push({ id, price: approxPrice(lot.perAntUsd) });
+  }
+  let floorLotId = null;
+  let floorPrice = null;
+  for (const n of newLots) {
+    if (n.price === null) continue;
+    const setsNewFloor = prevFloor === null ? n.price === currFloor : n.price < prevFloor;
+    if (!setsNewFloor) continue;
+    if (floorPrice === null || n.price < floorPrice) {
+      floorPrice = n.price;
+      floorLotId = n.id;
+    }
   }
 
   for (const lot of curr.listings || []) {
@@ -71,22 +97,12 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
     const keyPrice = approxPrice(lot.perAntUsd);
     const prevPrice = prevMap.has(id) ? approxPrice(prevMap.get(id)) : undefined;
     if (prevPrice === undefined) {
-      // Brand-new lot. When it is the new floor, one combined post instead of
-      // duplicating the news as "New listing" + "Floor".
-      if (floorEvent && keyPrice !== null && approxPrice(curr.floorAsk) === keyPrice) {
-        events.push({
-          type: 'floor-listing',
-          key: `listing:${id}:listed:${keyPrice}`,
-          text: newFloorListingText(lot),
-        });
-        floorEvent = null;
-      } else {
-        events.push({
-          type: 'listing',
-          key: `listing:${id}:listed:${keyPrice}`,
-          text: newListingText(lot),
-        });
-      }
+      const setsNewFloor = id === floorLotId;
+      events.push({
+        type: setsNewFloor ? 'floor-listing' : 'listing',
+        key: `listing:${id}:listed:${keyPrice}`,
+        text: setsNewFloor ? newFloorListingText(lot) : newListingText(lot),
+      });
     } else if (prevPrice !== null && keyPrice !== null && prevPrice !== keyPrice) {
       // Relisted at a new price: the old key is unlisted, the new key listed,
       // so a price change is never swallowed by the id-only diff.
@@ -102,34 +118,13 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
       });
     }
   }
-  if (floorEvent) events.push(floorEvent);
 
-  // Delists. A position that just sold is NOT "delisted": the Sold post tells
-  // that story, so skip ids that appear in a fresh listing-trade.
-  const prevTrades = asIdSet(p.tradeIds);
-  const soldTokenIds = new Set();
-  for (const t of curr.trades || []) {
-    if (prevTrades.has(String(t.id))) continue;
-    if (t.tradeType !== 'listing') continue;
-    soldTokenIds.add(String(t.tokenId));
-  }
+  // Delists: an own listing that disappeared (sold, cancelled or expired).
   for (const id of prevMap.keys()) {
     if (currMap.has(id)) continue;
-    if (soldTokenIds.has(id)) continue;
     const prevPrice = approxPrice(prevMap.get(id));
     const key = prevPrice === null ? `listing:${id}:unlisted` : `listing:${id}:unlisted:${prevPrice}`;
     events.push({ type: 'delist', key, text: delistText(id) });
-  }
-
-  for (const t of curr.trades || []) {
-    if (prevTrades.has(String(t.id))) continue;
-    // Offers are not sales; the "Sold" template describes listing fills only.
-    if (t.tradeType !== 'listing') continue;
-    events.push({
-      type: 'trade',
-      key: `trade:${t.id}`,
-      text: tradeText(t),
-    });
   }
 
   if (p.epoch != null && curr.epoch != null && curr.epoch > p.epoch) {
@@ -137,7 +132,7 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
     events.push({
       type: 'epoch',
       key: `epoch:${closed}`,
-      text: epochText(closed, emission, curr.avg24h),
+      text: epochText(closed, emission, curr.avg24h, { restakeBonusPct }),
     });
   }
 
@@ -154,10 +149,13 @@ export function diffFeed(prev, curr, { emission = null } = {}) {
  * persisted state (toAntseedState shape); curr is the full snapshot.
  * @param {object|null} prev  toAntseedState shape
  * @param {object|null} curr  toAntseedSnapshot shape
+ * @param {{nowMs?:number, topModelsEnabled?:boolean}} opts
  * @returns {Array<{type:string,key:string,text:string,meta?:{field:string,value:number}}>}
  */
-export function diffAntseedStats(prev, curr) {
+export function diffAntseedStats(prev, curr, opts = {}) {
   if (!prev || !curr) return [];
+  const nowMs = opts.nowMs ?? Date.now();
+  const topModelsEnabled = opts.topModelsEnabled ?? TOP_MODELS_ENABLED;
   const events = [];
 
   const prevBurns = new Set((prev.burns || []).map((b) => String(b.epoch)));
@@ -178,11 +176,12 @@ export function diffAntseedStats(prev, curr) {
     settled7d: curr.settled7d,
     settled30d: curr.settled30d,
     stakedAnts: curr.stakedAnts,
+    requests24h: curr.requests24h,
   };
 
-  for (const [field, label, settlesField, sellersField] of [
-    ['settled7d', '7d', 'settles7d', 'sellers7d'],
-    ['settled30d', '30d', 'settles30d', 'sellers30d'],
+  for (const [field, label, settlesField, sellersField, buyersField] of [
+    ['settled7d', '7d', 'settles7d', 'sellers7d', 'buyers7d'],
+    ['settled30d', '30d', 'settles30d', 'sellers30d', 'buyers30d'],
   ]) {
     if (!changedBy(posted[field], curr[field])) continue;
     events.push({
@@ -190,7 +189,7 @@ export function diffAntseedStats(prev, curr) {
       field,
       value: curr[field],
       key: `settled:${field}:${curr[field]}`,
-      text: settledText(label, curr[field], pct(posted[field], curr[field]), curr[settlesField], curr[sellersField]),
+      text: settledText(label, curr[field], pct(posted[field], curr[field]), curr[settlesField], curr[sellersField], curr[buyersField]),
       meta: { field, value: curr[field] },
     });
   }
@@ -204,6 +203,54 @@ export function diffAntseedStats(prev, curr) {
       text: stakedText(curr.stakedAnts, pct(posted.stakedAnts, curr.stakedAnts), curr.stakedPct),
       meta: { field: 'stakedAnts', value: curr.stakedAnts },
     });
+  }
+
+  // 24h network usage (requests) posts past a ±5% move from the last POSTED
+  // value, rounded to 1000 requests for a stable dedup key.
+  if (changedBy(posted.requests24h, curr.requests24h)) {
+    events.push({
+      type: 'usage',
+      field: 'requests24h',
+      value: curr.requests24h,
+      key: `usage:${Math.round(curr.requests24h / 1000) * 1000}`,
+      text: usageText({ requests: curr.requests24h, tokens: curr.tokens24h, videos: curr.videos24h, coverage: curr.coverage24h }),
+      meta: { field: 'requests24h', value: curr.requests24h },
+    });
+  }
+
+  // Epoch countdown: once per epoch per bucket (6h, 1h), keyed by the epoch.
+  const secondsLeft = curr.secondsLeft;
+  const bucket = Number.isFinite(secondsLeft)
+    ? (secondsLeft <= 3600 ? '1h' : secondsLeft <= 21600 ? '6h' : null)
+    : null;
+  if (bucket && Number.isInteger(curr.epoch)) {
+    const last = prev.countdownPosted ? prev.countdownPosted[String(curr.epoch)] : null;
+    const rank = { '6h': 1, '1h': 2 };
+    if (!last || rank[bucket] > (rank[last] || 0)) {
+      events.push({
+        type: 'countdown',
+        key: `countdown:${curr.epoch}:${bucket}`,
+        text: countdownText({
+          epoch: curr.epoch,
+          hoursLeft: Math.max(1, Math.round(secondsLeft / 3600)),
+          bonusPct: curr.restakeBonusPct,
+        }),
+        meta: { field: 'countdown', value: { epoch: curr.epoch, bucket } },
+      });
+    }
+  }
+
+  // Top models, weekly, gated off until the models sort semantics are verified.
+  if (topModelsEnabled && Array.isArray(curr.topModels) && curr.topModels.length > 0) {
+    const last = prev.lastTopModelsAt;
+    if (!last || nowMs - last >= TOP_MODELS_INTERVAL_MS) {
+      events.push({
+        type: 'topmodels',
+        key: `topmodels:${new Date(nowMs).toISOString().slice(0, 10)}`,
+        text: topModelsText({ models: curr.topModels }),
+        meta: { field: 'lastTopModelsAt', value: nowMs },
+      });
+    }
   }
 
   // All-time high of settled7d posts regardless of ±5%. Rounded to $100 for a
@@ -227,6 +274,10 @@ export function diffAntseedStats(prev, curr) {
       if (e.status === 'complete' && e.epoch > prevMax) {
         events.push({ type: 'epochstats', key: `epochstats:${e.epoch}`, text: epochStatsText(e) });
       }
+    }
+    const detail = curr.epochDetail;
+    if (detail && detail.epoch === currMax && Array.isArray(detail.economics?.buckets) && detail.economics.buckets.length > 0) {
+      events.push({ type: 'alloc', key: `alloc:${currMax}`, text: allocText({ epoch: currMax, buckets: detail.economics.buckets }) });
     }
   }
 

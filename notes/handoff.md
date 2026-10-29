@@ -1,4 +1,233 @@
-# Handoff — lants.eth.limo (28.10.2026, session 10: Twitter bot @sxsiant launch)
+# Handoff — lants.eth.limo (29.10.2026, сессия 16: antseedstats demand-посты)
+
+## Session 16 — demand-посты antseedstats: usage / countdown / alloc / topmodels (НЕ закоммичено)
+
+Дата: 29.10.2026. Всё в рабочем дереве, поверх сессии 15. План (источник правды):
+`.kilo/plans/1793256926840-antseedstats-demand-posts.md`.
+
+### Что добавлено
+
+Бот теперь постит и спросовую сторону AntSeed, которую API antseedstats.com отдаёт,
+а бот раньше игнорировал. Все новые типы — статистика (не рыночные):
+
+- `usage` — 📡 24h спрос (requests/tokens/videos/coverage) из `network/summary.paid_usage_24h`.
+  Change-only, ±5% по `requests` от последнего запощенного (`posted.requests24h`).
+  Dedup-ключ `usage:{requests rounded to 1000}`.
+- `countdown` — ⏳ «Epoch N ends in ~Xh … restake with +N% power bonus». Раз в эпоху на
+  бакет (6h, 1h) из `epoch.seconds_left` + `staking/pools.restake_bonus_pct`.
+- `alloc` — 🧮 эмиссионная аллокация из `epochs/{id}.economics.buckets` (cap_pct по
+  убыванию), на закрытии эпохи (росте `maxCompletedEpoch`).
+- `topmodels` — 🏅 top-3 моделей по usage с первой страницы `models`, раз в 7 дней.
+  **GATED OFF** (`TOP_MODELS_ENABLED = false`) до проверки сортировки первой страницы.
+- `buyers` — свёрнут в существующий `settled`-пост (`· N buyers`).
+- `usage`+`generative` — две строки без эмодзи в недельный дайджест.
+- `restake bonus` — свёрнут в epoch CTA (`Restake — … 🌱 (+N% power bonus)`).
+
+### Adopt vs reject
+
+- **Adopt**: usage, countdown, alloc, topmodels (gated), buyers→settled,
+  usage+generative→digest, restake bonus→epoch CTA.
+- **Reject** (записано в `docs/twitter-content-plan.md` «Rejected post types»):
+  standalone buyers/coverage/generative/claimable, полный каталог models/prices,
+  APY (`apy_*_pct`; 2y-цифра = «inflated yield»), внутренний plumbing
+  (`buyer_ants_per_usd_projected`, `degraded`, `tokens_in/out`, `economics.stake`,
+  `usage.pct_of_target`).
+- **Отклонение от плана**: `lifetime` (settled_usd/fees/buyers/sellers/settles) из
+  `network/summary` НЕ извлекается — не используется ни в одном посте и отсутствует в
+  списке тестов плана. `modality_7d` тоже пропущен (план: «optional, for future use»).
+- **«sorted by key» в плане** интерпретировано как «cap_pct по убыванию»: иначе `allocText`
+  не совпадает с шаблоном поста из плана (seller pools → usage → team → reserve → verification).
+
+### Файлы
+
+- `bot/read-antseedstats.mjs` — расширены `parseNetworkSummary`/`parseStaking`/
+  `parseEpochDetail` (economics.buckets/burn); `readAntseedStats` фетчит `/staking/pools`
+  (мягко) и, при росте `maxCompletedEpoch`, `/epochs/{n}` (мягко, параметр
+  `prevMaxCompletedEpoch`).
+- `bot/antseed-snapshot.mjs` (НОВЫЙ) — `toAntseedSnapshot`/`toAntseedState`/
+  `countdownBucket` вынесены из `read-antseedstats.mjs`, чтобы тот остался ≤300 строк
+  (итого 274). Стейт сидит новые поля `posted.requests24h`, `countdownPosted`,
+  `lastTopModelsAt`; апгрейд сидит их из текущего снапшота (без постов).
+- `bot/format.mjs` — `usageText`/`countdownText`/`allocText`/`topModelsText`;
+  `settledText(buyers)`, `digestText(usage+generative)`, `epochText(opts.restakeBonusPct)`.
+- `bot/diff.mjs` — usage (±5%), countdown (бакет-дедуп по эпохе), alloc (на закрытии
+  эпохи), topmodels (7-дневный гейт, `opts.topModelsEnabled`), buyers→settled.
+  `diffFeed` принимает `restakeBonusPct`.
+- `bot/state.mjs` — `STAT_COOLDOWN_HOURS.requests24h = 24`.
+- `bot/run.mjs` — читает `restakeBonusPct` из снапшота и передаёт в `diffFeed`; дайджест
+  получает `usage`+`generative`; пост-цикл двигает `countdownPosted`/`lastTopModelsAt`.
+
+### Проверено
+
+- `npm.cmd run bot` = **110/110 pass**.
+- `npm.cmd test` = **305 (304 pass / 1 skip / 0 fail)** (skip — `expectedRuntimeHash`,
+  forge-артефакт).
+- `node bot/run.mjs --dry-run` — живой прогон OK: дайджест теперь с demand-строками
+  (`24h 230.55K requests · 13.2B tokens`, `7d generative $2,459 · 3.16K videos`);
+  `epochDetail` на живом API дал timeout → alloc-пост мягко пропущен (ожидаемо).
+- `node --check` — все изменённые модули OK.
+
+### Гейты / открытые вопросы (перенесены из плана)
+
+1. `models` sort semantics — первая страница выглядит отсортированной по `usage`
+   (descending), но `usage` vs `usage_all` windowing не подтверждён. `TOP_MODELS_ENABLED`
+   = false; проверить по glossary перед включением.
+2. Два close-поста за эпоху — `epochstats` (rewards) + `alloc` (allocation). По умолчанию
+   раздельные; можно слить `alloc` в `epochstats`.
+3. `countdown` бакеты 6h/1h — константы, максимум 2 поста/неделю.
+
+Всё НЕ закоммичено и НЕ запушено (как и сессия 15). Деплой CI-only.
+
+## Session 15 — бот @sxsiant: Sold/Floor убраны, листинги только свои (НЕ закоммичено)
+
+Дата: 29.10.2026. Всё лежит в рабочем дереве; ничего не закоммичено и не запушено.
+План независимой проверки: `.kilo/plans/1793255766104-bot-sold-floor-removal-verification.md`.
+Контент-спека (единственный источник правды по текстам): `docs/twitter-content-plan.md`,
+Phase 2 + «Removed post types».
+
+### Решение владельца и почему (НЕ возвращать без пересмотра)
+
+- **Бот перестал быть «вторым тикером».** Раньше он дублировал @antseedbot: постил продажи и
+  движение агрегатного флора. Это история конкурента, а не наш инвентарь, и она не ведёт
+  покупателя к нам.
+- **Sold — удалён целиком.** Конкурент постит каждую сделку с контекстом («X% above
+  24h avg»); наш deep-линк вёл на уже проданную позицию — тупик, конверсии ноль.
+  Объём продаж остался только в недельном дайджесте (settled7d).
+- **Floor move — удалён.** Движение агрегатного флора — не наше событие. Наш флор важен
+  ровно в одном случае: его поставил НОВЫЙ свой листинг → «New floor listing».
+- **Источник листингов — только VexyMarketplace** (наш маркет, 1% seller fee). Seaport-
+  ордера конкурента не постим: пусть постит их сам.
+- **Лимиты постинга сняты** по просьбе владельца: он смотрит, «как оно выглядит» вживую.
+- **Эмодзи добавлены** по просьбе владельца (см. карту ниже).
+
+Обоснование зафиксировано в `docs/twitter-content-plan.md` («Removed post types») и в
+инвариантах `AGENTS.md`: бот постит только свои листинги, закрытия эпох и
+атрибутированные данные antseedstats.
+
+### Почему листинги читаются с цепи, а не из фида
+
+`bot/read-own-listings.mjs` (НОВЫЙ) импортирует канонический `readListings` из
+`site/own-listings.mjs` — второго читателя листингов в проекте нет. Нормализация в
+`toOwnListing()` отбрасывает всё, что нельзя показать честно:
+
+- `isLive !== true` (продан/истёк/отменён), `ownerMismatch` (NFT уже не у seller),
+  `chainClosed` (позиция закрыта/выведена);
+- `listingId ∈ INTERNAL_LISTING_IDS` (0–5 — внутренние сделки между нашими кошельками);
+- `price <= 0` / `chainAmount <= 0` / `nftId < 0`;
+- `lockDays` — только если `chainStakeEnd` в будущем.
+
+Фильтра по адресу продавца нет: любой лот на нашем маркете с `listingId >= 6` постится
+(лоты кошелька владельца — в их числе). Если нужен allowlist по адресу — нужен адрес,
+это отдельная правка.
+
+`hasIncompleteRows()`: живая строка, у которой не прочитался `positions()`
+(`chainAmount === null`), валит весь own-read (`ok:false`, reason `partial`). Тогда
+`run.mjs` берёт прежний набор листингов — сбой RPC не превращается в ложный
+`Delisted` + `New listing` на восстановлении.
+
+### Что изменено по файлам
+
+- `bot/format.mjs` — удалены `floorText`/`tradeText` (+ мёртвые `price4`/`usd2`);
+  `epochText` переписан в CTA-пост; `digestText` заканчивается `https://lants.eth.limo`;
+  добавлены эмодзи; `epochText` при переполнении 280 бросает меры, а не пост.
+- `bot/read-feed.mjs` — удалены trades (`normalizeTrade`/`parseTrades`/`fetchTrades`);
+  остался market-контекст (floorAsk/avg24h/epoch/listedCount) и `fetchEmission`
+  (сумма rewardByEpoch по снапшоту). `toState` = `{ epoch, listings }`.
+- `bot/read-own-listings.mjs` (НОВЫЙ) + `bot/read-own-listings.test.mjs` (НОВЫЙ).
+- `bot/diff.mjs` — `diffFeed` переписан: только свои листинги (listing/floor-listing/
+  delist/epoch), флор считается из своих лотов. Если в одном прогоне ниже прежнего флора
+  появились ДВА лота, «New floor listing» получает только самый глубокий, второй — обычный
+  `listing`. Relist по новой цене = `delist(unlisted:old)` + `listing(listed:new)`;
+  float-шум цены режется округлением до 4 знаков; холодный старт (`prev === null`) молчит.
+- `bot/state.mjs` — `MARKET_EVENT_TYPES` = `listing`/`floor-listing`/`delist`/`epoch`
+  (раньше `sold`/`newListing`/`newFloorListing` были мёртвыми именами, а реальные типы не
+  попадали в приоритет/кап).
+- `bot/run.mjs` — `curr.listings` только из `readOwnListings()`; при `own.ok === false`
+  подставляется `state.last.listings`, epoch детектится независимо; лимиты выключены
+  (`STATS_PER_RUN = 0`, `STATS_THROTTLE = false`).
+- `.github/workflows/twitter-bot.yml` — убран `MAX_POSTS_PER_RUN: 3`.
+- `package.json` — `npm run bot` включает `bot/read-own-listings.test.mjs`.
+- Тесты обновлены: `format.test.mjs`, `diff.test.mjs`, `read-feed.test.mjs`, `state.test.mjs`.
+- `docs/twitter-content-plan.md` — Phase 2 (листинги/epoch/cadence/эмодзи) и раздел
+  «Removed post types». `AGENTS.md` — инвариант про Sold/Floor move.
+
+### Как устроен один прогон
+
+`readFeed()` (жёсткая зависимость: без него прогон не двигается) → `readOwnListings()`
+(мягкая: фолбэк на прежний набор) → `diffFeed()` → `readAntseedStats()` +
+`diffAntseedStats()` (мягкая) → недельный дайджест (раз в 7 дней) → `enqueue` (дедуп по
+ключу, очередь старше 48 ч выбрасывается) → `orderEvents` (сначала рыночные) → постинг.
+Epoch: `curr.epoch > prev.epoch` → постится эпоха `curr.epoch - 1`; эмиссия берётся из
+снапшота и опциональна. Дайджест считается из фида + antseedstats, отсутствующие числа
+просто не попадают в текст.
+
+### Контракт постов (реальный вывод `bot/format.mjs`)
+
+```
+🆕 New listing: #206 · 🐜 400 ANTS @ $0.150 · lock 8w · lants.eth.limo/#position/206      (84)
+🎯 New floor listing: #207 · 🐜 400 ANTS @ $0.120 · lock 8w · lants.eth.limo/#position/207 (90)
+🗑️ Delisted: #205 · lants.eth.limo/#position/205                                          (49)
+
+🏁 Epoch 27 has ended · 🐜 104,500 ANTS emitted · 24h avg $0.102
+
+Staker rewards for epoch 27 are claimable now:
+• Claim — ANTS to your wallet
+• Restake — compound into a new position 🌱
+
+Buyer rewards for epoch 27 can be staked into a seller pool.
+
+https://lants.eth.limo                                                                    (272)
+
+🔥 ANTS burn: 🐜 1.5M (epoch 25) · total 6M · data: antseedstats.com                       (68)
+💰 AntSeed 7d settled: $12,804 (+8.4%) · 27,841 settlements · 70 sellers · data: antseedstats.com (97)
+🌱 Staked: 1.54M ANTS (+5.2%) · 73% of stakable · data: antseedstats.com                   (72)
+🏆 AntSeed 7d settled hit a record: $13,000 · data: antseedstats.com                       (68)
+🎁 Epoch 21 rewards · 🐜 1.5M ANTS emission · $12,804.23 seller points · 1.5M burned · data: antseedstats.com (109)
+
+📊 lANTS weekly
+
+Floor $0.134 · 24h avg $0.130 · 17 listed
+7d settled $13,462 · 70 sellers · 1.69M ANTS staked · 81% of stakable
+
+https://lants.eth.limo · data: antseedstats.com                                            (177)
+```
+
+Эмодзи-карта (в коде — unicode-escape вида `\u{1F41C}`, файлы остаются ASCII): 🆕 листинг ·
+🎯 флор · 🗑️ делist · 🏁 epoch · 🔥 burn · 💰 settled · 🌱 staked · 🏆 record ·
+🎁 epoch rewards · 📊 дайджест. Внутри текста только два маркера: 🐜 перед суммой ANTS и
+🌱 у стейкинга/роста (пост staked, bullet Restake).
+
+### Лимиты: что снято и как вернуть
+
+Снято по просьбе владельца (29.10), чтобы смотреть живое поведение:
+`STATS_PER_RUN = 0` (нет капа на статистику за прогон), `STATS_THROTTLE = false`
+(кулдауны 24 ч / 48 ч не применяются), нет `MAX_POSTS_PER_RUN` в workflow.
+Остались: дедуп по ключу, отброс очереди старше 48 ч, дайджест раз в 7 дней, cron
+`7 * * * *`. Вернуть троттлинг: `STATS_PER_RUN = 1`, `STATS_THROTTLE = true`,
+`MAX_POSTS_PER_RUN` в `.github/workflows/twitter-bot.yml`.
+
+### Проверено
+
+- `npm.cmd run bot` = **87/87 pass, 0 fail**.
+- `npm.cmd test` = **288 (287 pass / 1 skip / 0 fail)**, skip — `expectedRuntimeHash`
+  (нет `contracts/out/RebateClaims.sol/RebateClaims.json`, нужен forge).
+- `node bot/run.mjs --dry-run` — живой прогон OK (фид + свои листинги + antseedstats
+  читаются; на момент проверки 1 digest).
+- Независимая проверка (сессия 15) подтвердила: grep'ы на удалённый trade/floor-код
+  (`Sold` остался только комментарием в `bot/read-feed.mjs:8`; `'floor'`/`'trade'` —
+  только тестовые фикстуры), регресс-точки флора/делist/relist/float-шума/холодного
+  старта, контракт полей `readListings` ↔ `toOwnListing` (BigInt-касты корректны).
+
+### Открытые вопросы (на решение владельца, не регресс)
+
+- Seaport-парсинг в `read-feed.mjs` `toMarket` больше не нужен для постинга: он остался
+  ради shape-гейта `listedCount > 0 && listings пусто → ok:false`. При дрейфе
+  конкурентского фида гейт может оборвать весь прогон (включая свои листинги и epoch).
+- Allowlist по адресу продавца не сделан (см. выше).
+- `bot/fixtures/lants-trades-2026-10-28.json` — неиспользуемая фикстура, осознанно не удалена.
+- Education-посты P0.2/P0.3/P0.4 — ручной контент, постит человек.
+- **Бот не задеплоен**: после push CI продолжит постить по cron; до этого правки живут
+  только в рабочем дереве.
 
 ## Session 14 — независимый аудит UX/UI/кнопок (НЕ закоммичено)
 
@@ -73,27 +302,58 @@ RPC 400(drpc)/429(mainnet.base.org) — грациозный фолбэк на p
 - Браузерный смоук `http://127.0.0.1:8099/#market` (Ctrl+Shift+R — кэш модулей).
 - Разбить незакоммиченные site-правки на логические коммиты + push (деплой CI/IPFS).
 
-## Session 12 — починка Twitter 403 (план `1793205561905-twitter-403-fix.md`; ЗАКОММИЧЕНО)
+## Session 12 — Twitter-бот @sxsiant: 403 починен + пост-улучшения (ЗАКОММИЧЕНО, всё в main)
 
-403 починен. Корень — рассинхрон секретов: `X_REFRESH_TOKEN` сменили на rainonbase
-(`2067642568423170048`), а `X_CLIENT_ID`/`X_CLIENT_SECRET` остались от TheTieTieTies
-(`cmZ3U0x3...`). Бот авторизовался как TheTieTieTies, токен принадлежал rainonbase →
-`invalid_request: Value passed for the token was invalid` (воспроизведено curl-ом).
+### Итог
+Бот живой и постит на @sxsiant по cron (каждый час на 7-й минуте, change-only). 403 исправлен;
+добавлены приоритет очереди, cooldown статистики, deep-ссылки и еженедельный дайджест.
 
-- **Коммит `ccca9bf`** (`feat(bot): locate 403 cause...`) — диагностика: `send()` → `headers`,
-  `getMe()` → `GET /2/users/me`, `scopeAllowsWrite()`; hard-gate по `tweet.write`;
-  логирование `res.headers` при провале поста. `npm.cmd run bot` = **81/81**,
-  `npm.cmd test` = **265 pass / 1 skip / 0 fail**.
-- **Коммит `ce6b811`** (`feat(bot): enable hourly cron, drop feed diagnostic`) — cron
-  `7 * * * *` включён, шаг `Feed diagnostic` + блок `feed-diag.log` удалены.
-- **Секреты** (GitHub и `bot/.env`) — rainonbase: `X_CLIENT_ID`=`Q1BtQURS…`,
-  `X_CLIENT_SECRET`=`T0ehUWZi…`, `X_REFRESH_TOKEN`=свежий (scope
-  `tweet.write users.read tweet.read offline.access`).
-- **Проверено сквозняком**: refresh → scope полный; `GET /2/users/me` → `@sxsiant`
-  (id `1947687125513560064`); `POST /2/tweets` → 201 (тестовый твит `2115504770702032913`).
-- Actions-кэш `twitter-bot-state-main-*` чистился — baseline сброшен, накопленный пост
-  `#775 @ $0.13` ушёл в baseline; первый рыночный пост выйдет на следующем изменении.
+### Причина 403 (и как чинили)
+Рассинхрон секретов: `X_REFRESH_TOKEN` сменили на rainonbase (`2067642568423170048`), а
+`X_CLIENT_ID`/`X_CLIENT_SECRET` остались от TheTieTieTies (`cmZ3U0x3...`). Бот авторизовался
+как TheTieTieTies, токен принадлежал rainonbase → `invalid_request: Value passed for the
+token was invalid` (воспроизведено curl-ом). Дополнительно Actions-кэш `twitter-bot-state-main-*`
+хранил `state.json` со старым `refreshToken`, который перекрывал секрет (`readCreds` берёт
+`state.refreshToken || secret`). Лечилось: секреты записаны через `gh` (PAT пользователя),
+все кэши `twitter-bot-state-main-*` удалены.
+
+### Коммиты (всё в origin/main)
+- `ccca9bf` — диагностика 403: `send()` → `headers` (rate-limit/www-authenticate),
+  `getMe()` → `GET /2/users/me`, `scopeAllowsWrite()`; hard-gate по `tweet.write`.
+- `ce6b811` — cron `7 * * * *` включён, шаг `Feed diagnostic` + блок `feed-diag.log` удалены.
+- `559bd63`, `5f238e8` — при фейле refresh в лог пишутся префиксы `client_id` и `refresh_token`
+  (GitHub маскирует полные секреты, поэтому пишутся только префиксы).
+- `6abe22b` — пост-улучшения: приоритетная очередь, кап статистики, cooldown, deep-ссылки,
+  еженедельный дайджест.
+
+### Секреты (GitHub + bot/.env) — rainonbase
+`X_CLIENT_ID`=`Q1BtQURS…`, `X_CLIENT_SECRET`=`T0ehUWZi…`, `X_REFRESH_TOKEN` — ротируется
+автоматически шагом `Rotate X refresh token secret` (gh secret set из `bot/.rotated-token`).
+Scope: `tweet.write users.read tweet.read offline.access`. Аккаунт: @sxsiant (id `1947687125513560064`).
+
+### Пост-логика (актуальная)
+- Приоритет: рыночные (`sold`/`newFloorListing`/`floor`/`newListing`/`delist`/`epoch`) раньше
+  статистики; максимум 1 статистический пост за прогон (`STATS_PER_RUN=1`), общий кап 3 (`MAX_POSTS_PER_RUN`).
+- Cooldown: `settled7d`/`settled30d` — 24ч, `stakedAnts` — 48ч; `burn`/`record7d`/`epochstats` — сразу.
+- Deep-ссылки: позиционные посты ведут на `lants.eth.limo/#position/{id}`.
+- Дайджест: `digestText` раз в 7 дней (`state.lastDigestAt`, интервал `DIGEST_INTERVAL_MS`).
+- Логика в `bot/state.mjs` (helpers `orderEvents`/`capStats`/`withinCooldown`/`isMarketEvent`),
+  `bot/format.mjs` (тексты + `digestText`), `bot/run.mjs` (связка), `postedAt` в `toAntseedState`.
+
+### Проверки
+`npm.cmd run bot` = **87/87**, `npm.cmd test` = **287 pass / 1 skip / 0 fail** (skip — forge-артефакт).
+Живой прогон подтвердил: `token refresh ok → authenticated as @sxsiant → posted` (вышли 2 реальных
+поста: рекорд 7d settled и еженедельный дайджест).
+
+### Осталось (мелочи)
+- Удалить PAT `lants secrets fix` (GitHub → Settings → Developer settings → Tokens) — если ещё не удалён.
+- Тестовый твит `lants.eth.limo market bot online` (id `2115504770702032913`) — удалить руками.
 - `tmp-pkce-mint.mjs` удалён; правило `tmp-*.mjs` в `.gitignore` оставлено (не закоммичено).
+
+### Отложено (следующие улучшения постов, НЕ сделано)
+- Merge нескольких antseedstats-метрик в один пост (сейчас решает кап + cooldown).
+- Посты «модель/цена» (`/models`, `/prices`) — пагинация по 100 таймаутит на free-тарифе.
+- Контекст floor-постов («lowest listing removed» и т.п.).
 
 ## Session 11 — bot hardening перед schedule (ЗАКОММИЧЕНО, план 1793201198338-bot-hardening.md)
 

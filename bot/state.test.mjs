@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { enqueue, dropStale, markEmitted, loadState, saveState, EMPTY_STATE, isMarketEvent, orderEvents, capStats, withinCooldown } from './state.mjs';
+import { enqueue, dropStale, markEmitted, loadState, saveState, EMPTY_STATE, isMarketEvent, orderEvents, capStats, withinCooldown, STAT_COOLDOWN_HOURS } from './state.mjs';
 
 test('enqueue skips already emitted and already queued keys', () => {
   const now = Date.parse('2026-10-28T12:00:00Z');
@@ -59,7 +59,7 @@ test('loadState tolerates a missing file and round-trips', () => {
 });
 
 test('isMarketEvent classifies market vs stats types', () => {
-  for (const t of ['sold', 'newFloorListing', 'floor', 'newListing', 'delist', 'epoch']) {
+  for (const t of ['listing', 'floor-listing', 'delist', 'epoch']) {
     assert.equal(isMarketEvent(t), true, t);
   }
   for (const t of ['settled', 'staked', 'burn', 'record7d', 'epochstats', 'digest']) {
@@ -69,22 +69,22 @@ test('isMarketEvent classifies market vs stats types', () => {
 
 test('orderEvents puts market events first and is stable', () => {
   const a = { type: 'settled', key: 's1', createdAt: '2026-10-28T10:00:00.000Z' };
-  const b = { type: 'sold', key: 'sold1', createdAt: '2026-10-28T11:00:00.000Z' };
-  const c = { type: 'floor', key: 'f1', createdAt: '2026-10-28T09:00:00.000Z' };
+  const b = { type: 'listing', key: 'l1', createdAt: '2026-10-28T11:00:00.000Z' };
+  const c = { type: 'delist', key: 'd1', createdAt: '2026-10-28T09:00:00.000Z' };
   const d = { type: 'burn', key: 'b1', createdAt: '2026-10-28T08:00:00.000Z' };
-  assert.deepEqual(orderEvents([a, b, c, d]).map((e) => e.key), ['f1', 'sold1', 'b1', 's1']);
+  assert.deepEqual(orderEvents([a, b, c, d]).map((e) => e.key), ['d1', 'l1', 'b1', 's1']);
 });
 
 test('capStats keeps market events and limits stats', () => {
   const events = [
-    { type: 'sold', key: 'sold1' },
+    { type: 'listing', key: 'l1' },
     { type: 'settled', key: 's1' },
     { type: 'settled', key: 's2' },
     { type: 'burn', key: 'b1' },
   ];
-  assert.deepEqual(capStats(events, 1).map((e) => e.key), ['sold1', 's1']);
-  assert.deepEqual(capStats(events, 0).map((e) => e.key), ['sold1']);
-  assert.deepEqual(capStats(events, 2).map((e) => e.key), ['sold1', 's1', 's2']);
+  assert.deepEqual(capStats(events, 1).map((e) => e.key), ['l1', 's1']);
+  assert.deepEqual(capStats(events, 0).map((e) => e.key), ['l1']);
+  assert.deepEqual(capStats(events, 2).map((e) => e.key), ['l1', 's1', 's2']);
 });
 
 test('withinCooldown enforces per-metric cooldown windows', () => {
@@ -97,4 +97,11 @@ test('withinCooldown enforces per-metric cooldown windows', () => {
   assert.equal(withinCooldown({ meta: { field: null, value: null } }, antseed, now), false);
   assert.equal(withinCooldown(settled, { postedAt: {} }, now), false);
   assert.equal(withinCooldown({ meta: { field: 'settled7d' } }, null, now), false);
+});
+
+test('STAT_COOLDOWN_HOURS includes the new usage cooldown', () => {
+  assert.equal(STAT_COOLDOWN_HOURS.requests24h, 24);
+  const now = Date.parse('2026-10-28T12:00:00Z');
+  const antseed = { postedAt: { requests24h: now - 12 * 3600 * 1000 } };
+  assert.equal(withinCooldown({ meta: { field: 'requests24h', value: 1 } }, antseed, now), true);
 });

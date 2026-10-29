@@ -5,8 +5,6 @@ import {
   fmtAmount,
   fmtEmission,
   fmtCompact,
-  floorText,
-  tradeText,
   newListingText,
   newFloorListingText,
   delistText,
@@ -17,12 +15,15 @@ import {
   stakedText,
   epochStatsText,
   recordText,
+  usageText,
+  countdownText,
+  allocText,
+  topModelsText,
   usdWhole,
   pct,
 } from './format.mjs';
 
 const DOT = '\u00b7'; // middle dot separator used by the templates
-const ARROW = '\u2192';
 
 test('fmtAmount: trims trailing zeros, keeps meaningful cents', () => {
   assert.equal(fmtAmount(400), '400');
@@ -59,73 +60,98 @@ test('fmtCompact: K/M/B notation with trimming', () => {
   assert.equal(fmtCompact(NaN), '0');
 });
 
-test('floorText: price changes with sign and site link', () => {
-  const t = floorText(0.101931, 0.094);
-  assert.match(t, /^Floor: \$0\.102/);
-  assert.match(t, /\$0\.094/);
-  assert.match(t, /\(-\d+\.\d%\)/);
-  assert.ok(t.includes(DOT));
-  assert.ok(t.includes('lants.eth.limo'));
-  assert.ok(t.includes(ARROW));
-  assert.match(floorText(0.09, 0.12), /\(\+33\.3%\)/);
-});
-
-test('tradeText: full trade line with per-ANT price and USDC total', () => {
-  const t = tradeText({ tokenId: 205, amount: 42.5, perAntUsd: 0.0025, usdTotal: 0.10625 });
-  assert.equal(t, 'Sold: #205 ' + DOT + ' 42.5 ANTS @ $0.0025 ($0.11 USDC) ' + DOT + ' lants.eth.limo/#position/205');
-});
-
 test('newListingText: with and without a lock', () => {
   const t = newListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
-  assert.equal(t, 'New listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
+  assert.equal(t, '\u{1F195} New listing: #7 ' + DOT + ' \u{1F41C} 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
   const s = newListingText({ id: 8, amount: 100, perAntUsd: 0.101, lockDays: 0 });
   assert.ok(!s.includes('lock'));
-  assert.ok(s.startsWith('New listing: #8'));
+  assert.ok(s.startsWith('\u{1F195} New listing: #8'));
 });
 
 test('newFloorListingText: same detail as a listing, new-floor prefix', () => {
   const t = newFloorListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
-  assert.equal(t, 'New floor listing: #7 ' + DOT + ' 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
-  assert.ok(newFloorListingText({ id: 8, amount: 100, perAntUsd: 0.09, lockDays: 0 }).startsWith('New floor listing: #8'));
+  assert.equal(t, '\u{1F3AF} New floor listing: #7 ' + DOT + ' \u{1F41C} 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
+  assert.ok(newFloorListingText({ id: 8, amount: 100, perAntUsd: 0.09, lockDays: 0 }).startsWith('\u{1F3AF} New floor listing: #8'));
 });
 
 test('delistText: plain id line with deep link', () => {
-  assert.equal(delistText(12), 'Delisted: #12 ' + DOT + ' lants.eth.limo/#position/12');
+  assert.equal(delistText(12), '\u{1F5D1}\uFE0F Delisted: #12 ' + DOT + ' lants.eth.limo/#position/12');
 });
 
-test('epochText: emission only, avg only, neither and both', () => {
+test('epochText: claim/restake call to action with optional measures', () => {
   const both = epochText(23, 1500000, 0.101931);
-  assert.equal(both, 'Epoch 23 closed ' + DOT + ' 1,500,000 ANTS emitted ' + DOT + ' 24h avg $0.102 ' + DOT + ' lants.eth.limo');
+  assert.equal(
+    both,
+    [
+      '\u{1F3C1} Epoch 23 has ended ' + DOT + ' \u{1F41C} 1,500,000 ANTS emitted ' + DOT + ' 24h avg $0.102',
+      '',
+      'Staker rewards for epoch 23 are claimable now:',
+      '\u2022 Claim \u2014 ANTS to your wallet',
+      '\u2022 Restake \u2014 compound into a new position \u{1F331}',
+      '',
+      'Buyer rewards for epoch 23 can be staked into a seller pool.',
+      '',
+      'https://lants.eth.limo',
+    ].join('\n')
+  );
+  assert.ok(both.length <= 280);
   const em = epochText(23, 1500000);
-  assert.ok(em.includes('1,500,000 ANTS emitted'));
+  assert.ok(em.startsWith('\u{1F3C1} Epoch 23 has ended ' + DOT + ' \u{1F41C} 1,500,000 ANTS emitted'));
   assert.ok(!em.includes('24h avg'));
   const avg = epochText(23, null, 0.101931);
-  assert.ok(avg.includes('24h avg $0.102'));
+  assert.ok(avg.startsWith('\u{1F3C1} Epoch 23 has ended ' + DOT + ' 24h avg $0.102'));
   assert.ok(!avg.includes('emitted'));
   const bare = epochText(23, undefined, undefined);
-  assert.equal(bare, 'Epoch 23 closed ' + DOT + ' lants.eth.limo');
+  assert.equal(bare.split('\n')[0], '\u{1F3C1} Epoch 23 has ended');
+  assert.ok(bare.endsWith('\n\nhttps://lants.eth.limo'));
+  assert.ok(bare.length <= 280);
+});
+
+test('epochText: drops the measures instead of exceeding the tweet limit', () => {
+  const t = epochText(23, 999999999999, 1234.5678);
+  assert.ok(t.length <= 280);
+  assert.equal(t.split('\n')[0], '\u{1F3C1} Epoch 23 has ended');
+  assert.ok(!t.includes('emitted'));
+});
+
+test('epochText: restake bullet gains the power bonus when known', () => {
+  const t = epochText(23, 1500000, 0.101931, { restakeBonusPct: 5 });
+  assert.ok(t.includes('\u2022 Restake \u2014 compound into a new position \u{1F331} (+5% power bonus)'));
+  assert.ok(t.length <= 280);
+  const noBonus = epochText(23, 1500000, 0.101931);
+  assert.ok(noBonus.includes('\u2022 Restake \u2014 compound into a new position \u{1F331}'));
+  assert.ok(!noBonus.includes('power bonus'));
 });
 
 test('burnText: total burned and attribution pinned', () => {
   assert.equal(
     burnText({ ants: 1500000, epoch: 21 }, 6000000),
-    'ANTS burn: 1.5M (epoch 21) ' + DOT + ' total 6M ' + DOT + ' data: antseedstats.com'
+    '\u{1F525} ANTS burn: \u{1F41C} 1.5M (epoch 21) ' + DOT + ' total 6M ' + DOT + ' data: antseedstats.com'
   );
 });
 
 test('settledText: whole dollars, change percent, settles and sellers', () => {
   const t = settledText('7d', 12804.23, '+6.1%', 27841, 70);
-  assert.equal(t, 'AntSeed 7d settled: $12,804 (+6.1%) ' + DOT + ' 27,841 settlements ' + DOT + ' 70 sellers ' + DOT + ' data: antseedstats.com');
-  assert.equal(settledText('30d', 30411.16, '-3.0%', 78141, 88), 'AntSeed 30d settled: $30,411 (-3.0%) ' + DOT + ' 78,141 settlements ' + DOT + ' 88 sellers ' + DOT + ' data: antseedstats.com');
+  assert.equal(t, '\u{1F4B0} AntSeed 7d settled: $12,804 (+6.1%) ' + DOT + ' 27,841 settlements ' + DOT + ' 70 sellers ' + DOT + ' data: antseedstats.com');
+  assert.equal(settledText('30d', 30411.16, '-3.0%', 78141, 88), '\u{1F4B0} AntSeed 30d settled: $30,411 (-3.0%) ' + DOT + ' 78,141 settlements ' + DOT + ' 88 sellers ' + DOT + ' data: antseedstats.com');
+});
+
+test('settledText: appends buyers only when supplied', () => {
+  assert.equal(
+    settledText('7d', 12804.23, '+6.1%', 27841, 70, 306),
+    '\u{1F4B0} AntSeed 7d settled: $12,804 (+6.1%) ' + DOT + ' 27,841 settlements ' + DOT + ' 70 sellers ' + DOT + ' 306 buyers ' + DOT + ' data: antseedstats.com'
+  );
+  assert.ok(!settledText('7d', 12804.23, '+6.1%', 27841, 70).includes('buyers'));
+  assert.ok(!settledText('7d', 12804.23, '+6.1%', 27841, 70, 0).includes('buyers'));
 });
 
 test('stakedText: compact value, change percent and share of stakable', () => {
-  assert.equal(stakedText(1535689.21, '+5.2%', 73.2107), 'Staked: 1.54M ANTS (+5.2%) ' + DOT + ' 73% of stakable ' + DOT + ' data: antseedstats.com');
-  assert.equal(stakedText(1500000, '-2.0%', 71.5), 'Staked: 1.5M ANTS (-2.0%) ' + DOT + ' 72% of stakable ' + DOT + ' data: antseedstats.com');
+  assert.equal(stakedText(1535689.21, '+5.2%', 73.2107), '\u{1F331} Staked: 1.54M ANTS (+5.2%) ' + DOT + ' 73% of stakable ' + DOT + ' data: antseedstats.com');
+  assert.equal(stakedText(1500000, '-2.0%', 71.5), '\u{1F331} Staked: 1.5M ANTS (-2.0%) ' + DOT + ' 72% of stakable ' + DOT + ' data: antseedstats.com');
 });
 
 test('recordText: settled7d all-time high with attribution', () => {
-  assert.equal(recordText(13400.5), 'AntSeed 7d settled hit a record: $13,401 ' + DOT + ' data: antseedstats.com');
+  assert.equal(recordText(13400.5), '\u{1F3C6} AntSeed 7d settled hit a record: $13,401 ' + DOT + ' data: antseedstats.com');
 });
 
 test('usdWhole: whole dollars with thousands separators', () => {
@@ -144,9 +170,9 @@ test('pct: signed percent strings', () => {
 
 test('epochStatsText: optional measures included only when supplied', () => {
   const full = epochStatsText({ epoch: 21, emissionAnts: 1500000, sellerPointsUsd: 4200.5, burnAnts: 300000 });
-  assert.equal(full, 'Epoch 21 rewards ' + DOT + ' 1.5M ANTS emission ' + DOT + ' $4,200.5 seller points ' + DOT + ' 300K burned ' + DOT + ' data: antseedstats.com');
+  assert.equal(full, '\u{1F381} Epoch 21 rewards ' + DOT + ' \u{1F41C} 1.5M ANTS emission ' + DOT + ' $4,200.5 seller points ' + DOT + ' 300K burned ' + DOT + ' data: antseedstats.com');
   const bare = epochStatsText({ epoch: 21 });
-  assert.equal(bare, 'Epoch 21 rewards ' + DOT + ' data: antseedstats.com');
+  assert.equal(bare, '\u{1F381} Epoch 21 rewards ' + DOT + ' data: antseedstats.com');
   const zero = epochStatsText({ epoch: 21, emissionAnts: 0, sellerPointsUsd: 0, burnAnts: 0 });
   assert.ok(!zero.includes('ANTS emission'));
 });
@@ -161,7 +187,7 @@ test('digestText: market plus optional antseedstats measures', () => {
     stakedAnts: 1535689.21,
     stakedPct: 73.2107,
   });
-  assert.ok(t.startsWith('lANTS weekly\n'));
+  assert.ok(t.startsWith('\u{1F4CA} lANTS weekly\n'));
   assert.ok(t.includes('Floor $0.130 ' + DOT + ' 24h avg $0.102 ' + DOT + ' 16 listed'));
   assert.ok(t.includes('7d settled $12,804 ' + DOT + ' 70 sellers'));
   assert.ok(t.includes('1.54M ANTS staked ' + DOT + ' 73% of stakable'));
@@ -175,6 +201,66 @@ test('digestText: market only when antseedstats is absent', () => {
   assert.ok(t.includes('15 listed'));
   assert.ok(!t.includes('7d settled'));
   assert.ok(!t.includes('staked'));
+});
+
+test('digestText: appends usage and generative lines when supplied', () => {
+  const t = digestText({
+    floorAsk: 0.13,
+    avg24h: 0.102,
+    listedCount: 16,
+    usage: { requests: 193584, tokens: 9768431978 },
+    generative: { videos: 3017, spendUsd: 2368.63 },
+  });
+  assert.ok(t.includes('24h 193.58K requests ' + DOT + ' 9.77B tokens'));
+  assert.ok(t.includes('7d generative $2,369 ' + DOT + ' 3.02K videos'));
+});
+
+test('digestText: omits demand lines when usage/generative absent', () => {
+  const t = digestText({ floorAsk: 0.13, avg24h: 0.102, listedCount: 16 });
+  assert.ok(!t.includes('requests'));
+  assert.ok(!t.includes('generative'));
+});
+
+test('usageText: 24h demand with attribution', () => {
+  const t = usageText({ requests: 193584, tokens: 9768431978, videos: 600, coverage: 0.946880907 });
+  assert.equal(t, '\u{1F4E1} AntSeed 24h ' + DOT + ' 193.58K requests ' + DOT + ' 9.77B tokens ' + DOT + ' 600 videos ' + DOT + ' 95% attributed ' + DOT + ' data: antseedstats.com');
+});
+
+test('countdownText: epoch countdown with optional bonus', () => {
+  const withBonus = countdownText({ epoch: 28, hoursLeft: 3, bonusPct: 5 });
+  assert.equal(
+    withBonus,
+    '\u{23F3}\uFE0F Epoch 28 ends in ~3h \u2014 claim staker rewards or restake with a +5% power bonus \u{1F331}\n\nhttps://lants.eth.limo'
+  );
+  assert.ok(withBonus.length <= 280);
+  const noBonus = countdownText({ epoch: 28, hoursLeft: 1 });
+  assert.equal(
+    noBonus,
+    '\u{23F3}\uFE0F Epoch 28 ends in ~1h \u2014 claim staker rewards or restake \u{1F331}\n\nhttps://lants.eth.limo'
+  );
+});
+
+test('allocText: emission buckets in cap-pct order with labels', () => {
+  const t = allocText({
+    epoch: 28,
+    buckets: [
+      { key: 'sellerPools', capPct: 40 },
+      { key: 'usage', capPct: 20 },
+      { key: 'team', capPct: 15 },
+      { key: 'reserve', capPct: 15 },
+      { key: 'verification', capPct: 10 },
+    ],
+  });
+  assert.equal(
+    t,
+    '\u{1F9EE} Epoch 28 emission ' + DOT + ' 40% seller pools ' + DOT + ' 20% usage ' + DOT + ' 15% team ' + DOT + ' 15% reserve ' + DOT + ' 10% verification ' + DOT + ' data: antseedstats.com'
+  );
+  assert.ok(t.length <= 280);
+});
+
+test('topModelsText: joins display names with attribution', () => {
+  const t = topModelsText({ models: ['Claude Opus 5.5', 'GPT-6 Astra', 'Kimi K3'] });
+  assert.equal(t, '\u{1F3C5} Most-used AI on AntSeed (7d): Claude Opus 5.5 ' + DOT + ' GPT-6 Astra ' + DOT + ' Kimi K3 ' + DOT + ' data: antseedstats.com');
 });
 
 console.log('format_ok=1');
