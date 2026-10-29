@@ -90,3 +90,18 @@ test('a position without a snapshot owner leaves owner null for the live read', 
   const vm = positionViewModel({ tokenId: 1, snapshot: snap, lots });
   assert.equal(vm.owner, null);
 });
+
+test('lots are enriched with yield, boost, unlock and lock weeks', () => {
+  const lotsWithPos = [
+    { tokenId: 1, perAntUsd: 0.1, priceUsdc: 1, provider: 'Apex', source: 'seaport', position: snapshot.positions[0] },
+  ];
+  const vm = positionViewModel({ tokenId: 1, snapshot, lots: lotsWithPos });
+  assert.equal(vm.lots.length, 1);
+  const lot = vm.lots[0];
+  assert.equal(lot.lockWeeks, vm.lockWeeks);
+  assert.equal(lot.aprPct, vm.aprPct);
+  assert.equal(lot.antsPerEpoch, vm.antsPerEpoch);
+  assert.equal(lot.poolSharePct, vm.poolSharePct);
+  assert.equal(lot.unlock instanceof Date, true);
+  assert.equal(lot.unlock.toISOString(), vm.unlock.toISOString());
+});

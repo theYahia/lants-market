@@ -44,6 +44,18 @@ export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], tr
     return acc;
   }, null);
 
+  const enrichedLots = tokenLots.map((lot) => {
+    const lotPos = lot.position ?? null;
+    return {
+      ...lot,
+      aprPct: aprPct(snapshot, lotPos),
+      antsPerEpoch: antsPerEpoch(snapshot, lotPos),
+      poolSharePct: poolShare(snapshot, lotPos?.agentId, epoch),
+      unlock: unlockDate(lotPos, epoch),
+      lockWeeks: lockWeeks(lotPos, epoch),
+    };
+  });
+
   const history = [];
   const seen = new Set();
   const push = (entry) => {
@@ -87,7 +99,7 @@ export function positionViewModel({ tokenId, snapshot, lots = [], sales = [], tr
     antsPerEpoch: antsPerEpoch(snapshot, pos),
     poolSharePct: poolShare(snapshot, pos?.agentId, epoch),
     owner: typeof pos?.owner === 'string' ? pos.owner : null,
-    lots: tokenLots,
+    lots: enrichedLots,
     history,
     perAntUsd: best?.perAntUsd ?? null,
     impliedMcUsd: best?.perAntUsd != null && minted != null ? best.perAntUsd * minted : null,
