@@ -12,22 +12,32 @@
   isApprovedForAll/approve, `createListing`, `waitReceipt`, `loadPublicMarket`).
 - **Классификация позиций** — pure `buildSellChoices` (`site/sell-model.mjs`):
   sellable / listed / pending / unavailable; burned, closed и withdrawn
-  отбрасываются. Live-листинги показываются строкой с Cancel через общий
-  `cancelNftListings` + делегированный `button.cancel` (`initCancelHandler`).
-- **Три модуля**: `sell-model.mjs` (математика и фильтр), `sell-modal-view.mjs`
-  (DOM шагов), `sell-modal.mjs` (состояние и кошелёк). Все ≤300 строк.
+  отбрасываются, `unavailable` (нет в свежем снапшоте) больше не продаётся —
+  строка-заглушка вместо кнопки. Live-листинги показываются строкой с Cancel
+  через общий `cancelNftListings` + делегированный `button.cancel`
+  (`initCancelHandler`); после отмены модалка перечитывает выбор через событие
+  `listing:cancelled`.
+- **Четыре модуля**: `sell-model.mjs` (математика и фильтр), `sell-modal-view.mjs`
+  (DOM шагов), `sell-modal.mjs` (состояние и кошелёк), `create-listing.mjs`
+  (общий owner/approve/createListing-путь для модалки и Portfolio-формы).
+  Все ≤300 строк.
+- **Защита от ценовых краёв**: `usdcToWei` отклоняет цену ниже 0,01 USDC
+  (а не отправляет `0n`), обе формы проверяют это до кошелька. Если
+  `readListings()` упал, модалка показывает Retry, а не пустой список (иначе
+  live-лоты выглядели бы как sellable).
 - **My Listings** (`renderMyListingsPanel`): добавлены net (price − 1%) и ends
   (endTime листинга); state/price/Cancel остались как были.
 - `market-view.mjs` уменьшился: старая Select-NFT модалка и её wiring удалены,
   `openSellDialog()` передаёт зависимости. `site/index.html`: `#sell-modal`
   заменила `#select-nft-modal`; CSS-классы `.select-nft-*` переиспользованы.
-- Build manifest: три новых модуля в `scripts/site/build-dist.mjs`.
+- Build manifest: четыре новых модуля в `scripts/site/build-dist.mjs`.
 
 ### Проверки
 
-- `npm.cmd test` = **317 (316 pass / 1 skip / 0 fail)**, включая
-  `site/sell-modal.test.mjs` (fee/net, days cap, фильтр, DOM-сценарий
-  pick → form → review → create с фейковым кошельком и RPC).
+- `npm.cmd test` = **318 (317 pass / 1 skip / 0 fail)**, включая
+  `site/sell-modal.test.mjs` (fee/net, days cap, фильтр, отмена → refresh,
+  Retry при сбое чтения листингов, DOM-сценарий pick → form → review → create
+  с фейковым кошельком и RPC).
 - `npm.cmd run build` = OK, **352 файл**.
 - Браузерный смоук не выполнен (нет живого кошелька в этой сессии).
 

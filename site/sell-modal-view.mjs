@@ -23,9 +23,9 @@ function summaryText(state) {
 }
 
 function renderPick(body, state, h) {
-  const sellable = state.choices.filter((c) => c.state === 'sellable' || c.state === 'unavailable');
+  const sellable = state.choices.filter((c) => c.state === 'sellable');
   const listed = state.choices.filter((c) => c.state === 'listed');
-  const blocked = state.choices.filter((c) => c.state === 'pending');
+  const blocked = state.choices.filter((c) => c.state === 'pending' || c.state === 'unavailable');
 
   body.appendChild(el('p', 'cf-note', 'Only sellable positions are listed. Live listings can be cancelled here.'));
 
@@ -55,7 +55,10 @@ function renderPick(body, state, h) {
     list.appendChild(row);
   }
   for (const choice of blocked) {
-    list.appendChild(el('div', 'cf-note', '#' + choice.tokenId + ' starts next epoch and cannot be listed yet.'));
+    const why = choice.state === 'pending'
+      ? ' starts next epoch and cannot be listed yet.'
+      : ' is not in the latest snapshot yet; retry after the next snapshot.';
+    list.appendChild(el('div', 'cf-note', '#' + choice.tokenId + why));
   }
   body.appendChild(list);
 }
@@ -145,6 +148,15 @@ function renderDone(body, h) {
   body.appendChild(close);
 }
 
+function renderRetry(body, h) {
+  body.appendChild(el('p', 'select-nft-empty-title', 'Could not read your live listings'));
+  body.appendChild(el('p', 'select-nft-empty-sub', 'Selling is paused so an already listed position is not listed twice. Retry the marketplace read.'));
+  const retry = el('button', 'offer-cta', 'Retry');
+  retry.type = 'button';
+  retry.addEventListener('click', () => h.retry());
+  body.appendChild(retry);
+}
+
 export function renderSellModal(state, h) {
   const body = document.getElementById('sell-modal-body');
   if (!body) return;
@@ -160,6 +172,8 @@ export function renderSellModal(state, h) {
     body.appendChild(el('p', 'select-nft-empty-sub', 'Loading your positions...'));
   } else if (state.step === 'pick') {
     renderPick(body, state, h);
+  } else if (state.step === 'retry') {
+    renderRetry(body, h);
   } else if (state.step === 'form') {
     renderForm(body, state, h);
   } else if (state.step === 'review') {

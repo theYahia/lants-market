@@ -71,10 +71,12 @@ async function pickPosition(tokenId) {
 const handlers = {
   close: closeModal,
   connect: () => { void (state.deps && state.deps.connect()); },
+  retry: () => { state.error = ''; state.step = 'loading'; render(); void loadChoices(); },
   select: (tokenId) => { void pickPosition(tokenId); },
   back: () => { state.step = 'form'; state.error = ''; render(); },
   review: () => {
     if (!(Number(state.price) > 0)) { state.error = 'Price must be greater than 0.'; render(); return; }
+    if (usdcToWei(state.price) === null) { state.error = 'Price must be at least 0.01 USDC.'; render(); return; }
     const days = clampDays(state.days);
     if (days === null) { state.error = 'Duration must be between 1 and 60 days.'; render(); return; }
     state.days = String(days);
@@ -88,9 +90,11 @@ const handlers = {
 async function submitListing() {
   const deps = state.deps;
   const fee = feeBreakdown(state.price, state.selected && state.selected.ants);
+  const priceWei = fee ? usdcToWei(fee.gross) : null;
   const secs = deps.wallet.daysToSeconds(state.days);
   if (!state.selected) { state.error = 'Pick a position first.'; render(); return; }
   if (!fee) { state.error = 'Price must be greater than 0.'; state.step = 'form'; render(); return; }
+  if (priceWei === null) { state.error = 'Price must be at least 0.01 USDC.'; state.step = 'form'; render(); return; }
   if (secs === null) { state.error = 'Duration must be between 1 and 60 days.'; state.step = 'form'; render(); return; }
 
   state.busy = true;
@@ -103,7 +107,7 @@ async function submitListing() {
       ensureChain: deps.wallet.ensureChain,
       waitReceipt: deps.wallet.waitReceipt,
       nftId: BigInt(state.selected.tokenId),
-      priceWei: usdcToWei(fee.gross),
+      priceWei,
       durationSecs: secs,
       onStatus: (text) => { state.status = text; render(); },
     });
@@ -140,12 +144,11 @@ export async function openSellModal(deps) {
     return;
   }
 
-  state.choices = await readChoices(deps);
-  state.step = 'pick';
-  if (modal.hidden) return;
-  render();
+  await loadChoices();
 }
 
+// A rejected listings read must not look like "no listings": that would offer
+// live lots for sale again and hide their Cancel rows.
 async function readChoices(deps) {
   const [snapRes, listRes] = await Promise.allSettled([
     deps.loadSnapshot(),
@@ -153,20 +156,34 @@ async function readChoices(deps) {
   ]);
   const snapshot = snapRes.status === 'fulfilled' ? snapRes.value : null;
   const listings = listRes.status === 'fulfilled' ? listRes.value : [];
-  return buildSellChoices({
-    myIds: deps.myIds || [],
-    positions: snapshot && snapshot.positions ? snapshot.positions : [],
-    listings,
-    account: deps.account,
-    epoch: Number(snapshot && snapshot.epoch ? snapshot.epoch : 0),
-  });
+  return {
+    choices: buildSellChoices({
+      myIds: deps.myIds || [],
+      positions: snapshot && snapshot.positions ? snapshot.positions : [],
+      listings,
+      account: deps.account,
+      epoch: Number(snapshot && snapshot.epoch ? snapshot.epoch : 0),
+    }),
+    listingsFailed: listRes.status === 'rejected',
+  };
+}
+
+async function loadChoices() {
+  const deps = state.deps;
+  const modal = document.getElementById('sell-modal');
+  if (!deps || !deps.account || !modal || modal.hidden) return;
+  const result = await readChoices(deps);
+  if (!state.deps || modal.hidden) return;
+  state.choices = result.choices;
+  state.selected = null;
+  state.step = result.listingsFailed ? 'retry' : 'pick';
+  render();
 }
 
 async function refreshChoices() {
   const deps = state.deps;
   if (!deps || !deps.account) return;
-  state.choices = await readChoices(deps);
-  state.selected = null;
-  state.step = 'pick';
-  render();
+  state.status = '';
+  state.error = '';
+  await loadChoices();
 }

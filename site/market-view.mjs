@@ -1713,6 +1713,7 @@ export function initCreateListing() {
     if (secs === null) { say('Duration must be between 1 and 60 days'); return; }
     if (!(selectedProvider ?? window.ethereum)) { say('Connect a wallet first'); return; }
     const price = usdcToWei(priceHuman);
+    if (price === null) { say('Price must be at least 0.01 USDC'); return; }
     btn.disabled = true;
     try {
       await createListingFlow({

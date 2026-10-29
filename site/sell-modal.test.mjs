@@ -26,6 +26,8 @@ test('feeBreakdown: rejects non-positive and non-numeric prices', () => {
 test('usdcToWei: scales USDC to six-decimal units and rejects bad prices', () => {
   assert.equal(usdcToWei(2), 2000000n);
   assert.equal(usdcToWei('0.01'), 10000n);
+  assert.equal(usdcToWei(0.0000004), null);
+  assert.equal(usdcToWei('0.005'), null);
   assert.equal(usdcToWei(0), null);
   assert.equal(usdcToWei(-1), null);
   assert.equal(usdcToWei('abc'), null);
@@ -195,14 +197,19 @@ test('sell modal: pick, form, review and wallet create', async () => {
   }
 });
 
-test('sell modal: rejects an empty price before the review step', async () => {
+test('sell modal: rejects an empty or sub-cent price before the review step', async () => {
   const sell = await import(BASE_URL);
   const { deps } = makeDeps();
   await sell.openSellModal(deps);
   document.querySelector('.select-nft-item').click();
-  const reviewBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Review listing');
-  reviewBtn.click();
+  [...document.querySelectorAll('button')].find((b) => b.textContent === 'Review listing').click();
   assert.match(document.body.textContent, /Price must be greater than 0/);
+
+  const price = document.getElementById('sell-modal-body').querySelector('input[type=number]');
+  price.value = '0.005';
+  price.dispatchEvent(new window.Event('input', { bubbles: true }));
+  [...document.querySelectorAll('button')].find((b) => b.textContent === 'Review listing').click();
+  assert.match(document.body.textContent, /Price must be at least 0\.01 USDC/);
 });
 
 test('sell modal: approves the marketplace before creating when needed', async () => {
@@ -243,5 +250,24 @@ test('sell modal: refreshes the picker after a listing is cancelled', async () =
   document.dispatchEvent(new window.CustomEvent('listing:cancelled'));
   await new Promise((res) => setTimeout(res, 20));
   assert.doesNotMatch(document.body.textContent, /listed at/);
-  assert.match(document.body.textContent, /#2 \u00b7 ANTS unavailable/);
+  assert.match(document.body.textContent, /#2 is not in the latest snapshot yet/);
+});
+
+test('sell modal: pauses when the listings read fails and retries on demand', async () => {
+  const sell = await import(BASE_URL);
+  let fail = true;
+  const { deps } = makeDeps({
+    readListings: async () => {
+      if (fail) throw new Error('rpc unavailable');
+      return listings;
+    },
+  });
+  await sell.openSellModal(deps);
+  assert.match(document.body.textContent, /Could not read your live listings/);
+  assert.doesNotMatch(document.body.textContent, /listed at/);
+
+  fail = false;
+  [...document.querySelectorAll('button')].find((b) => b.textContent === 'Retry').click();
+  await new Promise((res) => setTimeout(res, 20));
+  assert.match(document.body.textContent, /#2 \u00b7 listed at/);
 });

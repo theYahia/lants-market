@@ -5,12 +5,15 @@ import { MARKET } from './market-config.mjs';
 
 const FEE_RATE = 0.01;
 const USDC_UNIT = 10 ** MARKET.usdcDecimals;
+const MIN_PRICE_UNITS = BigInt(USDC_UNIT / 100); // 0.01 USDC
 
 // USDC price (human string/number) -> integer micro-USDC for the listing call.
+// Reject anything below the form's 0.01 USDC step or rounding to zero units.
 export function usdcToWei(priceUsdc) {
   const n = Number(priceUsdc);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return BigInt(Math.round(n * USDC_UNIT));
+  const wei = BigInt(Math.round(n * USDC_UNIT));
+  return wei >= MIN_PRICE_UNITS ? wei : null;
 }
 
 export function etherToAnts(wei) {
