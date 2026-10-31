@@ -3,15 +3,39 @@
 // "Calculate" action selects a pool here via the #inc-calc-amount input and the
 // .inc-calc select.
 import { poolModel } from './incentives-pool-model.mjs';
+import { forecastHorizon, snapshotEpochInputs } from './incentives-forecast.mjs';
 import { isValidOffer } from './incentives-offers.mjs';
 import { validRebate, rebateLabel, rebateForSpend } from './rebate.mjs';
 
 export function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames) {
   const { poolData, estForPool } = poolModel(snapshot, mode);
   const positions = snapshot.positions || [];
-
   const container = document.createElement('div');
   container.className = 'inc-calc';
+  const forecastOutput = document.createElement('div');
+  forecastOutput.className = 'inc-calc-forecast';
+  const forecastStatus = document.createElement('p');
+  forecastStatus.textContent = 'Forecast: exact on-chain inputs required';
+  forecastOutput.appendChild(forecastStatus);
+  const forecastButton = document.createElement('button');
+  forecastButton.type = 'button';
+  forecastButton.textContent = 'Run forecast to unlock';
+  forecastOutput.appendChild(forecastButton);
+  forecastButton.addEventListener('click', () => {
+    const owner = new Map();
+    for (const position of positions) {
+      const pool = String(position.agentId);
+      const weight = position.weightsByEpoch?.[String(Number(mode.epoch) + 1)];
+      if (weight !== undefined) owner.set(pool, BigInt(String(weight)));
+    }
+    const epochs = [];
+    for (let i = 1; i <= 104; i += 1) {
+      const input = snapshotEpochInputs(snapshot, Number(mode.epoch) + i, owner);
+      epochs.push(input.unavailable ? input : input);
+    }
+    const result = forecastHorizon({ epochs, currentEpoch: mode.epoch, stakeEndEpoch: snapshot.stakeEndEpoch || Number(mode.epoch) + 104, discountRateBps: snapshot.forecastDiscountRateBps || 0 });
+    forecastStatus.textContent = result.coverage < 1 ? `Forecast unavailable: coverage ${Math.round(result.coverage * 100)}%` : `Forecast: ${result.undiscountedRewardTotalFix / 10n ** 18n} ANTS undiscounted · ${result.discountedPvRewardFix / 10n ** 18n} ANTS discounted PV`;
+  });
 
   const h3 = document.createElement('h3');
   h3.textContent = 'Estimated rewards calculator';
@@ -79,6 +103,7 @@ export function buildCalculator(snapshot, mode, offers, displayEpoch, poolNames)
   rebateOutput.className = 'inc-calc-rebate';
   container.appendChild(rebateSpendLabel);
   container.appendChild(rebateOutput);
+  container.appendChild(forecastOutput);
 
   function updateRebate() {
     const pool = poolSelect.value;

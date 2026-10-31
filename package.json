@@ -5,11 +5,13 @@
   "description": "Valuation board, market layer and seller incentives for locked ANTS positions (lANTS) on AntSeed",
   "scripts": {
     "build": "node scripts/site/build-dist.mjs",
-    "test": "node --test site/*.test.mjs && node scripts/site/check_authorizations.mjs",
+    "test": "node --test site/*.test.mjs scripts/probes/ants-forecast.test.cjs && node scripts/site/check_authorizations.mjs",
     "test:coverage": "node --test --experimental-test-coverage site/*.test.mjs",
-    "bot": "node --test bot/read-feed.test.mjs bot/read-own-listings.test.mjs bot/read-antseedstats.test.mjs bot/diff.test.mjs bot/format.test.mjs bot/state.test.mjs bot/token-store.test.mjs bot/xapi.test.mjs",
+    "bot": "node --test bot/read-feed.test.mjs bot/read-own-listings.test.mjs bot/read-antseedstats.test.mjs bot/read-antseedstats-live.test.mjs bot/diff.test.mjs bot/format.test.mjs bot/state.test.mjs bot/token-store.test.mjs bot/xapi.test.mjs",
     "probe:state": "node scripts/probes/net-state.cjs",
-    "probe:sellers": "node scripts/probes/seller-rank.cjs"
+    "probe:sellers": "node scripts/probes/seller-rank.cjs",
+    "probe:ants": "node scripts/probes/ants-balance.cjs",
+    "probe:forecast": "node scripts/probes/ants-forecast.cjs"
   },
   "dependencies": {
     "@privy-io/react-auth": "3.45.0",

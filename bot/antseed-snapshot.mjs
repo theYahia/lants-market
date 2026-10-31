@@ -4,8 +4,23 @@
 
 import { maxCompletedEpoch } from './read-antseedstats.mjs';
 
+// Round-number milestone buckets for the lifetime and video post types. A field
+// crossed to the next bucket posts once; the persisted `posted` baseline stores
+// the bucket (not the raw value) so a drift below the boundary never re-posts.
+export const LIFETIME_MILESTONES = [
+  { field: 'lifetimeSettles', kind: 'settles', step: 100000 },
+  { field: 'lifetimeSettledUsd', kind: 'settledUsd', step: 50000 },
+  { field: 'lifetimeBuyers', kind: 'buyers', step: 500 },
+  { field: 'lifetimeSellers', kind: 'sellers', step: 100 },
+];
+export const VIDEO_MILESTONE_STEP = 1000;
+
+export function milestoneBucket(value, step) {
+  return Number.isFinite(value) ? Math.floor(value / step) * step : 0;
+}
+
 // Full snapshot for diffing.
-export function toAntseedSnapshot(result) {
+export function toAntseedSnapshot(result, live = null) {
   const n = result.network || {};
   return {
     settled24h: n.settled24h ?? null,
@@ -34,7 +49,18 @@ export function toAntseedSnapshot(result) {
     burns: result.supply ? result.supply.burns : [],
     restakeBonusPct: result.staking ? result.staking.restakeBonusPct : null,
     epochDetail: result.epochDetail || null,
-    topModels: result.topModels || null,
+    lifetimeSettledUsd: n.lifetimeSettledUsd ?? null,
+    lifetimeSettles: n.lifetimeSettles ?? null,
+    lifetimeBuyers: n.lifetimeBuyers ?? null,
+    lifetimeSellers: n.lifetimeSellers ?? null,
+    modalityTextUsd: n.modalityTextUsd ?? null,
+    modalityImagesUsd: n.modalityImagesUsd ?? null,
+    modalityVideoUsd: n.modalityVideoUsd ?? null,
+    leaders: live && live.leaders ? live.leaders : null,
+    daily: live && live.daily ? live.daily : null,
+    diem: live && live.diem ? live.diem : null,
+    rewards: live && live.rewards ? live.rewards : null,
+    topModels: live && live.topModels ? live.topModels : null,
     epochs: result.epochs ? result.epochs : [],
   };
 }
@@ -58,7 +84,12 @@ export function toAntseedState(snapshot, prev = null) {
     settled30d: prevPosted.settled30d ?? snapshot.settled30d,
     stakedAnts: prevPosted.stakedAnts ?? snapshot.stakedAnts,
     requests24h: prevPosted.requests24h ?? snapshot.requests24h ?? null,
+    diemStake: prevPosted.diemStake ?? (snapshot.diem ? snapshot.diem.stakeValueUsd : null),
+    videoMilestone: prevPosted.videoMilestone ?? milestoneBucket(snapshot.generativeVideos7d, VIDEO_MILESTONE_STEP),
   };
+  for (const { field, step } of LIFETIME_MILESTONES) {
+    posted[field] = prevPosted[field] ?? milestoneBucket(snapshot[field], step);
+  }
   const seedBucket = countdownBucket(snapshot.secondsLeft);
   const countdownPosted = prev?.countdownPosted
     ?? (seedBucket && Number.isInteger(snapshot.epoch) ? { [snapshot.epoch]: seedBucket } : {});
@@ -83,7 +114,11 @@ export function toAntseedState(snapshot, prev = null) {
     postedAt: prev?.postedAt ?? {},
     // Per-epoch countdown bucket already emitted (once per epoch per bucket).
     countdownPosted,
-    // Timestamp of the last top-models post (7-day gate, disabled by default).
+    // Timestamp/date gates for the interval post types.
     lastTopModelsAt: prev?.lastTopModelsAt ?? null,
+    lastModalityAt: prev?.lastModalityAt ?? null,
+    lastLeadersDay: prev?.lastLeadersDay ?? null,
+    lastDailyDay: prev?.lastDailyDay ?? null,
+    lastUsageTargetAt: prev?.lastUsageTargetAt ?? null,
   };
 }

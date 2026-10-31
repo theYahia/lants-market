@@ -20,6 +20,7 @@ const FILES = [
   ['site/incentives-hero.mjs', 'dist/incentives-hero.mjs'],
   ['site/incentives-board.mjs', 'dist/incentives-board.mjs'],
   ['site/incentives-calc.mjs', 'dist/incentives-calc.mjs'],
+  ['site/incentives-forecast.mjs', 'dist/incentives-forecast.mjs'],
   ['site/incentives-nopool.mjs', 'dist/incentives-nopool.mjs'],
   ['site/incentives-points.mjs', 'dist/incentives-points.mjs'],
   ['site/incentives-buyers.mjs', 'dist/incentives-buyers.mjs'],

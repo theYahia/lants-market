@@ -7,7 +7,6 @@ import {
   fmtCompact,
   newListingText,
   newFloorListingText,
-  delistText,
   digestText,
   epochText,
   burnText,
@@ -19,6 +18,13 @@ import {
   countdownText,
   allocText,
   topModelsText,
+  modalityText,
+  videoText,
+  lifetimeText,
+  leadersText,
+  dailyText,
+  diemText,
+  usageTargetText,
   usdWhole,
   pct,
 } from './format.mjs';
@@ -72,10 +78,6 @@ test('newFloorListingText: same detail as a listing, new-floor prefix', () => {
   const t = newFloorListingText({ id: 7, amount: 100, perAntUsd: 0.101, lockDays: 14 });
   assert.equal(t, '\u{1F3AF} New floor listing: #7 ' + DOT + ' \u{1F41C} 100 ANTS @ $0.101 ' + DOT + ' lock 2w ' + DOT + ' lants.eth.limo/#position/7');
   assert.ok(newFloorListingText({ id: 8, amount: 100, perAntUsd: 0.09, lockDays: 0 }).startsWith('\u{1F3AF} New floor listing: #8'));
-});
-
-test('delistText: plain id line with deep link', () => {
-  assert.equal(delistText(12), '\u{1F5D1}\uFE0F Delisted: #12 ' + DOT + ' lants.eth.limo/#position/12');
 });
 
 test('epochText: claim/restake call to action with optional measures', () => {
@@ -261,6 +263,49 @@ test('allocText: emission buckets in cap-pct order with labels', () => {
 test('topModelsText: joins display names with attribution', () => {
   const t = topModelsText({ models: ['Claude Opus 5.5', 'GPT-6 Astra', 'Kimi K3'] });
   assert.equal(t, '\u{1F3C5} Most-used AI on AntSeed (7d): Claude Opus 5.5 ' + DOT + ' GPT-6 Astra ' + DOT + ' Kimi K3 ' + DOT + ' data: antseedstats.com');
+});
+
+test('modalityText: 7d spend by modality', () => {
+  const t = modalityText({ textUsd: 10233.61, videoUsd: 2337.98, imagesUsd: 172.17 });
+  assert.equal(t, '\u{1F9EC} AntSeed 7d spend: text $10.23K ' + DOT + ' video $2.34K ' + DOT + ' images $172 ' + DOT + ' data: antseedstats.com');
+});
+
+test('videoText: native video-inference milestone', () => {
+  const t = videoText({ videos: 5000, spendUsd: 2510.15 });
+  assert.equal(t, '\u{1F39E}\uFE0F Native video inference: 5K videos ' + DOT + ' $2.51K in 7d ' + DOT + ' data: antseedstats.com');
+});
+
+test('lifetimeText: milestones for counts and volume', () => {
+  assert.equal(lifetimeText('settles', 700000), '\u{1F6F0}\uFE0F AntSeed passed 700,000 settlements ' + DOT + ' data: antseedstats.com');
+  assert.equal(lifetimeText('settledUsd', 400000), '\u{1F6F0}\uFE0F AntSeed passed $400,000 settled volume ' + DOT + ' data: antseedstats.com');
+  assert.equal(lifetimeText('buyers', 1500), '\u{1F6F0}\uFE0F AntSeed passed 1,500 buyers ' + DOT + ' data: antseedstats.com');
+  assert.equal(lifetimeText('sellers', 300), '\u{1F6F0}\uFE0F AntSeed passed 300 sellers ' + DOT + ' data: antseedstats.com');
+});
+
+test('leadersText: 24h leaders with attribution', () => {
+  const t = leadersText({
+    sellerName: 'Open Forge',
+    sellerUsd: 645.38,
+    topModelSales: { display: 'GPT-6 Astra', usd: 410.19 },
+    topModelTokens: { display: 'DeepSeek V4.1 Flash', tokens: 5713003154 },
+  });
+  assert.equal(t, '\u{1F947} AntSeed 24h ' + DOT + ' top seller Open Forge $645 ' + DOT + ' most revenue GPT-6 Astra $410 ' + DOT + ' most tokens DeepSeek V4.1 Flash 5.71B ' + DOT + ' data: antseedstats.com');
+});
+
+test('dailyText: yesterday summary', () => {
+  const t = dailyText({ settledUsd: 2738.72, requests: 210696, newUsers: 18 });
+  assert.equal(t, '\u{1F4C8} Yesterday on AntSeed ' + DOT + ' settled $2,739 ' + DOT + ' 210.7K requests ' + DOT + ' 18 new paid users ' + DOT + ' data: antseedstats.com');
+});
+
+test('diemText: capacity pool with optional change and payouts', () => {
+  const t = diemText({ stakeValueUsd: 690694.85, stakers: 82, usdcDistributedUsd: 7647.37, pctChange: '+15.1%' });
+  assert.equal(t, '\u{1F50B} DIEM pool: $690,695 backing capacity (+15.1%) ' + DOT + ' 82 stakers ' + DOT + ' $7,647 USDC paid out ' + DOT + ' data: antseedstats.com');
+  assert.ok(!diemText({ stakeValueUsd: 690694.85, stakers: 82 }).includes('(+'));
+});
+
+test('usageTargetText: budget vs target percentages', () => {
+  const t = usageTargetText({ epoch: 29, usagePctOfTarget: 0.006031, stakePctOfTarget: 0.392649 });
+  assert.equal(t, '\u{1F3AF} Epoch 29 targets ' + DOT + ' usage 0.006% of target ' + DOT + ' stake 0.39% of target ' + DOT + ' data: antseedstats.com');
 });
 
 console.log('format_ok=1');

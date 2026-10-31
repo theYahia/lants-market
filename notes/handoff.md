@@ -1,4 +1,450 @@
-# Handoff — lants.eth.limo (29.10.2026, сессия 17: sell-модалка на Listings)
+# Handoff — lants.eth.limo (29.10.2026, сессия 24: контекст для новой сессии)
+
+## Session 24 — briefing для новой сессии (читай первым)
+
+Дата: 29.10.2026. Доведена формула форкаста, собран постоянный скрипт, исправлена
+формула награды по контракту. Всё НЕ закоммичено (поверх сессий 15–23).
+
+### 1. Новый постоянный скрипт (закрыт хвост сессии 23 №4)
+
+- `scripts/probes/ants-forecast.cjs` (267 строк) + `npm.cmd run probe:forecast`.
+  Один файл, read-only, как просил владелец.
+- antseedstats читается через resident-прокси (undici `ProxyAgent`, **свежий на каждый
+  запрос**, без `AbortController` — нативный fetch рвётся как «terminated»/ECONNRESET).
+  RPC — `publicnode` первичный; DRPC `lb.drpc.live` снова отвечает на простые чтения
+  (проверено `probe:ants`), но держим publicnode.
+- Endpoints: `/staking/pools` (rows: `usage_share_pct`, `reward_per_1k_power_ants`,
+  `next_power_ants`, `usage_points`, `reward_ants`, `reward_settled`), `/models`
+  (`usage.settled_usd` = 7d спрос, пагинация `limit=200`), `/prices` (listings:
+  `agent_id` → model + `input_usd_per_m`, всего 1938, `limit=500`).
+
+### 2. Формула usageShare доведена — и признана слабой
+
+Добавлены нормализация `captured(P)/Σcaptured(Q)` и softmax
+`share(P,M) = w_P·p^-λ / Σ_Q(w_Q·p^-λ)` + гейт доверия `w_P` (trusted/verified=1,
+иначе 0.1). Fit λ по реализованному `usage_share_pct`. Итог: λ схлопывается к 0.5,
+Open Forge предсказан **0.3%** vs факт **24.5%**. **Цена эндогенна** (непроданный SKU
+уценяют вниз) → usageShare из цен не предсказывается; сторона спроса — это уже готовое
+поле API `usage_share_pct`. В price-only модель дальше не вкладываться.
+
+### 3. Формула награды ИСПРАВЛЕНА (главная поправка сессии)
+
+Session 23 писала `reward = budget × usageShare × (myPower/poolPower)`. По контракту
+(`docs/protocol-notes.md` §«How the staker budget is split») вес пула **сокращается**:
+
+```text
+positionReward = budget × sales(P) × myWeight(P) / Σ_Q(sales(Q)·weight(Q))
+```
+
+→ **нет саморазмытия от собственного move**: знаменатель глобальный, не пула. «Не
+навредить себе» — это спросовый риск, а не размытие. `reward_per_1k_power_ants` =
+1000·budget·sales(P)/G, это и есть ставка. Моя power = `positionWeightAtEpoch(id,next)`
+(НЕ поле `weightAmount` из `positions()` — оно ≈ amount без лок-множителя).
+
+### 4. Цифры форкаста (сняты 29.10, эпоха 29 идёт, прогноз на e30)
+
+- Моя power (с лок-множителями ~108x): **Apex 9.79M, GesundAI 5.83M**.
+- Ставки `reward_per_1k_power_ants`: **Open Forge 3.86, GesundAI 2.40, Apex 0.49**.
+- Сценарии (ANTS/эпоху): без изменений **18 825** · всё Apex→GesundAI **37 518** ·
+  всё Apex→Open Forge **51 807** · 60/40 GesundAI/Forge **43 234**.
+- Вывод: первый порядок — Open Forge, но его 24.5% — живой всплеск (settled был 7.7%);
+  60/40 — хедж спросового риска.
+
+### 5. Открытые хвосты
+
+1. **Решение по move остальных Apex-позиций** (~90.3k ANTS = 9.79M power) — у
+   владельца. Рекомендация: Open Forge (выше ставка) или 60/40 (робуст).
+2. Проверить #926 в эп.30 (фармит ли в GesundAI).
+3. Halloween $300 — гейт «кредиты → buyer points» не подтверждён.
+4. Форкаст использует live-ставку; добавить диапазон settled-basis vs live-trend
+   (по `reward_ants` vs `reward_per_1k_power_ants`) для честного «range» — как в
+   Session 23 §5.
+5. `probe:ants` — дописать столбец «уже забрано» по эпохам (хвост сессии 23 №5).
+6. Хвосты сессий 15–23 в силе (Make Offer, Telegram-бот, тайминг выкладки и т.д.).
+
+### 6. Гигиена
+
+`npm.cmd test` = **331 (330 pass / 1 skip / 0 fail)**. Чекпоинт чистый, `/clear`
+безопасен — континуити берётся из этого блока + Session 23 + 21 + `AGENTS.md`.
+
+## Session 23 — briefing для новой сессии (читай первым)
+
+Дата: 29.10.2026. Продолжение сессий 21–22: подтверждён move, восстановлена полная
+кривая наград, построен модельный форкаст. Всё НЕ закоммичено (поверх незакоммиченных
+сессий 15–22). Правка кода: байер-блок в `scripts/probes/ants-balance.cjs`.
+
+### 1. Move #559 → #926 подтверждён (хвост сессии 22 закрыт)
+
+- Новая позиция **#926**: agentId **87124** (GesundAI), 234.42 ANTS, `stakeStartEpoch=30`
+  (фармит с эп.30), `stakeEndEpoch=134`, `closedAtEpoch=0`, **max-lock OFF**
+  (`positionMaxLockPowerAtEpoch(#926,30)=0`, у живого max-lock `#355` = 4.26e24).
+- Старая `#559` закрыта (`closedAtEpoch=30`). Сверка с дашбордом: pending 16→21,
+  Apex leaving −34.15k→−34.38k. Активация «с 30» — эту неделю 234 ANTS не фармят.
+- Move подтверждён **бесплатен по газу**, но позиция активируется со следующей эпохи —
+  каждый move = неделя простоя перемещаемой суммы. Max-lock можно отключить
+  (`disableMaxLock` 0x8e7a6bc2) и включить обратно (`enableMaxLock` 0xedcb5e4e).
+
+### 2. Полная кривая стейкер-наград (хвост сессии 21 закрыт)
+
+Проэнумерированы **все 965 позиций** → у оператора **16 позиций** (вкл. закрытые/перемещённые:
+`#110` closed e25 = split на `#111`+50, `#216` closed e27 = move в `#355`, `#559` closed e30 = move в `#926`).
+
+Реальная кривая (accounting-формула, валидирована точным совпадением e28=12 921.91):
+
+| эпоха | стейкер-награда |
+|---|---:|
+| e24 | 39 044 |
+| e25 | 24 517 |
+| e26 | **49 849 (пик)** |
+| e27 | 16 744 |
+| e28 | 12 922 |
+
+**«83к» из сессии 21 — не пик эпохи, а ошибка памяти.** Пик = 49.8k в e26. Падение
+e26→e28 = **−74%**, при том что стейк рос (5.67M→9.70M вес).
+
+### 3. Причина падения: миграция спроса Apex → GesundAI
+
+Награда = `budget × usageShare(пул) × (myPower / poolPower)`. Бюджет ~100–107k стабилен.
+Рухнула `usageShare` Apex: **65% сети (e26) → 5% (e28)**, GesundAI взлетел 17%→47%.
+В e28 из 12 922 ANTS: **10 242 пришло с одной позиции `#355`** (GesundAI), все 11 Apex
+вместе дали ~2.7k. Падение — не от действий владельца, а от переезда рынка продаж.
+
+### 4. Формула форкаста (3 входа)
+
+```
+reward(P) = budget × usageShare(пул) × (power(P) / power(пул))
+```
+- `budget` — константа, `stakerEpochBudget(e+1)`.
+- `power(пул)` — **включает pending** (on-chain `poolWeightAtEpoch(пул, e+1)`, или
+  antseedstats `next_power_ants` / `pending_positions`). Плюс **свой move тоже двигает знаменатель**.
+- `usageShare` — **demand, не предсказывается из stake**. Трейлинг: settled e28 (Apex 4.9%,
+  GesundAI 47.1%, Open Forge 7.7%) vs live-тренд e29 (Apex 3.1%, GesundAI 15.2%, Open Forge 24.5%).
+
+### 5. Сценарии форкаста @e30 (range = [live-тренд .. settled-basis])
+
+| сценарий | settled-basis | live-тренд |
+|---|---:|---:|
+| без изменений | 12 234 | 5 036 |
+| всё Apex → GesundAI | 18 212 | 5 897 |
+| всё Apex → Open Forge | 13 438 | **17 744** |
+| 60% GesundAI / 40% Forge | 16 508 | 16 089 |
+| только #563+#267 → GesundAI | 17 393 | 6 316 |
+
+Вывод: сидеть в Apex — худший сценарий при любом спросе. 60/40 GesundAI/Forge — самый
+стабильный (почти без разброса).
+
+### 6. Модельный разбор (главный инсайт: usageShare = спрос на модели пула)
+
+- Топ-10 моделей = **63%** всего 7d-оборота, топ-20 = **82%**. Лидеры: `gpt-5-3-codex-spark`
+  $5.2k (кит, 9 buyers), `claude-opus-5-5` $4.6k, `gpt-6-astra` $4.4k, `kimi-k3` $4.2k.
+- **Побеждает цена, а не каталог.** GesundAI демпингует claude-семейство в 2–10x дешевле
+  Apex (fable-5: $0.45 vs $5.00; opus-5-5: $0.35 vs $2.00). Apex широк (13 моделей), но
+  по каждой топ-модели в 10–100x дороже минимума → его `usageShare` ≈ 0. Половина моделей
+  Apex (`abliteration`, `aion`) — мёртвый инвентарь с $0 спроса.
+- **Open Forge — монополист видео** среди наших пулов (seedance/kling/veo/ltx/grok-imagine-video).
+  GesundAI — **ноль видео** (только 2 текстовые claude-fable). Apex — 18 видео-листингов,
+  но половина с `in=null` (мёртвые).
+
+### 7. Видео-модели (топ по 7d $)
+
+seedance-2-5-text-to-video $535 · seedance-2-0 $272 · seedance-2-0-fast $251 ·
+kling-video-v3-pro $165 · kling-v3-standard $130 · wan-3-0 $117 · veo3-1-fast $101.
+Весь видео-сегмент ≈ $2.7k/7d против ~$38k текста (~6%). Изображения <1% — не фактор.
+
+### 8. Код и данные (эта сессия)
+
+- `scripts/probes/ants-balance.cjs` — добавлен байер-блок. Ключевой факт: `pendingBuyerReward`
+  возвращает **брутто и НЕ обнуляется** после стейка; флаг «забрано» — отдельный
+  `buyerEpochClaimed(address,epoch)`. Поэтому «клеймабельно» = `pending>0 && !claimed`.
+  Клеймабельно сейчас **13 054.09 ANTS** (e24–28). Проверено на живом RPC через прокси.
+- Одноразовые скрипты анализа (не в репо, в Temp): `curve-full.cjs`, `dilution.cjs`,
+  `forecast.cjs`, `models-by-pool.cjs`, `overlap.cjs`, `video4.cjs`, `top-models.cjs`,
+  `forecast-models.cjs`. Не коммитить.
+
+### 9. RPC / прокси
+
+- DRPC (`lb.drpc.live`) — **мёртв** (`RPC Request failed`). Рабочий путь: `publicnode`.
+- Resident-прокси (для ончейн-ридов и antseedstats): `http://antseed111-country-any:…@gate.nodemaven.com:8080`
+  из `~/.config/kilo/secrets/proxies-ru.txt`, только через `undici.fetch` + `ProxyAgent`.
+- antseedstats API: `/api/v1/staking/pools` (next_power, pending_positions, usage_share),
+  `/api/v1/models` (7d usage, `video_generation`, `min_video_usd_per_s`), `/api/v1/prices`
+  (пагинация `?limit=500&offset=`, agent_id → модель+цена).
+
+### 10. Открытые хвосты
+
+1. **Решение по move остальных Apex-позиций** (~90.3k: #563=37k, #267=18k, #27=10k) — отложено владельцем. Рекомендация по моделям: GesundAI (демпинг claude) или Open Forge (видео), Apex — ноль.
+2. **Проверить #926 в эп.30** (фармит ли в GesundAI) — после старта эп.30.
+3. **Halloween $300** — гейт «аккруят ли призовые credits buyer points» не подтверждён (нужен ответ AntSeed).
+4. **Форкаст-скрипт** — перенести одноразовый `forecast.cjs`/`forecast-models.cjs` в постоянный `scripts/probes/ants-forecast.cjs` + `ants-models.cjs` (владелец просил «всё в одном скрипте»).
+5. **Дописать байер-блок в probe:ants** — сейчас он считает только клеймабельное; добавить столбец «уже забрано» по эпохам, если владелец хочет видеть историю.
+6. RPC DRPC исчерпан — держать fallback publicnode; при восстановлении баланса вернуть.
+
+### 11. Гигиена
+
+Чистый чекпоинт: move подтверждён, кривая восстановлена, форкаст построен. Рекомендую
+`/clear`; континуити берётся из этого блока + сессии 21–22 ниже + `AGENTS.md`.
+
+## Session 21 — briefing для новой сессии (читай первым)
+
+Дата: 29.10.2026. Разбор владельца «сколько нам капает и куда стейкать». Добавлен
+скрипт балансов `scripts/probes/ants-balance.cjs`. Ничего не закоммичено (поверх
+незакоммиченных сессий 15–19). Детали — в сессиях ниже, контекст проекта — `AGENTS.md`.
+
+### 1. Наши кошельки и роли (НЕ путать — три сущности)
+
+| Адрес | Роль | Что получает |
+|---|---|---|
+| `0x3d4C…Eef1B` | оператор + стейкер | стейкер-награды с 13 позиций |
+| `0x86bb…e473` | байер-нода | байер-награды за paid usage |
+
+Оба в `site/own-addresses.json` («our own buyer node and payer»). Deposits-оператор
+байер-ноды = `0x3d4C…` — только он вызывает `stakeBuyerReward` (награда не
+клеймится в кошелёк вообще: только стейкается в позицию, ANTS непереносимы).
+
+### 2. Цифры (сняты с цепи 29.10, эпоха 28 завершена, 29 идёт)
+
+**Стейк `0x3d4C`:** 13 позиций, 143 667 ANTS залочено. Пулы: Apex (52894) ~90к,
+GesundAI (87124) ~53к (позиции #355, #562). Стейкер-награды: эпоха 28 = **12 921 ANTS**,
+эпоха 29 (идёт) = **6 164 ANTS** пока. Доходность ≈9%/эпоху (~470% годовых).
+
+**Байер-награда `0x86bb` (`pendingBuyerReward` по эпохам):**
+
+| Эпоха | ANTS | Статус |
+|---|---:|---|
+| 22 | 10 075.91 | застейкана → позиция #27 |
+| 23 | 3 487.06 | застейкана → позиция #111 (+50 отщеплено) |
+| 24 | 3 442.24 | **не застейкана** |
+| 25 | 4 677.70 | **не застейкана** |
+| 26 | 1 886.45 | **не застейкана** |
+| 27 | 1 622.47 | **не застейкана** |
+| 28 | 1 425.23 | **не застейкана** |
+
+Итого заработано 26 617 ANTS, застейкано 13 563 (эпохи 22–23), **клеймабельно сейчас
+≈13 054 ANTS** (эпохи 24–28). В кошельке байер-ноды 0 ANTS (владелец не клеймил).
+
+### 3. Механика (что владелец теперь понимает)
+
+- **143к = тело (залоченные ANTS), не награда.** Награда капает сверху.
+- **Стейкер-награда НЕ зависит от usage владельца** — только от продаж пулов
+  (Apex/GesundAI) и размытия другими стейкерами. Падение «83к → 12к» объясняется
+  этим, а не «стал меньше пользоваться». Usage влияет только на байер-награду.
+- **Поинты (antseedpoints.com) = байер-награда.** Байер-нода качает мало: ~$60/эпоху
+  usage → 1 425 ANTS (эпоха 28), далеко до капа 5% (12 632 ANTS).
+- **Twitter/соцсети НЕ дают бустов.** Буст = только stake + lock. Referral (2%) —
+  PR #1015 открыт, не смержен. Trust score «identity 20» — рейтинг продавца, не байера.
+- Байер-награду выводить в кошелёк нельзя, только `stakeBuyerReward` → новая позиция.
+
+### 4. Рекомендации (владельцу)
+
+- **Байер-награду стейкать в GesundAI (87124) + max-lock** — платит ~26%/эпоху против
+  ~5% у Apex (по данным эпохи 28). 5 отдельных tx (эпохи 24–28 по одной).
+- **Конкурс Halloween ($300 AI-кредитов):** сначала подтвердить у AntSeed, что
+  призовые credits аккруят buyer points как paid usage (иначе приз не даёт ANTS).
+  Если да — ~7к ANTS за $300 usage в тяжёлый пул. Конкурс: quote RT + follow @AntSeed.
+
+### 5. Что сделано в коде (НЕ закоммичено)
+
+- `scripts/probes/ants-balance.cjs` (НОВЫЙ, 206 строк) — балансы ANTS/USDC + награды
+  за finished/current эпоху + delta «was→now». `npm run probe:ants [addr] [--proxy] [--rpc]`.
+  State: `scripts/probes/.ants-balance-state.json` (по адресу, gitignored).
+- `package.json`: `probe:ants`. `.gitignore`: `scripts/probes/.ants-balance-state.json`.
+
+### 6. Открытые хвосты (не доделано)
+
+1. Не прогонял `pendingStakerReward` по всем эпохам 22–28 → точная кривая падения
+   «83к → 12к» не снята.
+2. Не добавил блок «байер-награды по эпохам» в `probe:ants` (владелец просил «всё в
+   одном скрипте»).
+3. Не сделал расчёт «$300 usage → GesundAI vs Apex» с учётом веса/размытия.
+4. RPC: DRPC (`rpc-base.url`) сейчас `User balance exceeded` → рабочий путь publicnode.
+   Прокси nodemaven работает только через `undici.fetch`+ProxyAgent (глобальный fetch
+   в Node 24 не работает с этим прокси) — см. `makeTransport` в ants-balance.cjs.
+
+### 7. Сессии ниже — архив (15–20, контекст)
+
+## Session 20 — briefing для новой сессии (читай первым)
+
+Дата: 29.10.2026. Это сводка «что сейчас есть и что нельзя сломать». Детали — в
+сессиях ниже. Глубокий контекст проекта — `AGENTS.md` (стек, инварианты, команды).
+
+### 1. Состояние git (главное)
+
+- Закоммиченный HEAD: `ef29dfd fix(site): harden sell flow guards`. Всё, что
+  сделано в сессиях 15–19, **лежит в рабочем дереве, НЕ закоммичено и НЕ запушено**.
+- Деплой **CI-only** (GitHub Actions `snapshot` → `workflow_dispatch source=manual`).
+  Локально в IPFS не публиковать. Ничего не коммитить/пушить без явной команды.
+
+### 2. Незакоммиченные изменения (по группам)
+
+- **Site (витрина/продажа/UX)** — sell-модалка (Session 17), свежесть витрины,
+  all-time volume, Make Offer-правки, banner incentives, portfolio-rewards
+  (Session 19). Файлы: `site/sell-*.mjs`, `site/storefront.mjs`, `site/market-view.mjs`,
+  `site/market-stats.mjs`, `site/incentives.mjs`, `site/index.html`, `site/app.css`,
+  `site/portfolio-rewards.mjs`, `site/market-volume.mjs` (+ их `.test.mjs`),
+  `scripts/site/build-dist.mjs`, `scripts/check-trades-overlap.mjs`.
+- **Twitter-бот @sxsiant** — убраны listing-посты (Session 18), до этого demand-посты
+  antseedstats (Session 16), own-listings→Seaport источник (Session 15). Файлы:
+  `bot/diff.mjs`, `bot/run.mjs`, `bot/read-feed.mjs`, `bot/state.mjs`, `bot/format.mjs`
+  (+ `.test.mjs`), `.github/workflows/twitter-bot.yml`, `bot/.env.example`, `.gitignore`.
+- **Telegram-бот @lantsalerts_bot** — `bot/tg-*.mjs` + `bot/tg-*.test.mjs` +
+  `.github/workflows/telegram-bot.yml`, **всё untracked**, в работе.
+
+### 3. Инварианты, которые нельзя откатывать (без пересмотра с владельцем)
+
+- **Twitter-бот НЕ постит листинги**: убраны `listing`/`floor-listing`/`delist`
+  (Session 18) и ранее `Sold`/`Floor move` (Session 15). Постит только `epoch` CTA +
+  antseedstats + недельный дайджест. Причина: это тикер конкурента, не наш инвентарь.
+- **Лимиты постинга СНЯТЫ** (владелец, 29.10): `STATS_PER_RUN=0`,
+  `STATS_THROTTLE=false`, без `MAX_POSTS_PER_RUN`. Вернуть: `1` / `true` /
+  `MAX_POSTS_PER_RUN: 3`.
+- **Никогда не постить APY / boost-yield** (`apy_*_pct`). Top-models **gated off**
+  (`TOP_MODELS_ENABLED=false`).
+- **Telegram-бот не трогать**: `bot/tg-*` импортирует общие модули (`format.mjs`
+  `newListingText`/`newFloorListingText`, `read-own-listings.mjs`, `read-feed.mjs`
+  `toMarket`/`readFeed`). Он продолжает постить листинги.
+
+### 4. Ключевые гейты / открытые вопросы
+
+- **Make Offer (Session 19, П.5 E) — НЕ начат.** Гейты: forge не установлен,
+  deploy-ключ (не коммитить), fee-модель офферов (рекомендация 1% seller-side,
+  `feeRecipient`=оператор), полный адрес референта veXy (`0x2903…69c4` обрезан),
+  ABI `positions(uint256)`. Макет Manage-модалки — на ревью.
+- **Session 19 П.3.1** — проверить на старте следующей эпохи тайминг выкладки своих
+  позиций (поставить свой флор раньше конкурента).
+- **Session 16** — `models` sort semantics не подтверждён (top-models остаётся
+  выключенным); вопрос: сливать ли `alloc` в `epochstats`; countdown-бакеты 6h/1h.
+- **Session 15** — Seaport shape-гейт `listedCount>0 && listings пусто → ok:false`
+  может оборвать прогон при дрейфе фида конкурента; allowlist по продавцу не сделан.
+
+### 5. Команды проверки
+
+- Тесты: `npm.cmd test` (site), `npm.cmd run bot` (twitter), `npm.cmd run bot:tg`
+  (telegram), `npm.cmd run test:coverage`. Билд: `npm.cmd run build`.
+- Dry-run бота: `node bot/run.mjs --dry-run`. Синтаксис: `node --check <files>`.
+- Doc-билд после правки `site/docs/*.md`: `node scripts/site/build-docs.mjs`.
+
+### 6. Последние зелёные прогоны
+
+- `npm.cmd run bot` = 101/101, `bot:tg` = 59/59, `npm.cmd test` = 328 (327 pass/1 skip)
+  (skip — forge-артефакт), `npm.cmd run build` = OK 354 файла.
+
+## Session 19 — свежесть витрины, all-time volume, Make Offer и UX-правки (НЕ закоммичено)
+
+Дата: 29.10.2026. План (источник правды):
+`.kilo/plans/1793267013326-market-freshness-volume-offers-ux.md`. Деплой-референс: `ef29dfd`.
+
+### Сделано (A/B/C/D)
+
+- **П.3 (A1)** — видимая подсказка «1–60 days» в sell-модалке
+  (`site/sell-modal-view.mjs` renderForm) и в Portfolio-форме «List a position»
+  (`site/index.html` #cf-days). Тест: `site/sell-modal.test.mjs`.
+- **П.8 (A2)** — баннер «PREPARING — work in progress» первым ребёнком `#incentives`
+  (`site/incentives.mjs`), остаётся и в skeleton-фазе, и после загрузки. CSS `.inc-preparing`.
+- **П.6 (A3)** — Staker Rewards в сводке теперь суммирует indexed + finished-epoch
+  награды, как кнопки строк. Новый модуль `site/portfolio-rewards.mjs`
+  (`readPositionReward` / `readStakerRewardTotals` / `readFinishedEpoch`); `onConnect`
+  читает `currentEpoch()` один раз, `renderMyPositions` переиспользует `readPositionReward`.
+  `market-view.mjs` уменьшился (~-19 строк). Тултип на карточке «Staker Rewards».
+  Тест: `site/portfolio-rewards.test.mjs`.
+- **П.1 (B1)** — авто-опрос таблицы Listings каждые 60с в `site/storefront.mjs` `init()`
+  (пропуск при `document.hidden` и идущей загрузке). Шапка (tiles) не тронута.
+- **П.1.1 (C1)** — `scripts/check-trades-overlap.mjs` (read-only). Запущен:
+  **пересечение пусто** — 33 USDC-трейда конкурента, 6 наших BuyListing-транзакций
+  (все внутренние, listingId 0–5), overlap=0. Формула = сумма (own + competitor).
+- **П.1.1 (C2)** — `site/market-volume.mjs` (`fetchAllTimeUsdcVolume`) + расширение
+  `computeMarketStats` параметром `competitorVolumeUsd` (только в all-time итог, не в 24h/7d).
+  Плитка «Total Volume» = own + competitor; при недоступности фида — фолбэк на own.
+  Тесты: `site/market-volume.test.mjs`, `site/market-stats.test.mjs`.
+- **П.7 (D)** — Portfolio UX: кнопка «List» в строке открывает sell-модалку с
+  предвыбранным tokenId (`sell-modal.mjs` preselectedId), «Manage» раскрывает свёрнутую
+  форму и фокусирует id; нижние формы свёрнуты в `<details>` (дефолтный вид портфеля =
+  сводка + My Positions + My Listings). Полная «Manage»-модалка — на ревью.
+
+### Проверено
+
+- `npm.cmd test` = **328 (327 pass / 1 skip / 0 fail)** (skip — forge-артефакт).
+- `npm.cmd run build` = OK, **354 файла** (ASCII-гейт пройден).
+- `node scripts/check-trades-overlap.mjs` — overlap=0 (см. выше).
+
+### Гейты / открытые вопросы (из плана)
+
+- **П.5 (E) Make Offer — отдельный трек, НЕ начат.** Гейты: forge не установлен
+  (нет `forge` на машине), deploy-ключ (никогда не коммитить), fee-модель офферов
+  (рекомендация: та же 1% seller-side fee, `feeRecipient` = оператор `0x3d4C…Eef1B`) —
+  подтвердить владельцу, полный адрес референта veXy (`0x2903…69c4` в доке обрезан) +
+  ABI `positions(uint256)` для пересчёта цены. E1–E4 в плане.
+- **П.7** — точный макет «Manage»-модалки подтвердить на ревью (сейчас: свёрнутые
+  формы + List→модалка).
+- **П.3.1 (заметка владельца)** — **проверить на старте следующей эпохи**: тайминг
+  выкладки своих позиций, чтобы успеть до конкурента и поставить свой флор раньше
+  (сверить с ботом `@sxsiant`, который постит «New floor listing»).
+
+## Session 18 — бот @sxsiant: listing/delist убраны, лимиты остаются снятыми (НЕ закоммичено)
+
+Дата: 29.10.2026. План (источник правды):
+`.kilo/plans/1793267105273-twitter-bot-drop-listing-posts.md`.
+
+### Итог для следующей сессии (TL;DR)
+
+`@sxsiant` больше НЕ постит листинги — убраны `listing` (🆕), `floor-listing` (🎯),
+`delist` (🗑️), плюс ранее (сессия 15) `Sold`/`Floor move`. Причина: это тикер
+конкурента (Seaport/antseedmarkets), а не наш инвентарь. Постит ТОЛЬКО: `epoch`
+(claim/restake CTA), все antseedstats-посты и недельный дайджест. Лимиты СНЯТЫ
+(`STATS_PER_RUN=0`, `STATS_THROTTLE=false`, без `MAX_POSTS_PER_RUN`) — владелец
+ловит проблемы на живом поведении. Telegram-бот (`bot/tg-*`, untracked) НЕ трогать:
+он продолжает постить листинги и берёт `newListingText`/`newFloorListingText` из
+общего `format.mjs`.
+
+### Решение владельца (29.10)
+
+Твиттер-бот перестал постить все listing-level рыночные тики, дублирующие фид
+конкурента: `listing` (🆕), `floor-listing` (🎯), `delist` (🗑️). `Sold` / `Floor
+move` убраны ещё в сессии 15. Оставлены: `epoch` (claim/restake CTA), все
+antseedstats-посты (`burn`, `settled`, `staked`, `record7d`, `usage`, `countdown`,
+`alloc`, `epochstats`) и недельный дайджест.
+
+Лимиты постинга остаются снятыми по просьбе владельца (29.10), чтобы быстрее
+ловить проблемы на живом поведении: `STATS_PER_RUN = 0`, `STATS_THROTTLE = false`,
+без `MAX_POSTS_PER_RUN` в workflow. Держится только дедуп по ключу, отброс очереди
+старше 48 ч, дайджест раз в 7 дней и cron `7 * * * *`. Вернуть троттлинг при
+необходимости: `STATS_PER_RUN = 1`, `STATS_THROTTLE = true`,
+`MAX_POSTS_PER_RUN: 3` в workflow.
+
+### Ограничение: общие модули питают Telegram-бот
+
+`bot/tg-*.mjs` (untracked, `@lantsalerts_bot`) импортирует модули твиттер-бота.
+Не сломано (подтверждено `npm.cmd run bot:tg` = 59/59):
+
+- `format.mjs` — сохранены `posLink`, `price3`, `fmtAmount`, `newListingText`,
+  `newFloorListingText`, `countdownText` (их берёт `bot/tg-format.mjs`). Удалён
+  только мёртвый `delistText` (Telegram его не импортирует).
+- `read-own-listings.mjs` — сохранён (импортируется `bot/tg-run.mjs`).
+- `read-feed.mjs` `toMarket`/`readFeed` — сохранены парсинг листингов и shape-гейт
+  `listedCount > 0 && listings.length === 0` (Telegram использует
+  `market.listings`, `market.floorAsk`, `market.listedCount`).
+
+`bot/diff.mjs`, `bot/run.mjs`, `bot/state.mjs` — только для твиттер-бота.
+
+### Изменено по файлам
+
+- `bot/diff.mjs` — `diffFeed` отдаёт только закрытие эпохи; удалены мёртвые
+  `approxPrice`/`listingMap`/`minPrice`; импорт срезан до `epochText` + antseedstats.
+- `bot/run.mjs` — убран `readOwnListings()` и фолбэк own-listings;
+  `curr = { avg24h, epoch }`; лимиты оставлены снятыми.
+- `bot/read-feed.mjs` — `toState` = `{ epoch }` (листинги больше не персистятся).
+- `bot/state.mjs` — `MARKET_EVENT_TYPES = ['epoch']`.
+- `bot/format.mjs` — удалён `delistText`.
+- Тесты обновлены (`diff/format/state/read-feed`), доки (`twitter-content-plan.md`,
+  `AGENTS.md`) приведены к новому инварианту.
+
+### Проверено
+
+- `npm.cmd run bot` = **101/101 pass**.
+- `npm.cmd run bot:tg` = **59/59 pass** (общие модули не сломаны).
+- `npm.cmd test` = **318 (317 pass / 1 skip / 0 fail)** (skip — forge-артефакт).
+- `node bot/run.mjs --dry-run` — только digest/antseedstats, listing/delist не
+  генерируются.
+- `node --check` — все изменённые модули OK.
 
 ## Session 17 — продажа своих позиций из Listings (НЕ закоммичено)
 

@@ -63,9 +63,9 @@ export function markEmitted(emitted, key) {
 // (lants.eth.limo) always precede antseedstats events in a run's posting slice;
 // continuous antseedstats metrics are capped per run and cooled down per metric.
 
-export const MARKET_EVENT_TYPES = new Set(['listing', 'floor-listing', 'delist', 'epoch']);
+export const MARKET_EVENT_TYPES = new Set(['epoch']);
 
-export const STAT_COOLDOWN_HOURS = { settled7d: 24, settled30d: 24, stakedAnts: 48, requests24h: 24 };
+export const STAT_COOLDOWN_HOURS = { settled7d: 24, settled30d: 24, stakedAnts: 48, requests24h: 24, diemStake: 24 };
 
 export function isMarketEvent(type) {
   return MARKET_EVENT_TYPES.has(type);

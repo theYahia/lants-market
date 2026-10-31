@@ -13,7 +13,7 @@ import {
   maxCompletedEpoch,
   readAntseedStats,
 } from './read-antseedstats.mjs';
-import { toAntseedSnapshot, toAntseedState, countdownBucket } from './antseed-snapshot.mjs';
+import { toAntseedSnapshot, toAntseedState, countdownBucket, milestoneBucket, LIFETIME_MILESTONES, VIDEO_MILESTONE_STEP } from './antseed-snapshot.mjs';
 
 const load = (name) =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8'));
@@ -248,10 +248,18 @@ test('toAntseedSnapshot and toAntseedState build diff + persist shapes', () => {
   assert.equal(state.burnedAnts, 6);
   assert.equal(state.settles7d, 10);
   assert.equal(state.sellers7d, 2);
-  assert.deepEqual(state.posted, { settled7d: 2, settled30d: 3, stakedAnts: 2, requests24h: null });
+  assert.deepEqual(state.posted, {
+    settled7d: 2, settled30d: 3, stakedAnts: 2, requests24h: null,
+    diemStake: null, videoMilestone: 0,
+    lifetimeSettles: 0, lifetimeSettledUsd: 0, lifetimeBuyers: 0, lifetimeSellers: 0,
+  });
   assert.equal(state.max7d, 2);
   assert.deepEqual(state.countdownPosted, {});
   assert.equal(state.lastTopModelsAt, null);
+  assert.equal(state.lastModalityAt, null);
+  assert.equal(state.lastLeadersDay, null);
+  assert.equal(state.lastDailyDay, null);
+  assert.equal(state.lastUsageTargetAt, null);
 });
 
 test('toAntseedState preserves the posted baseline and max7d from prev', () => {
@@ -272,7 +280,11 @@ test('toAntseedState preserves the posted baseline and max7d from prev', () => {
     max7d: 13000,
   };
   const state = toAntseedState(snapshot, prev);
-  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000 });
+  assert.deepEqual(state.posted, {
+    settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000,
+    diemStake: null, videoMilestone: 0,
+    lifetimeSettles: 0, lifetimeSettledUsd: 0, lifetimeBuyers: 0, lifetimeSellers: 0,
+  });
   assert.equal(state.max7d, 13000);
 });
 
@@ -292,7 +304,11 @@ test('toAntseedState seeds requests24h and countdown on upgrade, preserving prev
     max7d: 13000,
   };
   const state = toAntseedState(snapshot, prev);
-  assert.deepEqual(state.posted, { settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000 });
+  assert.deepEqual(state.posted, {
+    settled7d: 12000, settled30d: 30000, stakedAnts: 1500000, requests24h: 200000,
+    diemStake: null, videoMilestone: 0,
+    lifetimeSettles: 0, lifetimeSettledUsd: 0, lifetimeBuyers: 0, lifetimeSellers: 0,
+  });
   assert.deepEqual(state.countdownPosted, { 28: '6h' });
 });
 
@@ -303,4 +319,45 @@ test('countdownBucket buckets seconds left into 6h/1h boundaries', () => {
   assert.equal(countdownBucket(10800), '6h');
   assert.equal(countdownBucket(3600), '1h');
   assert.equal(countdownBucket(600), '1h');
+});
+
+test('parseNetworkSummary extracts lifetime and modality spend', () => {
+  const json = {
+    data: {
+      windows: { '7d': { settled_usd: '10', settles: 5, sellers: 2, buyers: 1 } },
+      epoch: { number: 29 },
+      lifetime: { settled_usd: '335469.52', settles: 650462, buyers: 1419, sellers: 246, fees_usd: '13332.29' },
+      modality_7d: { text: { spend_usd: '10233.61' }, images: { spend_usd: '172.17' }, video: { spend_usd: '2337.98' } },
+    },
+  };
+  const res = parseNetworkSummary(json);
+  assert.equal(res.ok, true);
+  assert.ok(Math.abs(res.network.lifetimeSettledUsd - 335469.52) < 1e-6);
+  assert.equal(res.network.lifetimeSettles, 650462);
+  assert.equal(res.network.lifetimeBuyers, 1419);
+  assert.equal(res.network.lifetimeSellers, 246);
+  assert.ok(Math.abs(res.network.lifetimeFeesUsd - 13332.29) < 1e-6);
+  assert.ok(Math.abs(res.network.modalityTextUsd - 10233.61) < 1e-6);
+  assert.ok(Math.abs(res.network.modalityImagesUsd - 172.17) < 1e-6);
+  assert.ok(Math.abs(res.network.modalityVideoUsd - 2337.98) < 1e-6);
+});
+
+test('parseNetworkSummary leaves lifetime and modality null when absent', () => {
+  const json = { data: { windows: { '7d': { settled_usd: '1' } }, epoch: { number: 29 } } };
+  const res = parseNetworkSummary(json);
+  assert.equal(res.ok, true);
+  assert.equal(res.network.lifetimeSettledUsd, null);
+  assert.equal(res.network.lifetimeSettles, null);
+  assert.equal(res.network.modalityTextUsd, null);
+  assert.equal(res.network.modalityVideoUsd, null);
+});
+
+test('milestoneBucket floors to the given step', () => {
+  assert.equal(milestoneBucket(650462, 100000), 600000);
+  assert.equal(milestoneBucket(700001, 100000), 700000);
+  assert.equal(milestoneBucket(3221, 1000), 3000);
+  assert.equal(milestoneBucket(null, 1000), 0);
+  assert.equal(milestoneBucket(undefined, 1000), 0);
+  assert.equal(LIFETIME_MILESTONES.length, 4);
+  assert.equal(VIDEO_MILESTONE_STEP, 1000);
 });

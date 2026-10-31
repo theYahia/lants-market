@@ -9,8 +9,9 @@
 // posted at all (see docs/twitter-content-plan.md "Removed post types").
 //
 // Our OWN marketplace listings (VexyMarketplace, the 1% seller fee) are read
-// on-chain in bot/read-own-listings.mjs. An optional source supplies the
-// closed-epoch emission for the epoch post only (see fetchEmission).
+// on-chain in bot/read-own-listings.mjs, now by the Telegram bot (bot/tg-run.mjs)
+// rather than @sxsiant. An optional source supplies the closed-epoch emission
+// for the epoch post only (see fetchEmission).
 
 import { fetchSeaportMarket } from '../site/seaport-feed.mjs';
 
@@ -121,13 +122,11 @@ export async function fetchEmission({ fetchImpl = globalThis.fetch, timeoutMs = 
   return { ok: false, reason: 'network' };
 }
 
-// Compact state persisted between runs: the active epoch and our own listings
-// (id + price). The full lot objects are carried only by the run's snapshot.
+// Compact state persisted between runs: just the active epoch. Listing/trade
+// events are no longer derived from the feed (see docs/twitter-content-plan.md
+// "Removed post types"), so there is no listing set to persist.
 export function toState(curr) {
-  return {
-    epoch: curr.epoch,
-    listings: (curr.listings || []).map((l) => ({ id: l.id, perAntUsd: l.perAntUsd })),
-  };
+  return { epoch: curr.epoch };
 }
 
 /**

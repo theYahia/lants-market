@@ -17,6 +17,7 @@ import { buildCalculator } from './incentives-calc.mjs';
 import { buildBuyersSection } from './incentives-buyers.mjs';
 import { buildProvidersSection } from './incentives-providers.mjs';
 import { buildOfferSection } from './incentives-offers.mjs';
+import { forecastEpoch, forecastHorizon, decimalToFix, snapshotEpochInputs } from './incentives-forecast.mjs';
 import { buildHero, buildMetrics, buildHeroActions, buildSection } from './incentives-hero.mjs';
 
 export { isValidOffer, offerLine, offerCard, buildOfferRows, buildOfferSection } from './incentives-offers.mjs';
@@ -29,6 +30,7 @@ export { buildCalculator } from './incentives-calc.mjs';
 export { buildBuyersSection } from './incentives-buyers.mjs';
 export { buildProvidersSection } from './incentives-providers.mjs';
 export { buildNoPool } from './incentives-nopool.mjs';
+export { forecastEpoch, forecastHorizon, decimalToFix, snapshotEpochInputs } from './incentives-forecast.mjs';
 
 async function init() {
   const container = document.getElementById('incentives');

@@ -28,8 +28,8 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 
 - Phase 0 (now → debut deploy): 2–3 manual posts/week. Data + education only. No promises.
 - Phase 1 (after T1–T8 deploy): launch thread once, then steady data cadence.
-- Phase 2 (bot, live): automated data posts only (our own listings, epoch closes,
-  antseedstats metrics), dedup + change-only. No per-day or per-run cap while the owner
+- Phase 2 (bot, live): automated data posts only (epoch closes, antseedstats
+  metrics), dedup + change-only. No per-day or per-run cap while the owner
   watches live behaviour (29.10): `STATS_PER_RUN = 0`, `STATS_THROTTLE = false`,
   no `MAX_POSTS_PER_RUN`. Weekly digest still fires at most once per 7 days.
   Manual posts stay manual (no label on them).
@@ -98,22 +98,20 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 ## Phase 2 — automated posts (bot, live)
 
 Change-only, dedup by `(type, value)`; never repeat an identical value as new.
-Listing posts cover ONLY our own marketplace listings (VexyMarketplace, the 1%
-seller fee). The competitor's Seaport orders on antseedmarkets.com are theirs
-to post, never ours.
+The bot posts no listing-level market-ticker events: new listings, new floor
+listings and delists duplicate the competitor's Seaport ticker and are not our
+story (see "Removed post types" below).
 
 Emoji convention: one leading emoji per post —
-🆕 listing · 🎯 floor listing · 🗑️ delisted · 🏁 epoch close · 🔥 burn ·
-💰 settled · 🌱 staked · 🏆 record · 🎁 epoch rewards · 📊 weekly digest ·
-📡 usage · ⏳ countdown · 🧮 allocation · 🏅 top models.
-Two markers also sit inside the text: 🐜 before an ANTS amount (listing size,
-epoch emission, burn, epoch rewards) and 🌱 for staking/growth (staked post,
-the Restake bullet). No other emoji inside the text, the Twitter length limit
-(280) is the hard constraint — `epochText` drops its measures rather than exceed it.
+🏁 epoch close · 🔥 burn · 💰 settled · 🌱 staked · 🏆 record ·
+🎁 epoch rewards · 📊 weekly digest · 📡 usage · ⏳ countdown · 🧮 allocation ·
+🏅 top models · 🧬 modality · 🎞️ video · 🛰️ lifetime · 🥇 leaders ·
+📈 daily · 🔋 diem · 🎯 usage target.
+Two markers also sit inside the text: 🐜 before an ANTS amount (epoch emission,
+burn, epoch rewards) and 🌱 for staking/growth (staked post, the Restake
+bullet). No other emoji inside the text, the Twitter length limit (280) is the
+hard constraint — `epochText` drops its measures rather than exceed it.
 
-- New listing: `🆕 New listing: #206 · 400 ANTS @ $0.150 · lock 8w · lants.eth.limo/#position/206`
-- New floor listing: `🎯 New floor listing: #206 · 400 ANTS @ $0.120 · lock 8w · lants.eth.limo/#position/206`
-- Delisted: `🗑️ Delisted: #205 · lants.eth.limo/#position/205`
 - Epoch close (Thursday), a claim/restake call to action:
   ```
   🏁 Epoch 29 has ended · X ANTS emitted · 24h avg $Y
@@ -143,14 +141,38 @@ the demand side the bot used to ignore. Added 29.10:
 - Emission allocation: `🧮 Epoch 28 emission: 40% seller pools · 20% usage · 15% team · 15% reserve · 10% verification · data: antseedstats.com`
   — on completed-epoch advance, from `epochs/{id}.economics.buckets`.
 - Top models: `🏅 Most-used AI on AntSeed (7d): Claude Opus 5.5 · GPT-6 Astra · Kimi K3 · data: antseedstats.com`
-  — weekly, top 3 by usage from the models first page. **Gated off**
-  (`TOP_MODELS_ENABLED = false`) until the `models` sort semantics are verified.
+  — weekly, top 3 by recent settled USDC from the models first page
+  (`usage.settled_usd` descending; the reader re-sorts defensively). Enabled
+  (`TOP_MODELS_ENABLED = true`).
 - Buyers folded into the existing settled post: `… 27,841 settlements · 70 sellers · 306 buyers · …`.
 - Usage + generative folded into the weekly digest (two plain lines, no emoji).
 
+### Live/demand posts (new endpoints, added 29.10)
+
+The `leaders`, `network/daily`, `diem` and `rewards/current` endpoints (plus
+`modality_7d` and `lifetime`, already inside `network/summary`) drive a second
+wave of demand-side posts. Read by `bot/read-antseedstats-live.mjs` (soft
+dependency) and diffed by `bot/diff-live.mjs`.
+
+- Modality (weekly): `🧬 AntSeed 7d spend: text $10.2K · video $2.3K · images $172 · data: antseedstats.com`
+  — from `network/summary.modality_7d` (text/images/video `spend_usd`).
+- Video milestone: `🎞️ Native video inference: 5K videos · $2.5K in 7d · data: antseedstats.com`
+  — on a round `generative_7d.videos` bucket (1000 steps).
+- Lifetime milestones: `🛰️ AntSeed passed 700K settlements · data: antseedstats.com`
+  — on round buckets of `lifetime.settles` (100K), `settled_usd` ($50K),
+  `buyers` (500), `sellers` (100).
+- Leaders (daily): `🥇 AntSeed 24h: top seller Open Forge $645 · most revenue GPT-6 Astra $410 · most tokens DeepSeek V4.1 Flash 5.71B · data: antseedstats.com`
+  — from `/leaders` (wash trading excluded), once per calendar day.
+- Daily (daily): `📈 Yesterday on AntSeed: settled $2,739 · 210.7K requests · 18 new paid users · data: antseedstats.com`
+  — from `/network/daily`, the last fully-closed UTC day.
+- DIEM pool (change-only): `🔋 DIEM pool: $690,695 backing capacity (+15.1%) · 82 stakers · $7.6K USDC paid out · data: antseedstats.com`
+  — ±5% on `/diem.stake_value_usd`. The `apy_*` fields are never read (yields banned).
+- Usage target (weekly): `🎯 Epoch 29 targets: usage 0.006% of target · stake 0.39% of target · data: antseedstats.com`
+  — from `/rewards/current.budgets` (`usage_pct_of_target`, `stake_pct_of_target`).
+
 ## Removed post types (do not reintroduce)
 
-Two former event types were removed on 29.10.2026 because they made @sxsiant a
+Five former event types were removed on 29.10.2026 because they made @sxsiant a
 second "market ticker" behind @antseedbot instead of a destination for buyers:
 
 - **Sold** — removed. The competitor already posts every sale with more context
@@ -158,12 +180,18 @@ second "market ticker" behind @antseedbot instead of a destination for buyers:
   to a position that no longer exists, so the post never converted. Sale volume
   now lives only in the weekly digest.
 - **Floor move** — removed. A floor change on the aggregate (antseedmarkets) feed
-  is the competitor's story, not our inventory. Our own floor is only relevant
-  when a new own listing sets it ("New floor listing").
+  is the competitor's story, not our inventory.
+- **New listing** — removed. A new listing on our own marketplace (VexyMarketplace)
+  is the same ticker the competitor runs for their Seaport orders; it is not our
+  story.
+- **New floor listing** — removed. Same rationale as New listing: an undercut of
+  the floor is a price-ticker event, not our inventory.
+- **Delisted** — removed. A listing disappearing (sold, cancelled or expired) is
+  competitor-ticker noise, not a call to action.
 
-Reintroducing either means posting the competitor's activity as our own. The bot
-now posts only: our own listings, epoch closes, and the antseedstats data we
-attribute. If a future change adds them back, this decision must be revisited.
+Reintroducing any of these means posting the competitor's activity as our own. The
+bot now posts only: epoch closes and the antseedstats data we attribute. If a
+future change adds them back, this decision must be revisited.
 
 ## Rejected post types (antseedstats demand, do not implement)
 

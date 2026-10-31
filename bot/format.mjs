@@ -37,7 +37,7 @@ export function usdWhole(v) {
 }
 
 // 27841 -> "27,841" (settlement counts in antseedstats texts).
-function countLabel(v) {
+export function countLabel(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return '0';
   return n.toLocaleString('en-US');
@@ -60,10 +60,6 @@ export function newFloorListingText(l) {
     ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
     : '';
   return `\u{1F3AF} New floor listing: #${l.id} ${MID} \u{1F41C} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
-}
-
-export function delistText(id) {
-  return `\u{1F5D1}\uFE0F Delisted: #${id} ${MID} ${posLink(id)}`;
 }
 
 // Epoch close is a call to action (claim / restake), not a market ticker. The
@@ -185,6 +181,78 @@ export function allocText({ epoch, buckets } = {}) {
 export function topModelsText({ models } = {}) {
   const list = (models || []).filter((m) => typeof m === 'string' && m !== '');
   return `\u{1F3C5} Most-used AI on AntSeed (7d): ${list.join(` ${MID} `)} ${MID} ${DATA_SRC}`;
+}
+
+// 0.006031 -> "0.006%", 0.3926 -> "0.39%", 12.5 -> "12.5%". The reward-budget
+// "pct of target" fields are already in percent units, not 0..1 fractions.
+function pctOfLabel(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (n >= 1) return String(Number(n.toFixed(1))) + '%';
+  if (n >= 0.1) return String(Number(n.toFixed(2))) + '%';
+  return String(Number(n.toFixed(3))) + '%';
+}
+
+// What buyers paid for in the last 7 days, split by modality (text/images/video).
+export function modalityText({ textUsd, videoUsd, imagesUsd } = {}) {
+  return `\u{1F9EC} AntSeed 7d spend: text $${fmtCompact(textUsd)} ${MID} video $${fmtCompact(videoUsd)} ${MID} images $${fmtCompact(imagesUsd)} ${MID} ${DATA_SRC}`;
+}
+
+// Native video-inference volume milestone (videos generated over 7d).
+export function videoText({ videos, spendUsd } = {}) {
+  return `\u{1F39E}\uFE0F Native video inference: ${fmtCompact(videos)} videos ${MID} $${fmtCompact(spendUsd)} in 7d ${MID} ${DATA_SRC}`;
+}
+
+// Lifetime milestone: kind is settles/settledUsd/buyers/sellers, value is the
+// round bucket crossed (e.g. 700000 for "700K settlements").
+export function lifetimeText(kind, value) {
+  const amount = kind === 'settledUsd' ? usdWhole(value) : countLabel(value);
+  const label = { settles: 'settlements', settledUsd: 'settled volume', buyers: 'buyers', sellers: 'sellers' }[kind] || kind;
+  return `\u{1F6F0}\uFE0F AntSeed passed ${amount} ${label} ${MID} ${DATA_SRC}`;
+}
+
+// 24h leaders, wash trading excluded by the source.
+export function leadersText({ sellerName, sellerUsd, topModelSales, topModelTokens } = {}) {
+  const parts = ['\u{1F947} AntSeed 24h'];
+  if (sellerName && Number.isFinite(sellerUsd)) parts.push(`top seller ${sellerName} ${usdWhole(sellerUsd)}`);
+  if (topModelSales && topModelSales.display && Number.isFinite(topModelSales.usd)) {
+    parts.push(`most revenue ${topModelSales.display} ${usdWhole(topModelSales.usd)}`);
+  }
+  if (topModelTokens && topModelTokens.display && Number.isFinite(topModelTokens.tokens)) {
+    parts.push(`most tokens ${topModelTokens.display} ${fmtCompact(topModelTokens.tokens)}`);
+  }
+  parts.push(DATA_SRC);
+  return parts.join(` ${MID} `);
+}
+
+// Yesterday's fully-closed network day.
+export function dailyText({ settledUsd, requests, newUsers } = {}) {
+  const parts = ['\u{1F4C8} Yesterday on AntSeed'];
+  if (Number.isFinite(settledUsd)) parts.push(`settled ${usdWhole(settledUsd)}`);
+  if (Number.isFinite(requests)) parts.push(`${fmtCompact(requests)} requests`);
+  if (Number.isFinite(newUsers)) parts.push(`${countLabel(newUsers)} new paid users`);
+  parts.push(DATA_SRC);
+  return parts.join(` ${MID} `);
+}
+
+// DIEM capacity pool: backing + stakers + lifetime payouts. No yield, ever.
+export function diemText({ stakeValueUsd, stakers, usdcDistributedUsd, pctChange } = {}) {
+  let s = `\u{1F50B} DIEM pool: ${usdWhole(stakeValueUsd)} backing capacity`;
+  if (typeof pctChange === 'string') s += ` (${pctChange})`;
+  if (Number.isFinite(stakers)) s += ` ${MID} ${countLabel(stakers)} stakers`;
+  if (Number.isFinite(usdcDistributedUsd) && usdcDistributedUsd > 0) s += ` ${MID} ${usdWhole(usdcDistributedUsd)} USDC paid out`;
+  return s + ` ${MID} ${DATA_SRC}`;
+}
+
+// Reward budgets vs their targets (honest demand-vs-ceiling, no spin).
+export function usageTargetText({ epoch, usagePctOfTarget, stakePctOfTarget } = {}) {
+  const parts = [`\u{1F3AF} Epoch ${epoch} targets`];
+  const u = pctOfLabel(usagePctOfTarget);
+  const s = pctOfLabel(stakePctOfTarget);
+  if (u) parts.push(`usage ${u} of target`);
+  if (s) parts.push(`stake ${s} of target`);
+  parts.push(DATA_SRC);
+  return parts.join(` ${MID} `);
 }
 
 // Weekly market snapshot: a fixed-cadence digest that includes only the

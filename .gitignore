@@ -23,6 +23,8 @@ bot/state.json
 bot/.rotated-token
 # temporary mint helpers (run once, then deleted)
 tmp-*.mjs
+# local wallet-balance probe state (was -> now delta)
+scripts/probes/.ants-balance-state.json
 # local-only agent workspace and thread media
 .kilo/
 lants-thread/

@@ -51,10 +51,10 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
   Seaport 1.6 fulfill: pinned selector/struct, fail-closed validation, exact approve.
 - `site/render.mjs` — legacy positions table used by List view; prefer not to modify.
 - `bot/` — `@sxsiant` automation: `read-feed.mjs` (market feed context only),
-  `read-own-listings.mjs` (our own VexyMarketplace listings, the only listing
-  source), `diff.mjs` (change-only), `xapi.mjs` (OAuth refresh + tweet),
-  `run.mjs` (`--dry-run`). State is gitignored `bot/state.json`; CI uses
-  `.github/workflows/twitter-bot.yml`.
+  `read-own-listings.mjs` (our own VexyMarketplace listings, now serving the
+  Telegram bot, not the Twitter bot), `diff.mjs` (change-only),
+  `xapi.mjs` (OAuth refresh + tweet), `run.mjs` (`--dry-run`). State is
+  gitignored `bot/state.json`; CI uses `.github/workflows/twitter-bot.yml`.
 
 ## Invariants
 
@@ -78,11 +78,10 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
   the fulfill path remains guarded by validateOrder + on-chain checks + eth_call
   simulate.
 - Files copied into `dist/` must be ASCII (Cyrillic is rejected; binary images are
-  exempt). New JS modules stay ≤300 lines; `market-view.mjs` and `render.mjs` must
-  not grow.
-- The bot posts only our OWN listings (VexyMarketplace), epoch closes and
-  attributed antseedstats data. It never posts `Sold` or `Floor move` events:
-  those are the competitor's market-ticker story, not our inventory (rationale in
+  exempt).
+- The bot posts only epoch closes and attributed antseedstats data; it never
+  posts listings (new/floor/delist), `Sold`, or `Floor move` events: those are
+  the competitor's market-ticker story, not our inventory (rationale in
   `docs/twitter-content-plan.md` "Removed post types"). Do not reintroduce them.
 - The bot never posts APY / boost-yield numbers from antseedstats
   (`staking/pools.rows[].apy_*_pct`): the 2y figure is the "inflated yield" the

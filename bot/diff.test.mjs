@@ -5,148 +5,14 @@ import { diffFeed, diffAntseedStats } from './diff.mjs';
 const MID = '\u00b7';
 
 test('no change yields no events', () => {
-  const prev = { epoch: 28, listings: [1, 2] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 1, amount: 1, lockDays: 7, perAntUsd: 0.1 },
-      { id: 2, amount: 1, lockDays: 7, perAntUsd: 0.1 },
-    ],
-  };
+  const prev = { epoch: 28 };
+  const curr = { avg24h: 0.1, epoch: 28 };
   assert.deepEqual(diffFeed(prev, curr), []);
-});
-
-test('new listing and delist are keyed by token id, price and listed flag', () => {
-  const prev = { epoch: 28, listings: [1, 2] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 2, amount: 1, lockDays: 7, perAntUsd: 0.1 },
-      { id: 3, amount: 400, lockDays: 56, perAntUsd: 0.15 },
-    ],
-  };
-  const events = diffFeed(prev, curr);
-  const listing = events.find((e) => e.type === 'listing');
-  const delist = events.find((e) => e.type === 'delist');
-  assert.equal(listing.key, 'listing:3:listed:0.15');
-  assert.equal(listing.text, `\u{1F195} New listing: #3 ${MID} \u{1F41C} 400 ANTS @ $0.150 ${MID} lock 8w ${MID} lants.eth.limo/#position/3`);
-  assert.equal(delist.key, 'listing:1:unlisted');
-  assert.equal(delist.text, `\u{1F5D1}\uFE0F Delisted: #1 ${MID} lants.eth.limo/#position/1`);
-});
-
-test('a relist at a new price is not swallowed (unlisted old + listed new)', () => {
-  const prev = { epoch: 28, listings: [{ id: 5, perAntUsd: 0.14 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [{ id: 5, amount: 400, lockDays: 56, perAntUsd: 0.12 }],
-  };
-  const events = diffFeed(prev, curr);
-  assert.equal(events.length, 2);
-  const delist = events.find((e) => e.type === 'delist');
-  const listing = events.find((e) => e.type === 'listing');
-  assert.equal(delist.key, 'listing:5:unlisted:0.14');
-  assert.equal(listing.key, 'listing:5:listed:0.12');
-  assert.equal(listing.text, `\u{1F195} New listing: #5 ${MID} \u{1F41C} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo/#position/5`);
-});
-
-test('price float noise does not fake a relist', () => {
-  const prev = { epoch: 28, listings: [{ id: 5, perAntUsd: 0.1399999993 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [{ id: 5, amount: 400, lockDays: 56, perAntUsd: 0.14 }],
-  };
-  assert.deepEqual(diffFeed(prev, curr), []);
-});
-
-test('a vanished own listing delists normally', () => {
-  const prev = { epoch: 28, listings: [7, 9] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [{ id: 9, amount: 100, lockDays: 0, perAntUsd: 0.15 }],
-  };
-  const events = diffFeed(prev, curr);
-  const delist = events.find((e) => e.type === 'delist');
-  assert.equal(delist.key, 'listing:7:unlisted');
-});
-
-test('a brand-new lot that undercuts the previous floor posts once as New floor listing', () => {
-  const prev = { epoch: 28, listings: [{ id: 1, perAntUsd: 0.15 }, { id: 2, perAntUsd: 0.14 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 1, amount: 100, lockDays: 0, perAntUsd: 0.15 },
-      { id: 2, amount: 100, lockDays: 0, perAntUsd: 0.14 },
-      { id: 3, amount: 400, lockDays: 56, perAntUsd: 0.12 },
-    ],
-  };
-  const events = diffFeed(prev, curr);
-  const floorListing = events.find((e) => e.type === 'floor-listing');
-  const listing = events.find((e) => e.type === 'listing');
-  assert.equal(floorListing.key, 'listing:3:listed:0.12');
-  assert.equal(floorListing.text, `\u{1F3AF} New floor listing: #3 ${MID} \u{1F41C} 400 ANTS @ $0.120 ${MID} lock 8w ${MID} lants.eth.limo/#position/3`);
-  assert.equal(listing, undefined);
-  assert.equal(events.length, 1);
-});
-
-test('a brand-new lot above the floor posts a plain listing', () => {
-  const prev = { epoch: 28, listings: [{ id: 1, perAntUsd: 0.12 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 1, amount: 100, lockDays: 0, perAntUsd: 0.12 },
-      { id: 2, amount: 400, lockDays: 56, perAntUsd: 0.15 },
-    ],
-  };
-  const events = diffFeed(prev, curr);
-  const listing = events.find((e) => e.type === 'listing');
-  assert.equal(listing.key, 'listing:2:listed:0.15');
-  assert.equal(events.find((e) => e.type === 'floor-listing'), undefined);
-});
-
-test('two new lots undercutting the floor post one New floor listing', () => {
-  const prev = { epoch: 28, listings: [{ id: 1, perAntUsd: 0.15 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 1, amount: 100, lockDays: 0, perAntUsd: 0.15 },
-      { id: 2, amount: 100, lockDays: 0, perAntUsd: 0.13 },
-      { id: 3, amount: 100, lockDays: 0, perAntUsd: 0.12 },
-    ],
-  };
-  const events = diffFeed(prev, curr);
-  const floors = events.filter((e) => e.type === 'floor-listing');
-  assert.equal(floors.length, 1);
-  assert.equal(floors[0].key, 'listing:3:listed:0.12');
-  const plain = events.find((e) => e.type === 'listing');
-  assert.equal(plain.key, 'listing:2:listed:0.13');
-  assert.equal(events.length, 2);
-});
-
-test('a floor change caused by a delist posts only the delist (no floor event)', () => {
-  const prev = { epoch: 28, listings: [{ id: 3, perAntUsd: 0.12 }, { id: 4, perAntUsd: 0.15 }] };
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [{ id: 4, amount: 100, lockDays: 0, perAntUsd: 0.15 }],
-  };
-  const events = diffFeed(prev, curr);
-  assert.equal(events.length, 1);
-  assert.equal(events[0].type, 'delist');
-  assert.equal(events[0].key, 'listing:3:unlisted:0.12');
-  assert.equal(events.find((e) => e.type === 'floor'), undefined);
 });
 
 test('epoch advance reports the closed epoch, with optional emission', () => {
-  const prev = { epoch: 28, listings: [] };
-  const curr = { avg24h: 0.101939, epoch: 29, listings: [] };
+  const prev = { epoch: 28 };
+  const curr = { avg24h: 0.101939, epoch: 29 };
   const withEmission = diffFeed(prev, curr, { emission: 104500 });
   assert.equal(withEmission.length, 1);
   assert.equal(withEmission[0].key, 'epoch:28');
@@ -162,11 +28,7 @@ test('epoch advance reports the closed epoch, with optional emission', () => {
 });
 
 test('a cold start (no baseline) invents no events', () => {
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [{ id: 1, amount: 1, lockDays: 7, perAntUsd: 0.1 }],
-  };
+  const curr = { avg24h: 0.1, epoch: 28 };
   assert.deepEqual(diffFeed(null, curr), []);
 });
 
@@ -417,12 +279,14 @@ test('diffAntseedStats posts alloc on completed-epoch advance with economics', (
   assert.equal(alloc.text, `\u{1F9EE} Epoch 28 emission ${MID} 40% seller pools ${MID} 20% usage ${MID} data: antseedstats.com`);
 });
 
-test('diffAntseedStats gates topmodels off by default', () => {
+test('diffAntseedStats emits topmodels by default (enabled)', () => {
   const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
   const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null };
   const prev = { ...base, posted, lastTopModelsAt: null };
   const curr = { ...base, topModels: ['Claude Opus 5.5', 'GPT-6 Astra', 'Kimi K3'] };
-  assert.equal(diffAntseedStats(prev, curr).find((e) => e.type === 'topmodels'), undefined);
+  const ev = diffAntseedStats(prev, curr).find((e) => e.type === 'topmodels');
+  assert.ok(ev);
+  assert.ok(ev.text.includes('Claude Opus 5.5'));
 });
 
 test('diffAntseedStats emits topmodels weekly when enabled', () => {
@@ -447,4 +311,108 @@ test('diffAntseedStats folds buyers into the settled post', () => {
   const settled = events.find((e) => e.type === 'settled');
   assert.ok(settled.text.includes('70 sellers'));
   assert.ok(settled.text.includes('309 buyers'));
+});
+
+test('diffAntseedStats posts modality weekly', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null };
+  const nowMs = Date.parse('2026-10-28T12:00:00Z');
+  const curr = { ...base, modalityTextUsd: 10233.61, modalityVideoUsd: 2337.98, modalityImagesUsd: 172.17 };
+  const prev = { ...base, posted, lastModalityAt: null };
+  const ev = diffAntseedStats(prev, curr, { nowMs }).find((e) => e.type === 'modality');
+  assert.ok(ev);
+  assert.equal(ev.key, 'modality:2026-10-28');
+  assert.ok(ev.text.startsWith(`\u{1F9EC} AntSeed 7d spend: text $10.23K`));
+  assert.deepEqual(ev.meta, { field: 'lastModalityAt', value: nowMs });
+  const prevRecent = { ...base, posted, lastModalityAt: nowMs - 3 * 24 * 3600 * 1000 };
+  assert.equal(diffAntseedStats(prevRecent, curr, { nowMs }).find((e) => e.type === 'modality'), undefined);
+});
+
+test('diffAntseedStats posts a video milestone on a round bucket', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null, videoMilestone: 3000 };
+  const prev = { ...base, posted };
+  const curr = { ...base, generativeVideos7d: 5000, generativeSpendUsd7d: 2510.15 };
+  const ev = diffAntseedStats(prev, curr).find((e) => e.type === 'video');
+  assert.equal(ev.key, 'video:5000');
+  assert.ok(ev.text.startsWith(`\u{1F39E}\uFE0F Native video inference: 5K videos`));
+  assert.deepEqual(ev.meta, { field: 'videoMilestone', value: 5000 });
+});
+
+test('diffAntseedStats posts lifetime milestones on round buckets', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null, lifetimeSettles: 600000 };
+  const prev = { ...base, posted };
+  const curr = { ...base, lifetimeSettles: 700123 };
+  const ev = diffAntseedStats(prev, curr).find((e) => e.type === 'lifetime');
+  assert.equal(ev.key, 'lifetime:lifetimeSettles:700000');
+  assert.equal(ev.text, `\u{1F6F0}\uFE0F AntSeed passed 700,000 settlements ${MID} data: antseedstats.com`);
+  assert.deepEqual(ev.meta, { field: 'lifetimeSettles', value: 700000 });
+});
+
+test('diffAntseedStats posts leaders once per day', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null };
+  const nowMs = Date.parse('2026-10-28T12:00:00Z');
+  const leaders = {
+    sellerName: 'Open Forge',
+    sellerUsd: 645.38,
+    topModelSales: { display: 'GPT-6 Astra', usd: 410.19, requests: 6585, buyers: 23 },
+    topModelTokens: { display: 'DeepSeek V4.1 Flash', tokens: 5713003154 },
+  };
+  const prev = { ...base, posted, lastLeadersDay: null };
+  const ev = diffAntseedStats(prev, { ...base, leaders }, { nowMs }).find((e) => e.type === 'leaders');
+  assert.ok(ev);
+  assert.equal(ev.key, 'leaders:2026-10-28');
+  assert.ok(ev.text.includes('Open Forge $645'));
+  assert.ok(ev.text.includes('GPT-6 Astra $410'));
+  assert.deepEqual(ev.meta, { field: 'lastLeadersDay', value: '2026-10-28' });
+  const prevSameDay = { ...base, posted, lastLeadersDay: '2026-10-28' };
+  assert.equal(diffAntseedStats(prevSameDay, { ...base, leaders }, { nowMs }).find((e) => e.type === 'leaders'), undefined);
+});
+
+test("diffAntseedStats posts yesterday's network day once per day", () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null };
+  const nowMs = Date.parse('2026-10-29T12:00:00Z');
+  const daily = [
+    { day: '2026-10-28', settledUsd: 2738.72, requests: 210696, newUsers: 18 },
+    { day: '2026-10-29', settledUsd: 1017.52, requests: 104978, newUsers: 4 },
+  ];
+  const prev = { ...base, posted, lastDailyDay: null };
+  const ev = diffAntseedStats(prev, { ...base, daily }, { nowMs }).find((e) => e.type === 'daily');
+  assert.ok(ev);
+  assert.equal(ev.key, 'daily:2026-10-29');
+  assert.ok(ev.text.includes('settled $2,739'));
+  assert.ok(ev.text.includes('210.7K requests'));
+  assert.ok(ev.text.includes('18 new paid users'));
+  assert.ok(!ev.text.includes('1017'));
+  assert.deepEqual(ev.meta, { field: 'lastDailyDay', value: '2026-10-29' });
+});
+
+test('diffAntseedStats posts DIEM capacity past a ±5% move', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null, diemStake: 600000 };
+  const prev = { ...base, posted };
+  const diem = { stakeValueUsd: 690694.85, stakers: 82, usdcDistributedUsd: 7647.37 };
+  const ev = diffAntseedStats(prev, { ...base, diem }, {}).find((e) => e.type === 'diem');
+  assert.equal(ev.key, 'diem:690695');
+  assert.ok(ev.text.includes('$690,695 backing capacity'));
+  assert.ok(ev.text.includes('82 stakers'));
+  assert.strictEqual(ev.field, 'diemStake');
+  assert.strictEqual(ev.value, 690694.85);
+});
+
+test('diffAntseedStats posts reward budgets vs targets weekly', () => {
+  const base = { settled7d: 1, settled30d: 1, stakedAnts: 1, burns: [] };
+  const posted = { settled7d: 1, settled30d: 1, stakedAnts: 1, requests24h: null };
+  const nowMs = Date.parse('2026-10-28T12:00:00Z');
+  const rewards = { epoch: 29, usagePctOfTarget: 0.006031, stakePctOfTarget: 0.392649 };
+  const prev = { ...base, posted, lastUsageTargetAt: null };
+  const ev = diffAntseedStats(prev, { ...base, rewards }, { nowMs }).find((e) => e.type === 'usagetarget');
+  assert.ok(ev);
+  assert.equal(ev.key, 'usagetarget:2026-10-28');
+  assert.ok(ev.text.includes('usage 0.006% of target'));
+  assert.ok(ev.text.includes('stake 0.39% of target'));
+  assert.deepEqual(ev.meta, { field: 'lastUsageTargetAt', value: nowMs });
 });

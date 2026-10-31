@@ -59,32 +59,32 @@ test('loadState tolerates a missing file and round-trips', () => {
 });
 
 test('isMarketEvent classifies market vs stats types', () => {
-  for (const t of ['listing', 'floor-listing', 'delist', 'epoch']) {
+  for (const t of ['epoch']) {
     assert.equal(isMarketEvent(t), true, t);
   }
-  for (const t of ['settled', 'staked', 'burn', 'record7d', 'epochstats', 'digest']) {
+  for (const t of ['listing', 'floor-listing', 'delist', 'settled', 'staked', 'burn', 'record7d', 'epochstats', 'digest']) {
     assert.equal(isMarketEvent(t), false, t);
   }
 });
 
 test('orderEvents puts market events first and is stable', () => {
   const a = { type: 'settled', key: 's1', createdAt: '2026-10-28T10:00:00.000Z' };
-  const b = { type: 'listing', key: 'l1', createdAt: '2026-10-28T11:00:00.000Z' };
-  const c = { type: 'delist', key: 'd1', createdAt: '2026-10-28T09:00:00.000Z' };
-  const d = { type: 'burn', key: 'b1', createdAt: '2026-10-28T08:00:00.000Z' };
-  assert.deepEqual(orderEvents([a, b, c, d]).map((e) => e.key), ['d1', 'l1', 'b1', 's1']);
+  const b = { type: 'epoch', key: 'e1', createdAt: '2026-10-28T11:00:00.000Z' };
+  const c = { type: 'burn', key: 'b1', createdAt: '2026-10-28T09:00:00.000Z' };
+  const d = { type: 'record7d', key: 'r1', createdAt: '2026-10-28T08:00:00.000Z' };
+  assert.deepEqual(orderEvents([a, b, c, d]).map((e) => e.key), ['e1', 'r1', 'b1', 's1']);
 });
 
 test('capStats keeps market events and limits stats', () => {
   const events = [
-    { type: 'listing', key: 'l1' },
+    { type: 'epoch', key: 'e1' },
     { type: 'settled', key: 's1' },
     { type: 'settled', key: 's2' },
     { type: 'burn', key: 'b1' },
   ];
-  assert.deepEqual(capStats(events, 1).map((e) => e.key), ['l1', 's1']);
-  assert.deepEqual(capStats(events, 0).map((e) => e.key), ['l1']);
-  assert.deepEqual(capStats(events, 2).map((e) => e.key), ['l1', 's1', 's2']);
+  assert.deepEqual(capStats(events, 1).map((e) => e.key), ['e1', 's1']);
+  assert.deepEqual(capStats(events, 0).map((e) => e.key), ['e1']);
+  assert.deepEqual(capStats(events, 2).map((e) => e.key), ['e1', 's1', 's2']);
 });
 
 test('withinCooldown enforces per-metric cooldown windows', () => {
@@ -99,9 +99,11 @@ test('withinCooldown enforces per-metric cooldown windows', () => {
   assert.equal(withinCooldown({ meta: { field: 'settled7d' } }, null, now), false);
 });
 
-test('STAT_COOLDOWN_HOURS includes the new usage cooldown', () => {
+test('STAT_COOLDOWN_HOURS includes the new usage and diem cooldowns', () => {
   assert.equal(STAT_COOLDOWN_HOURS.requests24h, 24);
+  assert.equal(STAT_COOLDOWN_HOURS.diemStake, 24);
   const now = Date.parse('2026-10-28T12:00:00Z');
-  const antseed = { postedAt: { requests24h: now - 12 * 3600 * 1000 } };
+  const antseed = { postedAt: { requests24h: now - 12 * 3600 * 1000, diemStake: now - 12 * 3600 * 1000 } };
   assert.equal(withinCooldown({ meta: { field: 'requests24h', value: 1 } }, antseed, now), true);
+  assert.equal(withinCooldown({ meta: { field: 'diemStake', value: 1 } }, antseed, now), true);
 });

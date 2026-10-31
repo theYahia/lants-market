@@ -15,22 +15,22 @@ const ENDPOINTS = {
   prices: '/api/v1/prices',
 };
 
-function isObject(v) {
+export function isObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
-function isInt(v) {
+export function isInt(v) {
   return typeof v === 'number' && Number.isInteger(v);
 }
 
 // Number or numeric string -> number; anything odd becomes null so a single
 // malformed value never aborts the whole section.
-function finiteNumber(v) {
+export function finiteNumber(v) {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
   return typeof n === 'number' && Number.isFinite(n) ? n : null;
 }
 
-async function getJson(fetchImpl, url, timeoutMs) {
+export async function getJson(fetchImpl, url, timeoutMs) {
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   let timer = null;
   const timeout = new Promise((_, reject) => {
@@ -71,6 +71,8 @@ export function parseNetworkSummary(json) {
   const usage = isObject(json.data.paid_usage_24h) ? json.data.paid_usage_24h : null;
   const generative = isObject(json.data.generative_7d) ? json.data.generative_7d : null;
   const epochData = isObject(json.data.epoch) ? json.data.epoch : null;
+  const lifetime = isObject(json.data.lifetime) ? json.data.lifetime : null;
+  const modality = isObject(json.data.modality_7d) ? json.data.modality_7d : null;
   return {
     ok: true,
     network: {
@@ -93,6 +95,14 @@ export function parseNetworkSummary(json) {
       generativeVideos7d: generative ? finiteNumber(generative.videos) : null,
       generativeSpendUsd7d: generative ? finiteNumber(generative.spend_usd) : null,
       secondsLeft: epochData ? finiteNumber(epochData.seconds_left) : null,
+      lifetimeSettledUsd: lifetime ? finiteNumber(lifetime.settled_usd) : null,
+      lifetimeSettles: lifetime ? finiteNumber(lifetime.settles) : null,
+      lifetimeBuyers: lifetime ? finiteNumber(lifetime.buyers) : null,
+      lifetimeSellers: lifetime ? finiteNumber(lifetime.sellers) : null,
+      lifetimeFeesUsd: lifetime ? finiteNumber(lifetime.fees_usd) : null,
+      modalityTextUsd: modality && isObject(modality.text) ? finiteNumber(modality.text.spend_usd) : null,
+      modalityImagesUsd: modality && isObject(modality.images) ? finiteNumber(modality.images.spend_usd) : null,
+      modalityVideoUsd: modality && isObject(modality.video) ? finiteNumber(modality.video.spend_usd) : null,
       epoch,
     },
   };

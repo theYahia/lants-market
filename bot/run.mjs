@@ -14,9 +14,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFeed, fetchEmission, toState } from './read-feed.mjs';
-import { readOwnListings } from './read-own-listings.mjs';
 import { diffFeed, diffAntseedStats } from './diff.mjs';
 import { readAntseedStats } from './read-antseedstats.mjs';
+import { readAntseedStatsLive } from './read-antseedstats-live.mjs';
 import { toAntseedSnapshot, toAntseedState } from './antseed-snapshot.mjs';
 import { loadState, saveState, enqueue, dropStale, markEmitted, orderEvents, capStats, withinCooldown } from './state.mjs';
 import { digestText } from './format.mjs';
@@ -25,12 +25,17 @@ import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.m
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
-// Posting limits. Owner request 29.10: lift them while watching what the bot
-// produces. STATS_PER_RUN 0 = no per-run stats cap; STATS_THROTTLE false =
-// ignore the per-metric cooldown windows. Restore 1/true to throttle again.
+// Posting limits lifted (owner, 29.10): no per-run stats cap, no per-metric
+// cooldown, no MAX_POSTS_PER_RUN in the workflow, so issues surface faster.
+// Restore by setting STATS_PER_RUN 1, STATS_THROTTLE true and re-adding
+// MAX_POSTS_PER_RUN to .github/workflows/twitter-bot.yml.
 const STATS_PER_RUN = 0;
 const STATS_THROTTLE = false;
 const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Post-baseline fields advanced onto state.antseed (not into `posted`). The
+// continuous/milestone metrics live in `posted`; these are interval/date gates.
+const DIRECT_FIELDS = new Set(['max7d', 'lastTopModelsAt', 'lastModalityAt', 'lastLeadersDay', 'lastDailyDay', 'lastUsageTargetAt']);
 
 function log(msg) {
   console.log(`[bot] ${msg}`);
@@ -91,15 +96,9 @@ async function main(argv) {
     return 0;
   }
 
-  const own = await readOwnListings();
-  if (!own.ok) log(`own listings unavailable (${own.reason}); listing posts skipped`);
-
   const curr = {
     avg24h: feed.market.avg24h,
     epoch: feed.market.epoch,
-    // On an own-listings outage reuse the previous listing set unchanged, so an
-    // outage never reads as "everything delisted".
-    listings: own.ok ? own.listings : (state.last ? state.last.listings : []),
   };
 
   let emission = null;
@@ -117,13 +116,23 @@ async function main(argv) {
   // fetch (the diff discards it anyway until the first baseline is written).
   const prevMaxCompletedEpoch = state.antseed ? state.antseed.maxCompletedEpoch ?? 0 : Number.MAX_SAFE_INTEGER;
   const astats = await readAntseedStats({ prevMaxCompletedEpoch });
+  let astatsLive = null;
+  const astatsLiveRes = await readAntseedStatsLive();
+  if (astatsLiveRes.ok) {
+    astatsLive = astatsLiveRes;
+    for (const [section, reason] of Object.entries(astatsLiveRes.reasons)) {
+      if (reason) log(`antseedstats ${section} unavailable (${reason}); ${section} posts skipped`);
+    }
+  } else {
+    log(`antseedstats live unavailable (${astatsLiveRes.reason}); live posts skipped`);
+  }
   let antseedEvents = [];
   let antseedSnapshot = null;
   let restakeBonusPct = null;
   if (!astats.ok) {
     log(`antseedstats unavailable (${astats.reason}); antseedstats posts skipped`);
   } else {
-    antseedSnapshot = toAntseedSnapshot(astats);
+    antseedSnapshot = toAntseedSnapshot(astats, astatsLive);
     restakeBonusPct = antseedSnapshot.restakeBonusPct;
     for (const [section, reason] of Object.entries(astats.reasons)) {
       if (reason) log(`antseedstats ${section} unavailable (${reason}); ${section} posts skipped`);
@@ -240,13 +249,11 @@ async function main(argv) {
     // went out; a capped run leaves the baseline untouched for the queue.
     if (state.antseed && post.meta?.field) {
       const { field, value } = post.meta;
-      if (field === 'max7d') {
-        state.antseed.max7d = value;
-      } else if (field === 'countdown') {
+      if (field === 'countdown') {
         state.antseed.countdownPosted = state.antseed.countdownPosted || {};
         state.antseed.countdownPosted[String(value.epoch)] = value.bucket;
-      } else if (field === 'lastTopModelsAt') {
-        state.antseed.lastTopModelsAt = value;
+      } else if (DIRECT_FIELDS.has(field)) {
+        state.antseed[field] = value;
       } else {
         state.antseed.posted[field] = value;
         state.antseed.postedAt[field] = nowMs;

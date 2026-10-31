@@ -72,20 +72,11 @@ test('readFeed treats a market failure as fatal', async () => {
   assert.deepEqual(down, { ok: false, reason: 'http' });
 });
 
-test('toState persists epoch and own listings compactly', () => {
-  const curr = {
-    avg24h: 0.1,
-    epoch: 28,
-    listings: [
-      { id: 7, amount: 400, lockDays: 56, perAntUsd: 0.15, usd: 60 },
-      { id: 9, amount: 100, lockDays: 0, perAntUsd: 0.1, usd: 10 },
-    ],
-  };
-  const state = toState(curr);
-  assert.equal(state.epoch, 28);
-  assert.deepEqual(state.listings, [{ id: 7, perAntUsd: 0.15 }, { id: 9, perAntUsd: 0.1 }]);
+test('toState persists the active epoch only (no listings)', () => {
+  const curr = { avg24h: 0.1, epoch: 28 };
+  assert.deepEqual(toState(curr), { epoch: 28 });
 });
 
 test('toState tolerates a missing listing list', () => {
-  assert.deepEqual(toState({ epoch: 28, listings: null }), { epoch: 28, listings: [] });
+  assert.deepEqual(toState({ epoch: 28 }), { epoch: 28 });
 });
