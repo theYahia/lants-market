@@ -1,207 +1,31 @@
-// Pure change-only diff: previous feed state + current feed state -> posts.
-// Dedup keys:
-//   epoch -> (closed epoch number)
-// antseedstats types (diffAntseedStats):
-//   burn -> (epoch), settled -> (window + value), staked -> (value),
-//   epochstats -> (epoch)
-// The live/demand types live in diff-live.mjs (diffLiveStats). No IO here;
-// state.mjs applies the persisted dedup/queue.
-
-import { epochText, burnText, settledText, stakedText, epochStatsText, recordText, usageText, countdownText, allocText, topModelsText, pct } from './format.mjs';
-import { maxCompletedEpoch } from './read-antseedstats.mjs';
-import { dateKey, changedBy, diffLiveStats } from './diff-live.mjs';
-
-// Top-models post is enabled: the /models first page sorts by the recent
-// `usage.settled_usd` window descending, and the live reader re-sorts
-// defensively before taking the top 3.
-const TOP_MODELS_ENABLED = true;
-const TOP_MODELS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+// Pure change-only diff for the market feed: previous feed state + current feed
+// state -> candidate posts. No IO here; state.mjs applies the persisted
+// dedup/queue and run.mjs formats, gates and ranks.
+//
+// The only feed-derived archetype is the epoch close (A). Listing/trade events
+// are deliberately absent: they duplicate the competitor's Seaport ticker and
+// are not our story (see docs/twitter-content-plan.md "Removed post types").
 
 /**
- * Change-only diff over the market feed snapshot (see read-feed.mjs).
- *
- * The only feed-derived event is the epoch close. Listing/trade events are
- * deliberately absent: they duplicate the competitor's Seaport ticker and are
- * not our story (see docs/twitter-content-plan.md "Removed post types").
- *
  * @param {object|null} prev  { epoch }
- * @param {object} curr       { avg24h, epoch }
- * @param {{emission?:(number|null), restakeBonusPct?:(number|null)}} opts
- * @returns {Array<{type:string,key:string,text:string}>}
+ * @param {object} curr       { epoch }
+ * @param {{emission?:(number|null), sellerPointsUsd?:(number|null), restakeBonusPct?:(number|null)}} opts
+ * @returns {Array<{type:string, family:string, key:string, data:object}>}
  */
-export function diffFeed(prev, curr, { emission = null, restakeBonusPct = null } = {}) {
-  const events = [];
-  // No baseline yet: a first run records state only, it does not announce the
-  // whole current market as "new".
-  if (!prev || !curr) return events;
-  const p = prev;
-
-  if (p.epoch != null && curr.epoch != null && curr.epoch > p.epoch) {
-    const closed = curr.epoch - 1;
-    events.push({
-      type: 'epoch',
-      key: `epoch:${closed}`,
-      text: epochText(closed, emission, curr.avg24h, { restakeBonusPct }),
-    });
-  }
-
-  return events;
-}
-
-/**
- * antseedstats.com change-only diff. Discrete events (burn, enriched epoch
- * close) post as soon as they appear; continuous ones (settled 7d/30d, staked)
- * post past a ±5% move from the last POSTED value (prev.posted) — never from
- * the last run, so a failed post cannot swallow a real move. The 24h window is
- * kept in the snapshot but never posted. A new settled7d all-time high always
- * posts (record key), independently of the ±5% threshold. prev is the compact
- * persisted state (toAntseedState shape); curr is the full snapshot. The
- * live/demand types (modality, video, lifetime, leaders, daily, diem,
- * usagetarget) come from diffLiveStats in diff-live.mjs.
- * @param {object|null} prev  toAntseedState shape
- * @param {object|null} curr  toAntseedSnapshot shape
- * @param {{nowMs?:number, topModelsEnabled?:boolean}} opts
- * @returns {Array<{type:string,key:string,text:string,meta?:{field:string,value:number}}>}
- */
-export function diffAntseedStats(prev, curr, opts = {}) {
+export function diffFeed(prev, curr, { emission = null, sellerPointsUsd = null, restakeBonusPct = null } = {}) {
   if (!prev || !curr) return [];
-  const nowMs = opts.nowMs ?? Date.now();
-  const topModelsEnabled = opts.topModelsEnabled ?? TOP_MODELS_ENABLED;
-  const events = [];
-
-  const prevBurns = new Set((prev.burns || []).map((b) => String(b.epoch)));
-  for (const b of curr.burns || []) {
-    if (prevBurns.has(String(b.epoch))) continue;
-    events.push({
-      type: 'burn',
-      key: `burn:${b.epoch}`,
-      text: burnText(b, curr.burnedAnts),
-      meta: { field: null, value: null },
-    });
-  }
-
-  // Continuous baseline: the last POSTED values. A state without `posted` is
-  // seeded from the current snapshot so the upgrade run never announces a move
-  // from an unknown baseline. The live types seed their own fields inside
-  // diffLiveStats.
-  const posted = prev.posted ?? {
-    settled7d: curr.settled7d,
-    settled30d: curr.settled30d,
-    stakedAnts: curr.stakedAnts,
-    requests24h: curr.requests24h,
-  };
-
-  // All-time high of settled7d posts regardless of ±5%. When a record fires it
-  // already announces the new value, so the plain 7d settled post is skipped in
-  // the same run (never post the same number twice).
-  const max7d = prev.max7d ?? curr.settled7d;
-  const record7dDue = curr.settled7d > max7d;
-
-  for (const [field, label, settlesField, sellersField, buyersField] of [
-    ['settled7d', '7d', 'settles7d', 'sellers7d', 'buyers7d'],
-    ['settled30d', '30d', 'settles30d', 'sellers30d', 'buyers30d'],
-  ]) {
-    if (field === 'settled7d' && record7dDue) continue;
-    if (!changedBy(posted[field], curr[field])) continue;
-    events.push({
-      type: 'settled',
-      field,
-      value: curr[field],
-      key: `settled:${field}:${curr[field]}`,
-      text: settledText(label, curr[field], pct(posted[field], curr[field]), curr[settlesField], curr[sellersField], curr[buyersField]),
-      meta: { field, value: curr[field] },
-    });
-  }
-
-  if (changedBy(posted.stakedAnts, curr.stakedAnts)) {
-    events.push({
-      type: 'staked',
-      field: 'stakedAnts',
-      value: curr.stakedAnts,
-      key: `staked:${curr.stakedAnts}`,
-      text: stakedText(curr.stakedAnts, pct(posted.stakedAnts, curr.stakedAnts), curr.stakedPct),
-      meta: { field: 'stakedAnts', value: curr.stakedAnts },
-    });
-  }
-
-  // 24h network usage (requests) posts past a ±5% move from the last POSTED
-  // value, rounded to 1000 requests for a stable dedup key.
-  if (changedBy(posted.requests24h, curr.requests24h)) {
-    events.push({
-      type: 'usage',
-      field: 'requests24h',
-      value: curr.requests24h,
-      key: `usage:${Math.round(curr.requests24h / 1000) * 1000}`,
-      text: usageText({ requests: curr.requests24h, tokens: curr.tokens24h, videos: curr.videos24h, coverage: curr.coverage24h }),
-      meta: { field: 'requests24h', value: curr.requests24h },
-    });
-  }
-
-  // Epoch countdown: once per epoch per bucket (6h, 1h), keyed by the epoch.
-  const secondsLeft = curr.secondsLeft;
-  const bucket = Number.isFinite(secondsLeft)
-    ? (secondsLeft <= 3600 ? '1h' : secondsLeft <= 21600 ? '6h' : null)
-    : null;
-  if (bucket && Number.isInteger(curr.epoch)) {
-    const last = prev.countdownPosted ? prev.countdownPosted[String(curr.epoch)] : null;
-    const rank = { '6h': 1, '1h': 2 };
-    if (!last || rank[bucket] > (rank[last] || 0)) {
-      events.push({
-        type: 'countdown',
-        key: `countdown:${curr.epoch}:${bucket}`,
-        text: countdownText({
-          epoch: curr.epoch,
-          hoursLeft: Math.max(1, Math.round(secondsLeft / 3600)),
-          bonusPct: curr.restakeBonusPct,
-        }),
-        meta: { field: 'countdown', value: { epoch: curr.epoch, bucket } },
-      });
-    }
-  }
-
-  // Top models, weekly, from the /models first page (see TOP_MODELS_ENABLED).
-  if (topModelsEnabled && Array.isArray(curr.topModels) && curr.topModels.length > 0) {
-    const last = prev.lastTopModelsAt;
-    if (!last || nowMs - last >= TOP_MODELS_INTERVAL_MS) {
-      events.push({
-        type: 'topmodels',
-        key: `topmodels:${dateKey(nowMs)}`,
-        text: topModelsText({ models: curr.topModels }),
-        meta: { field: 'lastTopModelsAt', value: nowMs },
-      });
-    }
-  }
-
-  // Live/demand types: modality, video, lifetime, leaders, daily, diem,
-  // usagetarget (see diff-live.mjs).
-  events.push(...diffLiveStats(prev, curr, { posted, nowMs }));
-
-  // All-time high of settled7d (see record7dDue above). Rounded to $100 for a
-  // stable dedup key across runs.
-  if (record7dDue) {
-    events.push({
-      type: 'record7d',
-      field: 'max7d',
-      value: curr.settled7d,
-      key: `record7d:${Math.round(curr.settled7d / 100) * 100}`,
-      text: recordText(curr.settled7d),
-      meta: { field: 'max7d', value: curr.settled7d },
-    });
-  }
-
-  const currMax = maxCompletedEpoch(curr.epochs || []);
-  const prevMax = prev.maxCompletedEpoch || 0;
-  if (currMax > prevMax) {
-    for (const e of curr.epochs || []) {
-      if (e.status === 'complete' && e.epoch > prevMax) {
-        events.push({ type: 'epochstats', key: `epochstats:${e.epoch}`, text: epochStatsText(e) });
-      }
-    }
-    const detail = curr.epochDetail;
-    if (detail && detail.epoch === currMax && Array.isArray(detail.economics?.buckets) && detail.economics.buckets.length > 0) {
-      events.push({ type: 'alloc', key: `alloc:${currMax}`, text: allocText({ epoch: currMax, buckets: detail.economics.buckets }) });
-    }
-  }
-
-  return events;
+  if (!Number.isInteger(prev.epoch) || !Number.isInteger(curr.epoch)) return [];
+  if (!(curr.epoch > prev.epoch)) return [];
+  const closed = curr.epoch - 1;
+  return [{
+    type: 'epoch',
+    family: 'epoch',
+    key: `epoch:${closed}`,
+    data: {
+      epoch: closed,
+      emissionAnts: Number.isFinite(emission) ? emission : null,
+      sellerPointsUsd: Number.isFinite(sellerPointsUsd) ? sellerPointsUsd : null,
+      restakeBonusPct: Number.isFinite(restakeBonusPct) ? restakeBonusPct : null,
+    },
+  }];
 }

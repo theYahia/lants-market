@@ -1,75 +1,80 @@
 #!/usr/bin/env node
 // @sxsiant bot entry point.
 //
-//   node bot/run.mjs --dry-run       print pending posts, post nothing, no state write
-//   node bot/run.mjs                 post every pending change (change-only + dedup)
-//   node bot/run.mjs --max-posts 3   cap this run at N posts (burst guard after a feed outage)
+//   node bot/run.mjs --dry-run       print candidates with family, slot, window,
+//                                    image and gate reason; write nothing
+//   node bot/run.mjs                 post at most ONE candidate this run
 //   node bot/run.mjs --state <p>     alternate state file
+//
+// The bot posts five archetypes only (epoch close, market board, lot highlight,
+// network story, education). A candidate must pass the quality gate and its
+// family slot, and the posting window must be open; otherwise it waits in the
+// queue until its family TTL expires. Every post carries a link, a number and a
+// card when the family has one (docs/twitter-content-plan.md Phase 3).
 //
 // Exit codes: 0 = nothing to do or a retryable failure (next cron retries);
 // 1 = human-actionable failure (missing credentials, expired refresh token,
-// billing/scope rejection). See plan section 8.
+// billing/scope rejection).
 
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFeed, fetchEmission, toState } from './read-feed.mjs';
-import { diffFeed, diffAntseedStats } from './diff.mjs';
+import { readFeed, toState } from './read-feed.mjs';
+import { readSnapshot, emissionFromSnapshot } from './read-snapshot.mjs';
+import { diffFeed } from './diff.mjs';
+import { boardChanged, diffNetwork, dateKey } from './diff-live.mjs';
+import { buildBoard, pickLot } from './aggregate.mjs';
 import { readAntseedStats } from './read-antseedstats.mjs';
-import { readAntseedStatsLive } from './read-antseedstats-live.mjs';
 import { toAntseedSnapshot, toAntseedState } from './antseed-snapshot.mjs';
-import { loadState, saveState, enqueue, dropStale, markEmitted, orderEvents, capStats, withinCooldown } from './state.mjs';
-import { digestText } from './format.mjs';
+import {
+  loadState,
+  saveState,
+  enqueue,
+  dropStale,
+  markEmitted,
+  markPublished,
+  familyDue,
+  postsThisWeek,
+  isFamily,
+} from './state.mjs';
+import { epochCloseText, boardText, lotText, networkText, eduText } from './format.mjs';
+import { gatePost, isWindowOpen, WINDOW_START_HOUR_UTC, WINDOW_END_HOUR_UTC } from './quality.mjs';
+import { cardFor } from './card.mjs';
+import { attachCard } from './media.mjs';
+import { loadEnvFile } from './env.mjs';
 import { saveRotatedToken } from './token-store.mjs';
 import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.mjs';
 
 const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
-// Posting limits lifted (owner, 29.10): no per-run stats cap, no per-metric
-// cooldown, no MAX_POSTS_PER_RUN in the workflow, so issues surface faster.
-// Restore by setting STATS_PER_RUN 1, STATS_THROTTLE true and re-adding
-// MAX_POSTS_PER_RUN to .github/workflows/twitter-bot.yml.
-const STATS_PER_RUN = 0;
-const STATS_THROTTLE = false;
-const DIGEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Post-baseline fields advanced onto state.antseed (not into `posted`). The
-// continuous/milestone metrics live in `posted`; these are interval/date gates.
-const DIRECT_FIELDS = new Set(['max7d', 'lastTopModelsAt', 'lastModalityAt', 'lastLeadersDay', 'lastDailyDay', 'lastUsageTargetAt']);
+// Families whose post carries a card. network/edu are text-only on purpose:
+// they are stories, not boards.
+const IMAGE_FAMILIES = new Set(['epoch', 'board', 'lot']);
+
+// Which candidate wins when several are ready: the time-critical epoch close
+// first, then the market board, then the lot, then the softer stories.
+const RANK = { epoch: 5, board: 4, lot: 3, network: 2, edu: 1 };
+
+const BUILDERS = {
+  epoch: epochCloseText,
+  board: boardText,
+  lot: lotText,
+  network: networkText,
+  edu: eduText,
+};
 
 function log(msg) {
   console.log(`[bot] ${msg}`);
 }
 
-function loadEnvFile(file) {
-  let raw;
-  try {
-    raw = readFileSync(file, 'utf8');
-  } catch {
-    return;
-  }
-  for (const line of raw.split(/\r?\n/)) {
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
-    if (!m) continue;
-    let value = m[2];
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (!(m[1] in process.env)) process.env[m[1]] = value;
-  }
+function indent(text) {
+  return text.split('\n').map((line) => `    | ${line}`).join('\n');
 }
 
 function argValue(argv, flag) {
   const i = argv.indexOf(flag);
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null;
-}
-
-// 0 = no cap (post everything pending); N > 0 = at most N posts this run.
-function parseMaxPosts(argv) {
-  const raw = argValue(argv, '--max-posts') ?? process.env.MAX_POSTS_PER_RUN;
-  if (raw == null || raw === '') return 0;
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
 function readCreds(state) {
@@ -81,112 +86,175 @@ function readCreds(state) {
   return { clientId, clientSecret, refreshToken };
 }
 
+function buildText(event) {
+  const build = BUILDERS[event.type];
+  if (typeof build !== 'function') return '';
+  const text = build(event.data || {});
+  return typeof text === 'string' ? text : '';
+}
+
+// One queued candidate per family: the newest data supersedes an older candidate
+// for the same story (a board from three days ago is not news once today's exists).
+function latestPerFamily(pending) {
+  const byFamily = new Map();
+  for (const e of pending) byFamily.set(e.family, e);
+  return [...byFamily.values()];
+}
+
+function rankCandidates(candidates) {
+  return candidates.slice().sort((a, b) => {
+    const ra = RANK[a.event.family] ?? 0;
+    const rb = RANK[b.event.family] ?? 0;
+    if (ra !== rb) return rb - ra;
+    if (a.event.createdAt < b.event.createdAt) return -1;
+    if (a.event.createdAt > b.event.createdAt) return 1;
+    return 0;
+  });
+}
+
+function findEpochRecord(antseed, epoch) {
+  const list = antseed && Array.isArray(antseed.epochs) ? antseed.epochs : [];
+  return list.find((e) => e.epoch === epoch && e.status === 'complete')
+    || list.find((e) => e.epoch === epoch)
+    || null;
+}
+
 async function main(argv) {
   loadEnvFile(path.join(BOT_DIR, '.env'));
 
   const dryRun = argv.includes('--dry-run') || process.env.DRY_RUN === 'true';
-  const maxPosts = parseMaxPosts(argv);
   const statePath = argValue(argv, '--state') || DEFAULT_STATE;
   const state = loadState(statePath);
   const nowMs = Date.now();
+  const windowOpen = isWindowOpen(nowMs);
 
   const feed = await readFeed();
   if (!feed.ok) {
     log(`feed unavailable (${feed.reason}); skipping run, no post`);
     return 0;
   }
+  const market = feed.market;
+  const epoch = market.epoch;
 
-  const curr = {
-    avg24h: feed.market.avg24h,
-    epoch: feed.market.epoch,
-  };
+  // The snapshot is a soft dependency: without it the epoch post omits the
+  // emission and the lot highlight is skipped, but the run continues.
+  const snapshot = await readSnapshot({ minEpoch: epoch });
+  if (!snapshot.ok) log(`snapshot unavailable (${snapshot.reason}); emission and lot highlight skipped`);
 
-  let emission = null;
-  const advanced = state.last
-    && Number.isInteger(state.last.epoch)
-    && Number.isInteger(curr.epoch)
-    && curr.epoch > state.last.epoch;
-  if (advanced) {
-    const res = await fetchEmission({ epoch: curr.epoch - 1 });
-    if (res.ok) emission = res.ants;
-    else log(`epoch emission unavailable (${res.reason}); epoch post omits it`);
-  }
-
-  // On a cold start there is no completed-epoch baseline: skip the epoch-detail
-  // fetch (the diff discards it anyway until the first baseline is written).
   const prevMaxCompletedEpoch = state.antseed ? state.antseed.maxCompletedEpoch ?? 0 : Number.MAX_SAFE_INTEGER;
   const astats = await readAntseedStats({ prevMaxCompletedEpoch });
-  let astatsLive = null;
-  const astatsLiveRes = await readAntseedStatsLive();
-  if (astatsLiveRes.ok) {
-    astatsLive = astatsLiveRes;
-    for (const [section, reason] of Object.entries(astatsLiveRes.reasons)) {
-      if (reason) log(`antseedstats ${section} unavailable (${reason}); ${section} posts skipped`);
-    }
-  } else {
-    log(`antseedstats live unavailable (${astatsLiveRes.reason}); live posts skipped`);
-  }
-  let antseedEvents = [];
-  let antseedSnapshot = null;
-  let restakeBonusPct = null;
+
+  let antseed = null;
   if (!astats.ok) {
-    log(`antseedstats unavailable (${astats.reason}); antseedstats posts skipped`);
+    log(`antseedstats unavailable (${astats.reason}); board network numbers skipped`);
   } else {
-    antseedSnapshot = toAntseedSnapshot(astats, astatsLive);
-    restakeBonusPct = antseedSnapshot.restakeBonusPct;
+    // The live/demand endpoints (leaders, daily, diem, rewards, models) no
+    // longer feed any post; the network story and board read only the core
+    // summary + supply + epochs. Passing null stops the extra API calls.
+    antseed = toAntseedSnapshot(astats, null);
     for (const [section, reason] of Object.entries(astats.reasons)) {
-      if (reason) log(`antseedstats ${section} unavailable (${reason}); ${section} posts skipped`);
+      if (reason) log(`antseedstats ${section} unavailable (${reason})`);
     }
-    antseedEvents = diffAntseedStats(state.antseed, antseedSnapshot, { nowMs });
   }
 
-  const feedEvents = diffFeed(state.last, curr, { emission, restakeBonusPct });
+  const board = buildBoard({ market, antseed, epoch });
 
-  if (STATS_THROTTLE) {
-    antseedEvents = antseedEvents.filter((e) => !withinCooldown(e, state.antseed, nowMs));
+  // --- Candidates ----------------------------------------------------------
+  const events = [];
+
+  if (state.last && Number.isInteger(epoch) && Number.isInteger(state.last.epoch) && epoch > state.last.epoch) {
+    const closed = epoch - 1;
+    const record = findEpochRecord(antseed, closed);
+    const emission = emissionFromSnapshot(snapshot, closed)
+      ?? (record && Number.isFinite(record.emissionAnts) ? record.emissionAnts : null);
+    events.push(...diffFeed(state.last, { epoch }, {
+      emission,
+      sellerPointsUsd: record ? record.sellerPointsUsd : null,
+      restakeBonusPct: antseed ? antseed.restakeBonusPct : null,
+    }));
   }
 
-  let digestEvent = null;
-  if (!state.lastDigestAt || nowMs - state.lastDigestAt >= DIGEST_INTERVAL_MS) {
-    state.lastDigestAt = nowMs;
-    digestEvent = {
-      type: 'digest',
-      key: `digest:${new Date(nowMs).toISOString().slice(0, 10)}`,
-      text: digestText({
-        floorAsk: feed.market.floorAsk,
-        avg24h: feed.market.avg24h,
-        listedCount: feed.market.listedCount,
-        settled7d: antseedSnapshot ? antseedSnapshot.settled7d : null,
-        sellers7d: antseedSnapshot ? antseedSnapshot.sellers7d : null,
-        stakedAnts: antseedSnapshot ? antseedSnapshot.stakedAnts : null,
-        stakedPct: antseedSnapshot ? antseedSnapshot.stakedPct : null,
-        usage: antseedSnapshot ? { requests: antseedSnapshot.requests24h, tokens: antseedSnapshot.tokens24h } : null,
-        generative: antseedSnapshot ? { videos: antseedSnapshot.generativeVideos7d, spendUsd: antseedSnapshot.generativeSpendUsd7d } : null,
-      }),
-      meta: null,
+  const boardSlotFree = familyDue(state.slots, 'board', nowMs);
+  const weekSinceBoard = !state.slots.board || nowMs - state.slots.board >= WEEK_MS;
+  if (state.lastBoard && (boardChanged(state.lastBoard, board) || (boardSlotFree && weekSinceBoard))) {
+    events.push({ type: 'board', family: 'board', key: `board:${dateKey(nowMs)}`, data: board });
+  }
+
+  if (familyDue(state.slots, 'lot', nowMs)) {
+    const lot = pickLot({ market, snapshot, epoch, nowMs });
+    if (lot) {
+      events.push({ type: 'lot', family: 'lot', key: `lot:${lot.id}:${Number(lot.usd).toFixed(2)}`, data: lot });
+    }
+  }
+
+  const net = antseed ? diffNetwork(state.antseed, antseed, { nowMs }) : { event: null, reseed: false };
+  if (net.event) events.push(net.event);
+
+  if (familyDue(state.slots, 'edu', nowMs)) {
+    events.push({
+      type: 'edu',
+      family: 'edu',
+      key: `edu:${dateKey(nowMs)}`,
+      data: { totalNfts: board ? board.totalNfts : null, listedCount: board ? board.listedCount : null },
+    });
+  }
+
+  // Old-format queue entries (no family/data) cannot be rebuilt into a post.
+  const known = (state.pending || []).filter((e) => e && isFamily(e.family) && e.data);
+  let pending = enqueue(known, events, state.emitted || [], nowMs);
+  pending = latestPerFamily(dropStale(pending, nowMs));
+
+  const candidates = rankCandidates(pending.map((event) => {
+    const text = buildText(event);
+    return {
+      event,
+      text,
+      gate: gatePost({ text, family: event.family, slots: state.slots, nowMs, windowOpen }),
     };
-  }
-
-  const events = [...feedEvents, ...antseedEvents, ...(digestEvent ? [digestEvent] : [])];
-  const pending = orderEvents(dropStale(enqueue(state.pending || [], events, state.emitted || [], nowMs), nowMs));
+  }));
 
   if (dryRun) {
-    log(`dry-run: ${events.length} new event(s), ${pending.length} pending post(s)`);
-    if (maxPosts > 0) log(`max-posts cap: ${maxPosts}`);
-    if (pending.length === 0) log('nothing to post');
-    pending.forEach((e, i) => log(`[${i}] ${e.type}: ${e.text}`));
+    log(`dry-run: ${events.length} new candidate(s), ${candidates.length} queued; `
+      + `window=${windowOpen ? 'open' : 'closed'} (${WINDOW_START_HOUR_UTC}:00-${WINDOW_END_HOUR_UTC}:00 UTC)`);
+    if (candidates.length === 0) log('nothing to post');
+    for (const c of candidates) {
+      const slot = familyDue(state.slots, c.event.family, nowMs) ? 'free' : 'blocked';
+      const image = IMAGE_FAMILIES.has(c.event.family) ? c.event.family : 'none';
+      log(`[${c.event.family}] slot=${slot} window=${windowOpen ? 'open' : 'closed'} image=${image} gate=${c.gate.ok ? 'ok' : c.gate.reason}`);
+      log(indent(c.text));
+    }
+    const passing = candidates.filter((c) => c.gate.ok).length;
+    log(`would_post=${passing > 0 ? 1 : 0} posts_this_week=${postsThisWeek(state.published, nowMs)}`);
     return 0;
   }
 
-  // Advance the snapshot regardless of whether we post, so events are never
-  // re-detected and never lost.
-  state.last = toState(curr);
-  if (antseedSnapshot) state.antseed = toAntseedState(antseedSnapshot, state.antseed);
+  // Advance the observed snapshot whatever happens, so the same change is never
+  // re-detected; queued candidates keep the waiting ones alive.
+  state.last = toState({ epoch });
+  if (board) {
+    state.lastBoard = {
+      floorAsk: board.floorAsk,
+      listedCount: board.listedCount,
+      offeredCount: board.offeredCount,
+    };
+  }
+  if (antseed) state.antseed = toAntseedState(antseed, state.antseed);
+  if (net.reseed && antseed && Number.isFinite(antseed.settled7d)) {
+    state.antseed = {
+      ...(state.antseed || {}),
+      networkBaseline: { at: new Date(nowMs).toISOString(), settled7d: antseed.settled7d },
+    };
+  }
   state.pending = pending;
 
-  if (pending.length === 0) {
+  const chosen = candidates.find((c) => c.gate.ok) || null;
+  if (!chosen) {
     saveState(statePath, state);
-    log('no pending posts');
+    const blocked = candidates[0];
+    log(blocked
+      ? `no post: ${blocked.event.family} held (${blocked.gate.reason})`
+      : 'no candidates');
+    log(`posts_this_run=0 posts_this_week=${postsThisWeek(state.published, nowMs)} window=${windowOpen ? 'open' : 'closed'}`);
     return 0;
   }
 
@@ -230,40 +298,58 @@ async function main(argv) {
   }
   log(`authenticated as @${me.username} (id ${me.userId})`);
 
-  const sliced = maxPosts > 0 ? pending.slice(0, maxPosts) : pending;
-  const toPost = STATS_PER_RUN > 0 ? capStats(sliced, STATS_PER_RUN) : sliced;
-  let posted = 0;
-  for (const post of toPost) {
-    const res = await postTweet({ accessToken: token.accessToken, text: post.text });
-    if (!res.ok) {
-      saveState(statePath, state);
-      if (res.body) log(`X response: ${JSON.stringify(res.body)}`);
-      if (res.headers && Object.keys(res.headers).length > 0) log(`X headers: ${JSON.stringify(res.headers)}`);
-      log(`post failed: ${res.reason}${res.status ? ` (HTTP ${res.status})` : ''}; will retry next run`);
-      return res.retryable ? 0 : 1;
+  // Cards are optional: a missing media.write scope, a render failure or an
+  // upload rejection must never cost the post itself.
+  let mediaId = null;
+  let hasImage = false;
+  const svg = cardFor(chosen.event.family, chosen.event.data);
+  if (svg) {
+    const card = await attachCard({ accessToken: token.accessToken, scope: token.scope, svg });
+    if (card.ok) {
+      mediaId = card.mediaId;
+      hasImage = true;
+      log(`card attached (${mediaId})`);
+    } else {
+      log(`card skipped (${card.reason}${card.detail ? `: ${card.detail}` : ''}); posting text only`);
     }
-    state.pending = state.pending.filter((e) => e.key !== post.key);
-    state.emitted = markEmitted(state.emitted || [], post.key);
-    state.lastPostKey = post.key;
-    // Advance the antseedstats post-baseline only for the events that actually
-    // went out; a capped run leaves the baseline untouched for the queue.
-    if (state.antseed && post.meta?.field) {
-      const { field, value } = post.meta;
-      if (field === 'countdown') {
-        state.antseed.countdownPosted = state.antseed.countdownPosted || {};
-        state.antseed.countdownPosted[String(value.epoch)] = value.bucket;
-      } else if (DIRECT_FIELDS.has(field)) {
-        state.antseed[field] = value;
-      } else {
-        state.antseed.posted[field] = value;
-        state.antseed.postedAt[field] = nowMs;
-      }
-    }
-    posted += 1;
-    log(`posted ${res.id}: ${post.text}`);
   }
-  if (posted > 0) state.lastPostAt = new Date().toISOString();
+
+  const res = await postTweet({
+    accessToken: token.accessToken,
+    text: chosen.text,
+    mediaIds: mediaId ? [mediaId] : null,
+  });
+  if (!res.ok) {
+    saveState(statePath, state);
+    if (res.body) log(`X response: ${JSON.stringify(res.body)}`);
+    if (res.headers && Object.keys(res.headers).length > 0) log(`X headers: ${JSON.stringify(res.headers)}`);
+    log(`post failed: ${res.reason}${res.status ? ` (HTTP ${res.status})` : ''}; will retry next run`);
+    return res.retryable ? 0 : 1;
+  }
+
+  state.pending = state.pending.filter((e) => e.key !== chosen.event.key);
+  state.emitted = markEmitted(state.emitted || [], chosen.event.key);
+  state.slots = { ...(state.slots || {}), [chosen.event.family]: nowMs };
+  state.published = markPublished(state.published || [], {
+    key: chosen.event.key,
+    type: chosen.event.type,
+    family: chosen.event.family,
+    id: res.id,
+    at: nowMs,
+    hasImage,
+  });
+  if (chosen.event.family === 'network' && antseed && Number.isFinite(antseed.settled7d)) {
+    state.antseed = {
+      ...(state.antseed || {}),
+      networkBaseline: { at: new Date(nowMs).toISOString(), settled7d: antseed.settled7d },
+    };
+  }
+  state.lastPostKey = chosen.event.key;
+  state.lastPostAt = new Date(nowMs).toISOString();
   saveState(statePath, state);
+
+  log(`posted ${res.id} [${chosen.event.family}${hasImage ? '+card' : ''}]: ${chosen.text}`);
+  log(`posts_this_run=1 posts_this_week=${postsThisWeek(state.published, nowMs)} window=${windowOpen ? 'open' : 'closed'}`);
   return 0;
 }
 

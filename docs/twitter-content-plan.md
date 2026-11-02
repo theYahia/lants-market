@@ -1,6 +1,6 @@
 # Twitter content plan — @sxsiant (lants.eth.limo)
 
-Status: Phase 0 active (manual posting while the storefront sprint T1–T8 is in progress).
+Status: Phase 3 active (bot packages posts: five archetypes, cards, gate, weekly metrics).
 Account: handle `@sxsiant`, display `lants.eth.limo`, bio `Locked ANTS positions (lANTS) market on @base · lants.eth.limo`.
 Automated-by label: `Automated by @TheTieTieTies` (X settings attribution; no bot code exists yet).
 
@@ -28,11 +28,12 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 
 - Phase 0 (now → debut deploy): 2–3 manual posts/week. Data + education only. No promises.
 - Phase 1 (after T1–T8 deploy): launch thread once, then steady data cadence.
-- Phase 2 (bot, live): automated data posts only (epoch closes, antseedstats
-  metrics), dedup + change-only. No per-day or per-run cap while the owner
-  watches live behaviour (29.10): `STATS_PER_RUN = 0`, `STATS_THROTTLE = false`,
-  no `MAX_POSTS_PER_RUN`. Weekly digest still fires at most once per 7 days.
-  Manual posts stay manual (no label on them).
+- Phase 3 (bot, live): automated posts only, packaged as five archetypes — epoch
+  close (A), market board (B), lot highlight (C), network story (D), education (E).
+  One post per run, at most one per family per 5 days (education 10), inside the
+  14:00–17:00 UTC window, gated by `bot/quality.mjs`. Numbers live in the A/B cards
+  (`bot/card.mjs`); the old "emoji · number · data:" streams are gone. Manual posts
+  stay manual (no label on them).
 - Best window: 14:00–17:00 UTC (17:00–20:00 MSK) — morning US + evening EU, per the AntSeed
   contest playbook found on disk. Not on Moscow nights, not weekends unless an epoch closes.
 
@@ -95,80 +96,77 @@ no "two yields" framing. If a number changes, post the change; never post a numb
 9. Roadmap: incentives proof page (public payout rules + verifiable trees), phase-4 market layer.
 10. CTA: lants.eth.limo — open the market.
 
-## Phase 2 — automated posts (bot, live)
+## Phase 3 — automated posts (bot, live)
 
-Change-only, dedup by `(type, value)`; never repeat an identical value as new.
-The bot posts no listing-level market-ticker events: new listings, new floor
-listings and delists duplicate the competitor's Seaport ticker and are not our
-story (see "Removed post types" below).
+The bot no longer streams every change as its own post. One post = one story,
+gated, at most one post per run; cards carry the numbers. A post must earn its
+X API call: a link back to lants.eth.limo, a real number, a sentence first line
+(no emoji-led "emoji · number · data:" dump), inside the 14:00–17:00 UTC window,
+and only when its archetype's slot is free.
 
-Emoji convention: one leading emoji per post —
-🏁 epoch close · 🔥 burn · 💰 settled · 🌱 staked · 🏆 record ·
-🎁 epoch rewards · 📊 weekly digest · 📡 usage · ⏳ countdown · 🧮 allocation ·
-🏅 top models · 🧬 modality · 🎞️ video · 🛰️ lifetime · 🥇 leaders ·
-📈 daily · 🔋 diem · 🎯 usage target.
-Two markers also sit inside the text: 🐜 before an ANTS amount (epoch emission,
-burn, epoch rewards) and 🌱 for staking/growth (staked post, the Restake
-bullet). No other emoji inside the text, the Twitter length limit (280) is the
-hard constraint — `epochText` drops its measures rather than exceed it.
+### The five archetypes
 
-- Epoch close (Thursday), a claim/restake call to action:
-  ```
-  🏁 Epoch 29 has ended · X ANTS emitted · 24h avg $Y
+| # | Archetype | Cadence | Card | Absorbs |
+|---|-----------|---------|------|---------|
+| A | Epoch close + claim/restake CTA | 1/epoch (Thu) | epoch card | `epochstats`, `alloc`, `burn`, `countdown` |
+| B | Market board (find of the week) | 1/week | board card | digest, `staked`, floor/avg, `listed`, `offeredCount`, supply, implied MC/FDV, `settled7d` |
+| C | Lot highlight (real lot + deep link) | ≤1/week | lot card | new type |
+| D | Network story (network demand) | ≤1/week | none | `settled 7d/30d`, `usage`, `leaders`, `daily`, `modality`, `video`, `record7d`, `usagetarget`, `diem` |
+| E | Education (what is a lANT, honest bounds) | 1/10 days | none | new type |
 
-  Staker rewards for epoch 29 are claimable now:
-  • Claim — ANTS to your wallet
-  • Restake — compound into a new position 🌱 (+5% power bonus)
+Slot gaps: A/B/C/D every 5 days, E every 10 days (`bot/state.mjs`). TTLs: A 36h,
+B/C/D 48h, E 10d — so waiting for a slot never loses the news. When several
+candidates are ready, run order is A > B > C > D > E.
 
-  Buyer rewards for epoch 29 can be staked into a seller pool.
+### Gate and merge
 
-  https://lants.eth.limo
-  ```
-  The measures on the first line are optional (only when the source supplied them);
-  the `(+N% power bonus)` appears only when the staking endpoint supplied it.
-- antseedstats: burn, settled (7d/30d, now with a buyer count), staked, record,
-  epoch rewards, weekly digest, plus the demand-side posts below.
+`bot/quality.mjs` refuses a post without `lants.eth.limo`, without a number, with
+an emoji-led or middle-dot first line, over 280 chars, with a busy family slot,
+or outside the window. `bot/run.mjs` posts at most one candidate per run (best by
+archetype rank), so a burst is impossible by construction. The numbers that used
+to stream as their own posts now live inside the A/B cards; the same data stays
+available for free in the Telegram bot (untracked `bot/tg-*`, not touched).
 
-### Demand-side posts (network usage side of AntSeed)
+### Cards
 
-The `network/summary`, `epochs/{id}` and `staking/pools` endpoints already expose
-the demand side the bot used to ignore. Added 29.10:
+`bot/card.mjs` builds 1200×675 dark-theme SVGs (DejaVu Sans, ASCII-only):
+`boardCard` (floor · 24h avg · listed · bids · supply · 7d settled · staked ·
+epoch), `lotCard` (#id · ANTS · USD · $/ANTS · unlock date · ANTS/epoch ·
+provider), `epochCard` (epoch · emission · seller points · restake bonus · next
+close). `bot/media.mjs` renders (`@resvg/resvg-js`) and uploads
+(`POST /2/media/upload?media_category=tweet_image`). Cards need the `media.write`
+scope; without it (the current token) the bot posts text only.
 
-- Usage (24h): `📡 AntSeed 24h: 232.7K requests · 13.4B tokens · 610 videos · 96% attributed · data: antseedstats.com`
-  — change-only, ±5% on `paid_usage_24h.requests` vs the last posted value.
-- Epoch countdown: `⏳ Epoch 28 ends in ~3h — claim staker rewards or restake with a +5% power bonus 🌱` + site URL.
-  Once per epoch per bucket (`6h`, `1h`), from `epoch.seconds_left` + `staking.pools.restake_bonus_pct`.
-- Emission allocation: `🧮 Epoch 28 emission: 40% seller pools · 20% usage · 15% team · 15% reserve · 10% verification · data: antseedstats.com`
-  — on completed-epoch advance, from `epochs/{id}.economics.buckets`.
-- Top models: `🏅 Most-used AI on AntSeed (7d): Claude Opus 5.5 · GPT-6 Astra · Kimi K3 · data: antseedstats.com`
-  — weekly, top 3 by recent settled USDC from the models first page
-  (`usage.settled_usd` descending; the reader re-sorts defensively). Enabled
-  (`TOP_MODELS_ENABLED = true`).
-- Buyers folded into the existing settled post: `… 27,841 settlements · 70 sellers · 306 buyers · …`.
-- Usage + generative folded into the weekly digest (two plain lines, no emoji).
+### Metrics
 
-### Live/demand posts (new endpoints, added 29.10)
+`bot/metrics.mjs` joins `state.published` with the account's last 100 original
+tweets (`GET /2/users/:id/tweets?max_results=100&tweet.fields=created_at,public_metrics`)
+into a `family · impressions · likes · replies · reposts · bookmarks · engagement`
+table. It runs weekly (workflow `0 6 * * 1`); `--write` persists it to
+`notes/twitter-metrics.md`. After 4 weeks: keep the three archetypes that earn
+their call.
 
-The `leaders`, `network/daily`, `diem` and `rewards/current` endpoints (plus
-`modality_7d` and `lifetime`, already inside `network/summary`) drive a second
-wave of demand-side posts. Read by `bot/read-antseedstats-live.mjs` (soft
-dependency) and diffed by `bot/diff-live.mjs`.
+### Cost
 
-- Modality (weekly): `🧬 AntSeed 7d spend: text $10.2K · video $2.3K · images $172 · data: antseedstats.com`
-  — from `network/summary.modality_7d` (text/images/video `spend_usd`).
-- Video milestone: `🎞️ Native video inference: 5K videos · $2.5K in 7d · data: antseedstats.com`
-  — on a round `generative_7d.videos` bucket (1000 steps).
-- Lifetime milestones: `🛰️ AntSeed passed 700K settlements · data: antseedstats.com`
-  — on round buckets of `lifetime.settles` (100K), `settled_usd` ($50K),
-  `buyers` (500), `sellers` (100).
-- Leaders (daily): `🥇 AntSeed 24h: top seller Open Forge $645 · most revenue GPT-6 Astra $410 · most tokens DeepSeek V4.1 Flash 5.71B · data: antseedstats.com`
-  — from `/leaders` (wash trading excluded), once per calendar day.
-- Daily (daily): `📈 Yesterday on AntSeed: settled $2,739 · 210.7K requests · 18 new paid users · data: antseedstats.com`
-  — from `/network/daily`, the last fully-closed UTC day.
-- DIEM pool (change-only): `🔋 DIEM pool: $690,695 backing capacity (+15.1%) · 82 stakers · $7.6K USDC paid out · data: antseedstats.com`
-  — ±5% on `/diem.stake_value_usd`. The `apy_*` fields are never read (yields banned).
-- Usage target (weekly): `🎯 Epoch 29 targets: usage 0.006% of target · stake 0.39% of target · data: antseedstats.com`
-  — from `/rewards/current.budgets` (`usage_pct_of_target`, `stake_pct_of_target`).
+One post = one paid `POST /2/tweets` call; a card adds one `POST /2/media/upload`.
+The per-call price is not recorded in this repo — fill it in here when known:
+
+| Operation | Calls |
+|-----------|-------|
+| Text post | 1 × `POST /2/tweets` |
+| Card post | +1 × `POST /2/media/upload` |
+| Weekly metrics | 1 × `GET /2/users/:id/tweets` + 1 token refresh |
+
+### Reply bank for @TheTieTieTies
+
+Quote-tweet the bot post (never bare retweet), 30–60 min later, one line of
+founder voice. Stock lines per archetype:
+
+- A (epoch): "The lock keeps paying until you claim it — the yield is real, the date is fixed."
+- B (board): "468 holders are holding through a 3% listed float. That's the signal."
+- C (lot): "This is the cheapest real position on the board right now. Numbers verified, not vibes."
+- D (network): "A seller shortage on the demand side is exactly what a staking network wants to show."
+- E (education): "Buying a lock, the yield and the boost together — that's the whole product in one sentence."
 
 ## Removed post types (do not reintroduce)
 
@@ -178,7 +176,7 @@ second "market ticker" behind @antseedbot instead of a destination for buyers:
 - **Sold** — removed. The competitor already posts every sale with more context
   ("X% above 24h avg"). A sold position is a dead end for us: the deep link led
   to a position that no longer exists, so the post never converted. Sale volume
-  now lives only in the weekly digest.
+  now lives only in the market board (B).
 - **Floor move** — removed. A floor change on the aggregate (antseedmarkets) feed
   is the competitor's story, not our inventory.
 - **New listing** — removed. A new listing on our own marketplace (VexyMarketplace)
@@ -190,8 +188,32 @@ second "market ticker" behind @antseedbot instead of a destination for buyers:
   competitor-ticker noise, not a call to action.
 
 Reintroducing any of these means posting the competitor's activity as our own. The
-bot now posts only: epoch closes and the antseedstats data we attribute. If a
-future change adds them back, this decision must be revisited.
+bot now posts only: the five archetypes above. If a future change adds them back,
+this decision must be revisited.
+
+On 02.11.2026 the per-metric streams were also removed, because they were "posts
+about the same thing with no story" — 5 of 8 posts on 29.10 had no link and none
+had an image, a question or an interpretation. Their numbers now live inside the
+epoch (A) and board (B) cards, or the free Telegram bot:
+
+- **settled 7d/30d** — folded into the board card (`settled7d`) and the network story.
+- **staked** — folded into the board card (`Staked %`).
+- **usage** (24h requests/tokens/videos) — folded into the board card.
+- **leaders, daily, diem, modality, video, lifetime, usagetarget** — folded into
+  the network story (D), which posts only with a genuine week-over-week comparison
+  and a conclusion.
+- **topmodels** — folded into the board card's epoch context; the full catalog is
+  never posted (see "Rejected post types").
+- **epochstats, alloc, burn, countdown** — folded into the epoch card (A); a
+  countdown never posts on its own.
+- **record7d** — folded into the network story; a bare all-time-high post is gone.
+- **digest** (lANTS weekly) — replaced by the market board (B), a once-a-week story
+  instead of a number dump.
+
+Also banned forever: a first line of the form `📡 AntSeed 24h · 215.41K requests · …`
+(the gate rejects emoji-led and middle-dot first lines); a post without a link;
+two posts about the same metric in one week; `countdown` as a standalone post.
+
 
 ## Rejected post types (antseedstats demand, do not implement)
 
@@ -201,7 +223,7 @@ Considered 29.10 and rejected; one line each. See `notes/handoff.md` Session 16.
   "inflated yield" the invariants ban). Never post APY.
 - **Standalone buyers** — folded into the settled post (one less continuous stream).
 - **Standalone coverage** — kept only as the trailing "N% attributed" in the usage post.
-- **Standalone generative** — folded into the weekly digest.
+- **Standalone generative** — folded into the market board (B).
 - **Standalone claimable** — folded into countdown / epoch CTA.
 - **Full models catalog** — pagination (page 100) unreliable on the free tier; only
   "top 3 by usage" from the first page is used, and only after sort semantics are verified.
@@ -215,6 +237,7 @@ Considered 29.10 and rejected; one line each. See `notes/handoff.md` Session 16.
 - Quote-tweet, never bare retweet; add one line of founder commentary.
 - Space 30–60 min between the bot post and the main-account quote.
 - Main account carries personal voice; @sxsiant carries the data.
+- Stock reply lines per archetype live in "Phase 3 — Reply bank for @TheTieTieTies".
 
 ## Do-not list
 

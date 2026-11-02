@@ -109,6 +109,10 @@ export function toAntseedState(snapshot, prev = null) {
     posted,
     // All-time high of settled7d; a new high always posts (record key).
     max7d: prev?.max7d ?? snapshot.settled7d,
+    // Week-over-week baseline for the network story: the settled 7d value
+    // observed about a week ago. run.mjs seeds/rotates it; kept here so the
+    // compact state survives a run boundary.
+    networkBaseline: prev?.networkBaseline ?? null,
     // Timestamps of the last successful post per continuous metric, used for
     // the per-metric cooldown (24h settled, 48h staked).
     postedAt: prev?.postedAt ?? {},

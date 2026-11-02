@@ -1,128 +1,89 @@
-// Live/demand post-type diff: the antseedstats sections the core diff does not
-// cover — 7d modality spend, video milestones, lifetime milestones, 24h
-// leaders, yesterday's network day, the DIEM capacity pool and reward budgets.
-// Pure functions; the shared continuous-diff helper (changedBy) and date key
-// live here so diff.mjs and this module share one definition.
+// Secondary triggers for the remaining archetypes: the market board (B) fires
+// when a headline number moved, and the network story (D) fires once a real
+// week-over-week comparison exists. Both are pure; run.mjs owns slots, windows
+// and posting.
+//
+// Long-form post types of the previous version (settled 7d/30d, staked, usage,
+// leaders, daily, diem, modality, video, lifetime, usagetarget, topmodels,
+// countdown, alloc, epochstats, record7d) no longer emit anything: their data
+// lives inside the epoch and board cards (docs/twitter-content-plan.md).
 
-import { modalityText, videoText, lifetimeText, leadersText, dailyText, diemText, usageTargetText, pct } from './format.mjs';
-import { latestCompleteDay } from './read-antseedstats-live.mjs';
-import { milestoneBucket, LIFETIME_MILESTONES, VIDEO_MILESTONE_STEP } from './antseed-snapshot.mjs';
+import { pct } from './format.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
-const CHANGE_THRESHOLD = 0.05;
+
+// Two weeks of slack before a stored weekly baseline is too old to call a
+// comparison "w/w"; past it the baseline is re-seeded instead of posting.
+const MAX_BASELINE_AGE_MS = 2 * WEEK_MS;
+
+// A floor move this small is noise, not a story.
+export const BOARD_FLOOR_THRESHOLD = 0.02;
 
 export function dateKey(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-// A continuous metric posts only past this relative change from the last posted
-// value; a missing/zero baseline returns false so it seeds silently.
-export function changedBy(prevValue, currValue) {
-  return prevValue > 0 && currValue > 0 && Math.abs(currValue - prevValue) / prevValue >= CHANGE_THRESHOLD;
+export function changedBy(prevValue, currValue, threshold = 0.05) {
+  return prevValue > 0 && currValue > 0 && Math.abs(currValue - prevValue) / prevValue >= threshold;
 }
 
-export function diffLiveStats(prev, curr, { posted, nowMs }) {
-  const events = [];
+/**
+ * Did a board headline number move enough to tell the story again?
+ * Listing count and open bids are discrete: any change counts. Floor is
+ * relative: ±2%.
+ */
+export function boardChanged(prevBoard, currBoard) {
+  if (!prevBoard || !currBoard) return false;
+  if (prevBoard.listedCount !== currBoard.listedCount) return true;
+  if (prevBoard.offeredCount !== currBoard.offeredCount) return true;
+  return changedBy(prevBoard.floorAsk, currBoard.floorAsk, BOARD_FLOOR_THRESHOLD);
+}
 
-  // 7d spend by modality (text/images/video), weekly. All three must be present
-  // or the split would read as incomplete.
-  if (Number.isFinite(curr.modalityTextUsd) && Number.isFinite(curr.modalityVideoUsd) && Number.isFinite(curr.modalityImagesUsd)) {
-    const last = prev.lastModalityAt;
-    if (!last || nowMs - last >= WEEK_MS) {
-      events.push({
-        type: 'modality',
-        key: `modality:${dateKey(nowMs)}`,
-        text: modalityText({ textUsd: curr.modalityTextUsd, videoUsd: curr.modalityVideoUsd, imagesUsd: curr.modalityImagesUsd }),
-        meta: { field: 'lastModalityAt', value: nowMs },
-      });
-    }
+function parseTime(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') return Date.parse(value);
+  return NaN;
+}
+
+/**
+ * Network story candidate: only with a genuine week-over-week comparison.
+ *
+ * `prev.networkBaseline` is `{ at, settled7d }` — the settled 7d value observed
+ * about a week ago. Without it the diff asks the caller to seed the baseline and
+ * posts nothing; past two weeks it asks for a re-seed rather than quoting a
+ * stale comparison.
+ *
+ * @returns {{event:(object|null), reseed:boolean}}
+ */
+export function diffNetwork(prev, curr, { nowMs = Date.now() } = {}) {
+  const settled = curr ? curr.settled7d : null;
+  const buyers = curr ? curr.buyers7d : null;
+  const sellers = curr ? curr.sellers7d : null;
+  if (!Number.isFinite(settled) || settled <= 0) return { event: null, reseed: false };
+  if (!Number.isFinite(buyers) || !Number.isFinite(sellers)) return { event: null, reseed: false };
+
+  const base = prev ? prev.networkBaseline : null;
+  const baseAt = base ? parseTime(base.at) : NaN;
+  if (!base || !Number.isFinite(baseAt) || !Number.isFinite(base.settled7d)) {
+    return { event: null, reseed: true };
   }
+  const age = nowMs - baseAt;
+  if (!(age >= WEEK_MS)) return { event: null, reseed: false };
+  if (age > MAX_BASELINE_AGE_MS) return { event: null, reseed: true };
 
-  // Native video-inference volume milestone (7d videos), round buckets.
-  const videoBucket = milestoneBucket(curr.generativeVideos7d, VIDEO_MILESTONE_STEP);
-  const videoPosted = posted.videoMilestone ?? videoBucket;
-  if (videoBucket > videoPosted) {
-    events.push({
-      type: 'video',
-      key: `video:${videoBucket}`,
-      text: videoText({ videos: curr.generativeVideos7d, spendUsd: curr.generativeSpendUsd7d }),
-      meta: { field: 'videoMilestone', value: videoBucket },
-    });
-  }
-
-  // Lifetime milestones: settlements, settled volume, buyers, sellers.
-  for (const { field, kind, step } of LIFETIME_MILESTONES) {
-    const currBucket = milestoneBucket(curr[field], step);
-    const prevBucket = posted[field] ?? currBucket;
-    if (currBucket > prevBucket) {
-      events.push({
-        type: 'lifetime',
-        key: `lifetime:${field}:${currBucket}`,
-        text: lifetimeText(kind, currBucket),
-        meta: { field, value: currBucket },
-      });
-    }
-  }
-
-  const todayKey = dateKey(nowMs);
-
-  // 24h leaders, once per calendar day.
-  if (curr.leaders && curr.leaders.topModelSales && curr.leaders.topModelSales.display) {
-    if (prev.lastLeadersDay !== todayKey) {
-      events.push({
-        type: 'leaders',
-        key: `leaders:${todayKey}`,
-        text: leadersText(curr.leaders),
-        meta: { field: 'lastLeadersDay', value: todayKey },
-      });
-    }
-  }
-
-  // Yesterday's fully-closed network day, once per calendar day.
-  const day = latestCompleteDay(curr.daily, nowMs);
-  if (day && prev.lastDailyDay !== todayKey) {
-    events.push({
-      type: 'daily',
-      key: `daily:${todayKey}`,
-      text: dailyText({ settledUsd: day.settledUsd, requests: day.requests, newUsers: day.newUsers }),
-      meta: { field: 'lastDailyDay', value: todayKey },
-    });
-  }
-
-  // DIEM capacity pool, change-only on the USD stake value (no yield).
-  if (curr.diem && changedBy(posted.diemStake, curr.diem.stakeValueUsd)) {
-    events.push({
-      type: 'diem',
-      field: 'diemStake',
-      value: curr.diem.stakeValueUsd,
-      key: `diem:${Math.round(curr.diem.stakeValueUsd)}`,
-      text: diemText({
-        stakeValueUsd: curr.diem.stakeValueUsd,
-        stakers: curr.diem.stakers,
-        usdcDistributedUsd: curr.diem.usdcDistributedUsd,
-        pctChange: pct(posted.diemStake, curr.diem.stakeValueUsd),
-      }),
-      meta: { field: 'diemStake', value: curr.diem.stakeValueUsd },
-    });
-  }
-
-  // Reward budgets vs targets (demand-vs-ceiling), weekly.
-  if (curr.rewards && Number.isFinite(curr.rewards.usagePctOfTarget)) {
-    const last = prev.lastUsageTargetAt;
-    if (!last || nowMs - last >= WEEK_MS) {
-      events.push({
-        type: 'usagetarget',
-        key: `usagetarget:${dateKey(nowMs)}`,
-        text: usageTargetText({
-          epoch: curr.rewards.epoch,
-          usagePctOfTarget: curr.rewards.usagePctOfTarget,
-          stakePctOfTarget: curr.rewards.stakePctOfTarget,
-        }),
-        meta: { field: 'lastUsageTargetAt', value: nowMs },
-      });
-    }
-  }
-
-  return events;
+  return {
+    event: {
+      type: 'network',
+      family: 'network',
+      key: `network:${dateKey(nowMs)}`,
+      data: {
+        buyers,
+        sellers,
+        settled7d: settled,
+        pctChange: pct(base.settled7d, settled),
+      },
+    },
+    reseed: false,
+  };
 }

@@ -1,13 +1,16 @@
 // Minimal X (Twitter) API v2 client for the bot: OAuth 2.0 user-context token
-// refresh and tweet creation. No SDK; fetch only. The app is a confidential
-// client (client id + secret), so refresh uses HTTP Basic auth.
+// refresh, tweet creation, image upload and the tweet list used by metrics.
+// No SDK; fetch only. The app is a confidential client (client id + secret), so
+// refresh uses HTTP Basic auth.
 //
 // Scopes required on the refresh token: tweet.write, tweet.read, offline.access,
-// users.read (for GET /2/users/me identity check).
+// users.read (GET /2/users/me identity check) and media.write (image upload;
+// without it the bot posts text only).
 
 const OAUTH_TOKEN_URL = 'https://api.x.com/2/oauth2/token';
 const TWEET_URL = 'https://api.x.com/2/tweets';
 const ME_URL = 'https://api.x.com/2/users/me';
+const MEDIA_URL = 'https://api.x.com/2/media/upload';
 const MAX_TWEET_LEN = 280;
 
 function basicAuth(clientId, clientSecret) {
@@ -27,6 +30,12 @@ function errorDetail(json) {
 // signal that the refresh token was minted under a read-only (or downgraded) app.
 export function scopeAllowsWrite(scope) {
   return typeof scope === 'string' && scope.split(/\s+/).includes('tweet.write');
+}
+
+// media.write is a separate scope: without it image upload is rejected while
+// text keeps working, so the caller skips the card instead of failing the run.
+export function scopeAllowsMedia(scope) {
+  return typeof scope === 'string' && scope.split(/\s+/).includes('media.write');
 }
 
 const HEADER_KEYS = [
@@ -160,12 +169,17 @@ export async function getMe({
 export async function postTweet({
   accessToken,
   text,
+  mediaIds = null,
   fetchImpl = globalThis.fetch,
   timeoutMs = 15000,
 } = {}) {
   if (!accessToken) return { ok: false, reason: 'token', retryable: false };
   if (typeof text !== 'string' || text.trim() === '') return { ok: false, reason: 'text', retryable: false };
   if (text.length > MAX_TWEET_LEN) return { ok: false, reason: 'too-long', retryable: false };
+
+  const payload = { text };
+  const ids = Array.isArray(mediaIds) ? mediaIds.filter((id) => typeof id === 'string' && id !== '') : [];
+  if (ids.length > 0) payload.media = { media_ids: ids };
 
   const res = await send(fetchImpl, TWEET_URL, {
     method: 'POST',
@@ -174,7 +188,7 @@ export async function postTweet({
       'content-type': 'application/json',
       accept: 'application/json',
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(payload),
   }, timeoutMs);
 
   if (!res.ok) {
@@ -192,4 +206,80 @@ export async function postTweet({
     return { ok: false, status: res.status, retryable: false, reason: 'no-id', body: res.json, headers: res.headers };
   }
   return { ok: true, id };
+}
+
+/**
+ * Upload one image for a tweet (`POST /2/media/upload`, multipart). Returns the
+ * media id to pass as `postTweet({ mediaIds })`. Requires the media.write scope
+ * and a PNG/JPEG under the account's media limits.
+ */
+export async function uploadMedia({
+  accessToken,
+  buffer,
+  mimeType = 'image/png',
+  mediaCategory = 'tweet_image',
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 30000,
+} = {}) {
+  if (!accessToken) return { ok: false, reason: 'token', retryable: false };
+  if (!buffer || buffer.length === 0) return { ok: false, reason: 'empty', retryable: false };
+
+  const form = new FormData();
+  form.append('media', new Blob([buffer], { type: mimeType }), 'card.png');
+  form.append('media_category', mediaCategory);
+
+  const res = await send(fetchImpl, MEDIA_URL, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+    body: form,
+  }, timeoutMs);
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      retryable: isRetryable(res.status),
+      reason: errorDetail(res.json) || res.reason || 'http',
+      body: res.json,
+    };
+  }
+  const data = res.json?.data ?? res.json ?? {};
+  const mediaId = data.id ?? data.media_id_string ?? data.media_id;
+  if (mediaId === undefined || mediaId === null || String(mediaId) === '') {
+    return { ok: false, status: res.status, retryable: false, reason: 'no-media-id', body: res.json };
+  }
+  return { ok: true, mediaId: String(mediaId), status: res.status };
+}
+
+/**
+ * Last N original tweets of an account, with public metrics (used by
+ * bot/metrics.mjs). Needs users.read + tweet.read.
+ */
+export async function getUserTweets({
+  accessToken,
+  userId,
+  maxResults = 100,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 20000,
+} = {}) {
+  if (!accessToken) return { ok: false, reason: 'token', retryable: false, tweets: [] };
+  if (typeof userId !== 'string' || userId === '') return { ok: false, reason: 'user', retryable: false, tweets: [] };
+  const capped = Math.min(Math.max(Number(maxResults) || 100, 5), 100);
+  const url = `https://api.x.com/2/users/${encodeURIComponent(userId)}/tweets`
+    + `?max_results=${capped}&tweet.fields=created_at,public_metrics&exclude=replies,retweets`;
+  const res = await send(fetchImpl, url, {
+    method: 'GET',
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+  }, timeoutMs);
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      retryable: isRetryable(res.status),
+      reason: errorDetail(res.json) || res.reason || 'http',
+      tweets: [],
+      body: res.json,
+    };
+  }
+  return { ok: true, status: res.status, tweets: Array.isArray(res.json?.data) ? res.json.data : [], body: res.json };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite } from './xapi.mjs';
+import { refreshAccessToken, postTweet, getMe, scopeAllowsWrite, scopeAllowsMedia, uploadMedia, getUserTweets } from './xapi.mjs';
 
 function jsonResponse(status, body, headers = {}) {
   return {
@@ -151,4 +151,97 @@ test('scopeAllowsWrite detects tweet.write in a scope string', () => {
   assert.equal(scopeAllowsWrite('tweet.read offline.access'), false);
   assert.equal(scopeAllowsWrite('tweet.write'), true);
   assert.equal(scopeAllowsWrite('tweet.write tweet.read offline.access users.read'), true);
+});
+
+test('scopeAllowsMedia is a separate scope from tweet.write', () => {
+  assert.equal(scopeAllowsMedia(null), false);
+  assert.equal(scopeAllowsMedia('tweet.write users.read tweet.read offline.access'), false);
+  assert.equal(scopeAllowsMedia('tweet.write media.write users.read'), true);
+});
+
+test('postTweet sends media.media_ids when a card is attached', async () => {
+  let seen = null;
+  const fetchImpl = async (url, opts) => {
+    seen = { url, opts };
+    return jsonResponse(201, { data: { id: '124' } });
+  };
+  const res = await postTweet({ accessToken: 'at', text: 'hi', mediaIds: ['777'], fetchImpl });
+  assert.equal(res.ok, true);
+  assert.deepEqual(JSON.parse(seen.opts.body), { text: 'hi', media: { media_ids: ['777'] } });
+});
+
+test('postTweet omits the media object without mediaIds', async () => {
+  let seen = null;
+  const fetchImpl = async (url, opts) => {
+    seen = { url, opts };
+    return jsonResponse(201, { data: { id: '125' } });
+  };
+  await postTweet({ accessToken: 'at', text: 'hi', mediaIds: [], fetchImpl });
+  assert.deepEqual(JSON.parse(seen.opts.body), { text: 'hi' });
+  await postTweet({ accessToken: 'at', text: 'hi', fetchImpl });
+  assert.deepEqual(JSON.parse(seen.opts.body), { text: 'hi' });
+});
+
+test('uploadMedia posts multipart form data and returns the media id', async () => {
+  let seen = null;
+  const fetchImpl = async (url, opts) => {
+    seen = { url, opts };
+    return jsonResponse(200, { data: { id: '9001', media_key: '3_9001' } });
+  };
+  const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const res = await uploadMedia({ accessToken: 'at', buffer, fetchImpl });
+  assert.equal(res.ok, true);
+  assert.equal(res.mediaId, '9001');
+  assert.equal(seen.url, 'https://api.x.com/2/media/upload');
+  assert.equal(seen.opts.method, 'POST');
+  assert.equal(seen.opts.headers.authorization, 'Bearer at');
+  assert.equal(seen.opts.headers['content-type'], undefined);
+  assert.ok(seen.opts.body instanceof FormData);
+  assert.equal(seen.opts.body.get('media_category'), 'tweet_image');
+  assert.ok(seen.opts.body.get('media'));
+});
+
+test('uploadMedia refuses an empty buffer and surfaces a scope rejection', async () => {
+  let called = false;
+  const fetchImpl = async () => {
+    called = true;
+    return jsonResponse(200, { data: { id: '1' } });
+  };
+  assert.equal((await uploadMedia({ accessToken: 'at', buffer: Buffer.alloc(0), fetchImpl })).ok, false);
+  assert.equal(called, false);
+
+  const denied = await uploadMedia({
+    accessToken: 'at',
+    buffer: Buffer.from([1]),
+    fetchImpl: async () => jsonResponse(403, { title: 'Forbidden', detail: 'Unauthorized' }),
+  });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.status, 403);
+  assert.equal(denied.reason, 'Unauthorized');
+});
+
+test('getUserTweets requests original tweets with public metrics', async () => {
+  let seen = null;
+  const fetchImpl = async (url, opts) => {
+    seen = { url, opts };
+    return jsonResponse(200, { data: [{ id: '1', public_metrics: { impression_count: 5 } }] });
+  };
+  const res = await getUserTweets({ accessToken: 'at', userId: '42', fetchImpl });
+  assert.equal(res.ok, true);
+  assert.equal(res.tweets.length, 1);
+  assert.ok(seen.url.startsWith('https://api.x.com/2/users/42/tweets?'));
+  assert.ok(seen.url.includes('max_results=100'));
+  assert.ok(seen.url.includes('tweet.fields=created_at,public_metrics'));
+  assert.ok(seen.url.includes('exclude=replies,retweets'));
+  assert.equal(seen.opts.headers.authorization, 'Bearer at');
+});
+
+test('getUserTweets caps max_results at the API limit', async () => {
+  let seen = null;
+  const fetchImpl = async (url) => {
+    seen = url;
+    return jsonResponse(200, { data: [] });
+  };
+  await getUserTweets({ accessToken: 'at', userId: '42', maxResults: 500, fetchImpl });
+  assert.ok(seen.includes('max_results=100'));
 });

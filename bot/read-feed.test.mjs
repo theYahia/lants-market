@@ -26,6 +26,25 @@ test('toMarket turns the parsed feed into typed state', () => {
   assert.equal(lot.amount, 762.4724892065126);
   assert.equal(lot.lockDays, 126);
   assert.ok(Math.abs(lot.perAntUsd - 0.14) < 1e-9);
+  assert.equal(lot.sellerName, 'Venice.ai Proxy');
+  assert.equal(lot.agentId, 45869);
+});
+
+test('toMarket keeps the board denominators and the ANTS supply', () => {
+  const market = toMarket(parseSeaportMarket(marketFixture, { includeNonFulfillable: true }));
+  assert.equal(market.totalNfts, 483);
+  assert.equal(market.offeredCount, 0);
+  assert.equal(market.antsTotalSupply, 129929424.0681841);
+  // minted is the ANTS total supply: the MC/FDV multiplier, never an ask VWAP.
+  assert.equal(market.minted, 129929424.0681841);
+});
+
+test('toMarket leaves board fields null when the feed omits them', () => {
+  const market = toMarket({ items: [{ id: 1, amount: 100, perAntUsd: 0.1, priceUsdc: 10 }], listedCount: 1 });
+  assert.equal(market.totalNfts, null);
+  assert.equal(market.offeredCount, null);
+  assert.equal(market.antsTotalSupply, null);
+  assert.equal(market.minted, null);
 });
 
 test('toMarket rejects a bad shape instead of inventing a market', () => {

@@ -1,11 +1,13 @@
 // Tweet text builders. Pure string formatting only: no IO, no network.
-// Number formats mirror docs/twitter-content-plan.md Phase 2 templates.
+//
+// One post = one story. The text carries the narrative (a sentence a buyer can
+// act on), the card carries the density (see bot/card.mjs); the old
+// "emoji · number · number · data:" dumps are gone and must not come back
+// (docs/twitter-content-plan.md, Phase 3). Every builder ends on the site link
+// because the bot's gate refuses a post without a route back to lants.eth.limo.
 
-const MID = '\u00b7'; // middle dot separator used by the templates
 const SITE = 'lants.eth.limo';
 const SITE_URL = 'https://lants.eth.limo';
-const DATA_SRC = 'data: antseedstats.com'; // CC BY 4.0 attribution
-const MAX_POST_LEN = 280; // must match xapi.mjs MAX_TWEET_LEN
 
 function posLink(id) {
   return `${SITE}/#position/${id}`;
@@ -13,6 +15,12 @@ function posLink(id) {
 
 function price3(v) {
   return '$' + Number(v).toFixed(3);
+}
+
+function usd2(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '$0.00';
+  return '$' + n.toFixed(2);
 }
 
 // 400 -> "400", 762.4724 -> "762.47", 1512.7 -> "1512.7"
@@ -48,51 +56,6 @@ export function fmtEmission(v) {
   return n.toLocaleString('en-US');
 }
 
-export function newListingText(l) {
-  const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
-    ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
-    : '';
-  return `\u{1F195} New listing: #${l.id} ${MID} \u{1F41C} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
-}
-
-export function newFloorListingText(l) {
-  const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
-    ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
-    : '';
-  return `\u{1F3AF} New floor listing: #${l.id} ${MID} \u{1F41C} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
-}
-
-// Epoch close is a call to action (claim / restake), not a market ticker. The
-// measures stay optional and compact on the first line: only include a number
-// when a live source supplied it (never invent one). A long pair of measures is
-// dropped rather than letting the post exceed the tweet limit and fail forever.
-export function epochText(closedEpoch, emission, avg24h, opts = {}) {
-  const measures = [];
-  if (Number.isFinite(emission) && emission > 0) measures.push(`\u{1F41C} ${fmtEmission(emission)} ANTS emitted`);
-  if (Number.isFinite(avg24h)) measures.push(`24h avg ${price3(avg24h)}`);
-  const bonus = Number.isFinite(opts.restakeBonusPct) && opts.restakeBonusPct > 0
-    ? ` (+${Math.round(opts.restakeBonusPct)}% power bonus)`
-    : '';
-  const build = (withMeasures) => {
-    const head = withMeasures && measures.length > 0
-      ? `\u{1F3C1} Epoch ${closedEpoch} has ended ${MID} ${measures.join(` ${MID} `)}`
-      : `\u{1F3C1} Epoch ${closedEpoch} has ended`;
-    return [
-      head,
-      '',
-      `Staker rewards for epoch ${closedEpoch} are claimable now:`,
-      '\u2022 Claim \u2014 ANTS to your wallet',
-      `\u2022 Restake \u2014 compound into a new position \u{1F331}${bonus}`,
-      '',
-      `Buyer rewards for epoch ${closedEpoch} can be staked into a seller pool.`,
-      '',
-      SITE_URL,
-    ].join('\n');
-  };
-  const full = build(true);
-  return full.length <= MAX_POST_LEN ? full : build(false);
-}
-
 // 1500000 -> "1.5M", 6000000 -> "6M", 1535689.21 -> "1.54M".
 export function fmtCompact(v) {
   const n = Number(v);
@@ -107,187 +70,150 @@ function trim(x) {
   return String(Number(x.toFixed(2)));
 }
 
-// antseedstats.com post types: every number carries the CC BY 4.0 attribution.
-export function burnText(burn, totalBurned) {
-  return `\u{1F525} ANTS burn: \u{1F41C} ${fmtCompact(burn.ants)} (epoch ${burn.epoch}) ${MID} total ${fmtCompact(totalBurned)} ${MID} ${DATA_SRC}`;
-}
+// --- A. Epoch close + claim/restake CTA -------------------------------------
 
-// pctChange is a signed percent string like "+6.1%"; buyers is optional.
-export function settledText(label, value, pctChange, settles, sellers, buyers) {
-  let s = `\u{1F4B0} AntSeed ${label} settled: ${usdWhole(value)} (${pctChange}) ${MID} ${countLabel(settles)} settlements ${MID} ${countLabel(sellers)} sellers`;
-  if (Number.isFinite(buyers) && buyers > 0) s += ` ${MID} ${countLabel(buyers)} buyers`;
-  return s + ` ${MID} ${DATA_SRC}`;
-}
-
-// pctChange is a signed percent string like "+5.2%"; stakedPct is the raw
-// share of stakable ANTS (73.2107 -> "73% of stakable").
-export function stakedText(value, pctChange, stakedPct) {
-  const pctOf = Number.isFinite(Number(stakedPct)) ? Math.round(Number(stakedPct)) : 0;
-  return `\u{1F331} Staked: ${fmtCompact(value)} ANTS (${pctChange}) ${MID} ${pctOf}% of stakable ${MID} ${DATA_SRC}`;
-}
-
-export function recordText(value) {
-  return `\u{1F3C6} AntSeed 7d settled hit a record: ${usdWhole(value)} ${MID} ${DATA_SRC}`;
-}
-
-function usdCompact(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '$0';
-  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 });
-}
-
-// Emission/points/burn are all optional: include a measure only when the epoch
-// record actually supplied it (burn lags the close by a few epochs).
-export function epochStatsText(e) {
-  const parts = [`\u{1F381} Epoch ${e.epoch} rewards`];
-  if (Number.isFinite(e.emissionAnts) && e.emissionAnts > 0) parts.push(`\u{1F41C} ${fmtCompact(e.emissionAnts)} ANTS emission`);
-  if (Number.isFinite(e.sellerPointsUsd) && e.sellerPointsUsd > 0) parts.push(`${usdCompact(e.sellerPointsUsd)} seller points`);
-  if (Number.isFinite(e.burnAnts) && e.burnAnts > 0) parts.push(`${fmtCompact(e.burnAnts)} burned`);
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
-
-// Demand-side post types (plan 1793256926840): usage, countdown, alloc, topmodels.
-
-export function usageText({ requests, tokens, videos, coverage } = {}) {
-  const parts = ['\u{1F4E1} AntSeed 24h'];
-  if (Number.isFinite(requests)) parts.push(`${fmtCompact(requests)} requests`);
-  if (Number.isFinite(tokens)) parts.push(`${fmtCompact(tokens)} tokens`);
-  if (Number.isFinite(videos)) parts.push(`${fmtCompact(videos)} videos`);
-  if (Number.isFinite(coverage)) parts.push(`${Math.round(coverage * 100)}% attributed`);
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
-
-export function countdownText({ epoch, hoursLeft, bonusPct } = {}) {
-  let line = `\u{23F3}\uFE0F Epoch ${epoch} ends in ~${hoursLeft}h \u2014 claim staker rewards or restake`;
-  if (Number.isFinite(bonusPct) && bonusPct > 0) line += ` with a +${Math.round(bonusPct)}% power bonus`;
-  line += ` \u{1F331}`;
-  return [line, '', SITE_URL].join('\n');
-}
-
-const BUCKET_LABELS = { sellerPools: 'seller pools', usage: 'usage', team: 'team', reserve: 'reserve', verification: 'verification' };
-
-export function allocText({ epoch, buckets } = {}) {
-  const parts = [`\u{1F9EE} Epoch ${epoch} emission`];
-  for (const b of buckets || []) {
-    if (!Number.isFinite(b.capPct)) continue;
-    parts.push(`${Math.round(b.capPct)}% ${BUCKET_LABELS[b.key] || b.key}`);
+// The measures are optional and only appear when a live source supplied them
+// (never invent one). `paid` reads the sentence naturally with or without them.
+export function epochCloseText({ epoch, emissionAnts, sellerPointsUsd, restakeBonusPct } = {}) {
+  const n = Number(epoch);
+  let head = Number.isInteger(n) && n >= 0 ? `Epoch ${n} closed.` : 'Epoch closed.';
+  const parts = [];
+  if (Number.isFinite(emissionAnts) && emissionAnts > 0) {
+    parts.push(`${fmtCompact(emissionAnts)} ANTS went to stakers`);
   }
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
-
-export function topModelsText({ models } = {}) {
-  const list = (models || []).filter((m) => typeof m === 'string' && m !== '');
-  return `\u{1F3C5} Most-used AI on AntSeed (7d): ${list.join(` ${MID} `)} ${MID} ${DATA_SRC}`;
-}
-
-// 0.006031 -> "0.006%", 0.3926 -> "0.39%", 12.5 -> "12.5%". The reward-budget
-// "pct of target" fields are already in percent units, not 0..1 fractions.
-function pctOfLabel(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  if (n >= 1) return String(Number(n.toFixed(1))) + '%';
-  if (n >= 0.1) return String(Number(n.toFixed(2))) + '%';
-  return String(Number(n.toFixed(3))) + '%';
-}
-
-// What buyers paid for in the last 7 days, split by modality (text/images/video).
-export function modalityText({ textUsd, videoUsd, imagesUsd } = {}) {
-  return `\u{1F9EC} AntSeed 7d spend: text $${fmtCompact(textUsd)} ${MID} video $${fmtCompact(videoUsd)} ${MID} images $${fmtCompact(imagesUsd)} ${MID} ${DATA_SRC}`;
-}
-
-// Native video-inference volume milestone (videos generated over 7d).
-export function videoText({ videos, spendUsd } = {}) {
-  return `\u{1F39E}\uFE0F Native video inference: ${fmtCompact(videos)} videos ${MID} $${fmtCompact(spendUsd)} in 7d ${MID} ${DATA_SRC}`;
-}
-
-// Lifetime milestone: kind is settles/settledUsd/buyers/sellers, value is the
-// round bucket crossed (e.g. 700000 for "700K settlements").
-export function lifetimeText(kind, value) {
-  const amount = kind === 'settledUsd' ? usdWhole(value) : countLabel(value);
-  const label = { settles: 'settlements', settledUsd: 'settled volume', buyers: 'buyers', sellers: 'sellers' }[kind] || kind;
-  return `\u{1F6F0}\uFE0F AntSeed passed ${amount} ${label} ${MID} ${DATA_SRC}`;
-}
-
-// 24h leaders, wash trading excluded by the source.
-export function leadersText({ sellerName, sellerUsd, topModelSales, topModelTokens } = {}) {
-  const parts = ['\u{1F947} AntSeed 24h'];
-  if (sellerName && Number.isFinite(sellerUsd)) parts.push(`top seller ${sellerName} ${usdWhole(sellerUsd)}`);
-  if (topModelSales && topModelSales.display && Number.isFinite(topModelSales.usd)) {
-    parts.push(`most revenue ${topModelSales.display} ${usdWhole(topModelSales.usd)}`);
+  if (Number.isFinite(sellerPointsUsd) && sellerPointsUsd > 0) {
+    parts.push(`${usdWhole(sellerPointsUsd)} of seller points to providers`);
   }
-  if (topModelTokens && topModelTokens.display && Number.isFinite(topModelTokens.tokens)) {
-    parts.push(`most tokens ${topModelTokens.display} ${fmtCompact(topModelTokens.tokens)}`);
+  if (parts.length > 0) head += ' ' + parts.join(', ') + '.';
+  const bonus = Number.isFinite(restakeBonusPct) && restakeBonusPct > 0
+    ? `for +${Math.round(restakeBonusPct)}% power`
+    : 'to compound';
+  return [
+    head,
+    '',
+    `Holding a locked position? Claim, or restake ${bonus}.`,
+    'Bought compute? Your buyer rewards can go into a seller pool.',
+    '',
+    SITE,
+  ].join('\n');
+}
+
+// --- B. Market board -------------------------------------------------------
+
+function bidsLine(offeredCount) {
+  const n = Number(offeredCount);
+  if (!Number.isFinite(n)) return '';
+  if (n <= 0) return 'Zero bids on any of them.';
+  if (n === 1) return 'One open bid on one of them.';
+  return `${countLabel(n)} open bids across them.`;
+}
+
+export function boardText(board = {}) {
+  const listed = Number(board.listedCount);
+  const total = Number(board.totalNfts);
+  const lines = [];
+
+  if (Number.isFinite(listed) && Number.isFinite(total) && total > 0) {
+    const bids = bidsLine(board.offeredCount);
+    lines.push(`${listed} of ${total} locked ANTS positions are for sale.${bids ? ' ' + bids : ''}`);
   }
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
 
-// Yesterday's fully-closed network day.
-export function dailyText({ settledUsd, requests, newUsers } = {}) {
-  const parts = ['\u{1F4C8} Yesterday on AntSeed'];
-  if (Number.isFinite(settledUsd)) parts.push(`settled ${usdWhole(settledUsd)}`);
-  if (Number.isFinite(requests)) parts.push(`${fmtCompact(requests)} requests`);
-  if (Number.isFinite(newUsers)) parts.push(`${countLabel(newUsers)} new paid users`);
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
-
-// DIEM capacity pool: backing + stakers + lifetime payouts. No yield, ever.
-export function diemText({ stakeValueUsd, stakers, usdcDistributedUsd, pctChange } = {}) {
-  let s = `\u{1F50B} DIEM pool: ${usdWhole(stakeValueUsd)} backing capacity`;
-  if (typeof pctChange === 'string') s += ` (${pctChange})`;
-  if (Number.isFinite(stakers)) s += ` ${MID} ${countLabel(stakers)} stakers`;
-  if (Number.isFinite(usdcDistributedUsd) && usdcDistributedUsd > 0) s += ` ${MID} ${usdWhole(usdcDistributedUsd)} USDC paid out`;
-  return s + ` ${MID} ${DATA_SRC}`;
-}
-
-// Reward budgets vs their targets (honest demand-vs-ceiling, no spin).
-export function usageTargetText({ epoch, usagePctOfTarget, stakePctOfTarget } = {}) {
-  const parts = [`\u{1F3AF} Epoch ${epoch} targets`];
-  const u = pctOfLabel(usagePctOfTarget);
-  const s = pctOfLabel(stakePctOfTarget);
-  if (u) parts.push(`usage ${u} of target`);
-  if (s) parts.push(`stake ${s} of target`);
-  parts.push(DATA_SRC);
-  return parts.join(` ${MID} `);
-}
-
-// Weekly market snapshot: a fixed-cadence digest that includes only the
-// measures the live sources actually supplied. Market numbers come from the
-// feed; antseedstats numbers are optional (that feed is a soft dependency).
-export function digestText(d) {
-  const lines = ['\u{1F4CA} lANTS weekly', ''];
-  const market = [];
-  if (Number.isFinite(d.floorAsk)) market.push(`Floor ${price3(d.floorAsk)}`);
-  if (Number.isFinite(d.avg24h)) market.push(`24h avg ${price3(d.avg24h)}`);
-  if (Number.isInteger(d.listedCount)) market.push(`${d.listedCount} listed`);
-  if (market.length) lines.push(market.join(` ${MID} `));
-  const stats = [];
-  if (Number.isFinite(d.settled7d) && d.settled7d > 0) {
-    let s = `7d settled ${usdWhole(d.settled7d)}`;
-    if (Number.isFinite(d.sellers7d)) s += ` ${MID} ${countLabel(d.sellers7d)} sellers`;
-    stats.push(s);
+  const price = [];
+  if (Number.isFinite(board.floorAsk)) price.push(`Floor ${price3(board.floorAsk)}`);
+  if (Number.isFinite(board.avg24h)) price.push(`24h average sale ${price3(board.avg24h)}`);
+  if (price.length > 0) {
+    const rest = Number.isFinite(total) && Number.isFinite(listed) && total > listed
+      ? ` \u2014 the other ${total - listed} holders are just holding`
+      : '';
+    lines.push(`${price.join(', ')}${rest}.`);
   }
-  if (Number.isFinite(d.stakedAnts) && d.stakedAnts > 0) {
-    let s = `${fmtCompact(d.stakedAnts)} ANTS staked`;
-    if (Number.isFinite(d.stakedPct)) s += ` ${MID} ${Math.round(Number(d.stakedPct))}% of stakable`;
-    stats.push(s);
+
+  lines.push(`Every lot, live: ${SITE}`);
+  return lines.join('\n\n');
+}
+
+// --- C. Lot highlight ------------------------------------------------------
+
+function unlockPhrase(lot) {
+  const days = Number(lot.daysRemaining);
+  if (Number.isFinite(days) && days > 1) return `unlocks in ${days} days`;
+  if (days === 1) return 'unlocks in 1 day';
+  if (days === 0) return 'unlocks this epoch';
+  return `lock ends at epoch ${lot.stakeEndEpoch}`;
+}
+
+export function lotText(lot = {}) {
+  if (!Number.isInteger(Number(lot.id))) return '';
+  return [
+    `Cheapest way into locked ANTS today: ${fmtAmount(lot.amount)} ANTS for ${usd2(lot.usd)}.`,
+    '',
+    `${price3(lot.perAntUsd)}/ANTS, ${unlockPhrase(lot)}, earning staking rewards the whole time.`,
+    '',
+    `Card: ${posLink(lot.id)}`,
+  ].join('\n');
+}
+
+// --- D. Network story ------------------------------------------------------
+
+export function networkText({ buyers, sellers, settled7d, pctChange } = {}) {
+  const b = Number(buyers);
+  const s = Number(sellers);
+  const moreBuyers = b > s;
+  const head = moreBuyers
+    ? 'More buyers than sellers on AntSeed this week'
+    : 'Sellers outnumber buyers on AntSeed this week';
+  const parts = [`${countLabel(b)} buyers`, `${countLabel(s)} sellers`];
+  if (Number.isFinite(settled7d)) {
+    const change = typeof pctChange === 'string' ? ` (${pctChange} w/w)` : '';
+    parts.push(`${usdWhole(settled7d)} settled in 7d${change}`);
   }
-  if (stats.length) lines.push(stats.join(` ${MID} `));
-  const usage = d.usage || {};
-  const usageParts = [];
-  if (Number.isFinite(usage.requests)) usageParts.push(`${fmtCompact(usage.requests)} requests`);
-  if (Number.isFinite(usage.tokens)) usageParts.push(`${fmtCompact(usage.tokens)} tokens`);
-  if (usageParts.length) lines.push(`24h ${usageParts.join(` ${MID} `)}`);
-  const generative = d.generative || {};
-  const genParts = [];
-  if (Number.isFinite(generative.spendUsd)) genParts.push(usdWhole(generative.spendUsd));
-  if (Number.isFinite(generative.videos)) genParts.push(`${fmtCompact(generative.videos)} videos`);
-  if (genParts.length) lines.push(`7d generative ${genParts.join(` ${MID} `)}`);
-  lines.push('');
-  lines.push(`${SITE_URL} ${MID} ${DATA_SRC}`);
+  const conclusion = moreBuyers
+    ? `${countLabel(s)} sellers serving ${countLabel(b)} buyers is a supply shortage, not a demand problem.`
+    : `${countLabel(b)} buyers spread across ${countLabel(s)} sellers \u2014 demand is the constraint this week.`;
+  return [
+    `${head}: ${parts.join(', ')}.`,
+    '',
+    conclusion,
+    '',
+    `${SITE} \u00b7 src: antseedstats.com`,
+  ].join('\n');
+}
+
+// --- E. Education ----------------------------------------------------------
+
+export function eduText({ totalNfts, listedCount } = {}) {
+  const lines = [
+    'A lANTS position is ANTS staked behind a provider until a date. Buying one buys the lock, the yield and the boost with it.',
+    '',
+  ];
+  const total = Number(totalNfts);
+  const listed = Number(listedCount);
+  if (Number.isFinite(total) && Number.isFinite(listed)) {
+    lines.push(`${total} exist. ${listed} are for sale.`, '');
+  }
+  lines.push(`Want ANTS without a lock? This is not it. ${SITE}`);
   return lines.join('\n');
 }
+
+// --- Legacy builders -------------------------------------------------------
+// Listing-level posts are removed (docs/twitter-content-plan.md "Removed post
+// types"); these two builders stay because the Telegram bot and their tests
+// still reference them.
+
+export function newListingText(l) {
+  const MID = '\u00b7';
+  const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
+    ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
+    : '';
+  return `\u{1F195} New listing: #${l.id} ${MID} \u{1F41C} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
+}
+
+export function newFloorListingText(l) {
+  const MID = '\u00b7';
+  const lock = Number.isFinite(l.lockDays) && l.lockDays > 0
+    ? ` ${MID} lock ${Math.round(l.lockDays / 7)}w`
+    : '';
+  return `\u{1F3AF} New floor listing: #${l.id} ${MID} \u{1F41C} ${fmtAmount(l.amount)} ANTS @ ${price3(l.perAntUsd)}${lock} ${MID} ${posLink(l.id)}`;
+}
+
+export { SITE, SITE_URL };

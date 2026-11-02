@@ -1,0 +1,215 @@
+#!/usr/bin/env node
+// Weekly engagement metrics for @sxsiant.
+//
+//   node bot/metrics.mjs            print the table, write nothing
+//   node bot/metrics.mjs --dry-run  same (explicit form used by the docs)
+//   node bot/metrics.mjs --write    also update notes/twitter-metrics.md
+//   node bot/metrics.mjs --state <p>  alternate state file
+//
+// Joins the public metrics of the account's last 100 original tweets with
+// state.published (the ledger run.mjs writes for every post it bought), so the
+// table answers one question: which archetype earns its X API call.
+//
+// Exit codes: 0 = table printed; 1 = credentials/token problem.
+
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { loadState } from './state.mjs';
+import { loadEnvFile } from './env.mjs';
+import { saveRotatedToken } from './token-store.mjs';
+import { refreshAccessToken, getMe, getUserTweets } from './xapi.mjs';
+
+const BOT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.dirname(BOT_DIR);
+const DEFAULT_STATE = path.join(BOT_DIR, 'state.json');
+export const METRICS_PATH = path.join(REPO_ROOT, 'notes', 'twitter-metrics.md');
+
+export const FAMILY_LABELS = {
+  epoch: 'A · epoch close',
+  board: 'B · market board',
+  lot: 'C · lot highlight',
+  network: 'D · network story',
+  edu: 'E · education',
+};
+
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** X v2 `public_metrics` -> flat rows; missing counters count as zero. */
+export function parseTweetList(tweets) {
+  const out = [];
+  for (const t of tweets || []) {
+    if (!t || typeof t.id !== 'string' || t.id === '') continue;
+    const m = t.public_metrics || {};
+    out.push({
+      id: t.id,
+      createdAt: typeof t.created_at === 'string' ? t.created_at : null,
+      impressions: num(m.impression_count),
+      likes: num(m.like_count),
+      replies: num(m.reply_count),
+      reposts: num(m.retweet_count),
+      bookmarks: num(m.bookmark_count),
+    });
+  }
+  return out;
+}
+
+/**
+ * Aggregate the joined tweets per archetype family.
+ * Engagement rate = (likes + replies + reposts + bookmarks) / impressions,
+ * null when there are no impressions (never divide by zero).
+ */
+export function aggregateByFamily(published, tweets) {
+  const byId = new Map();
+  for (const t of tweets || []) byId.set(String(t.id), t);
+
+  const rows = new Map();
+  for (const post of published || []) {
+    if (!post || post.id == null) continue;
+    const t = byId.get(String(post.id));
+    if (!t) continue;
+    const family = typeof post.family === 'string' && post.family !== '' ? post.family : 'unknown';
+    const row = rows.get(family) || {
+      family,
+      posts: 0,
+      impressions: 0,
+      likes: 0,
+      replies: 0,
+      reposts: 0,
+      bookmarks: 0,
+    };
+    row.posts += 1;
+    row.impressions += t.impressions;
+    row.likes += t.likes;
+    row.replies += t.replies;
+    row.reposts += t.reposts;
+    row.bookmarks += t.bookmarks;
+    rows.set(family, row);
+  }
+
+  return [...rows.values()]
+    .map((row) => {
+      const interactions = row.likes + row.replies + row.reposts + row.bookmarks;
+      return {
+        ...row,
+        interactions,
+        engagementRate: row.impressions > 0 ? interactions / row.impressions : null,
+      };
+    })
+    .sort((a, b) => b.impressions - a.impressions || b.posts - a.posts);
+}
+
+function pctOrDash(rate) {
+  return rate === null ? '-' : `${(rate * 100).toFixed(2)}%`;
+}
+
+export function renderTable(rows) {
+  const head = [
+    '| Family | Posts | Impressions | Likes | Replies | Reposts | Bookmarks | Engagement |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+  ];
+  if (!rows || rows.length === 0) return [...head, '| (no posts matched the ledger) | - | - | - | - | - | - | - |'].join('\n');
+  const lines = rows.map((r) => `| ${FAMILY_LABELS[r.family] || r.family} | ${r.posts} | ${r.impressions} | ${r.likes} | ${r.replies} | ${r.reposts} | ${r.bookmarks} | ${pctOrDash(r.engagementRate)} |`);
+  const total = rows.reduce((acc, r) => ({
+    posts: acc.posts + r.posts,
+    impressions: acc.impressions + r.impressions,
+    likes: acc.likes + r.likes,
+    replies: acc.replies + r.replies,
+    reposts: acc.reposts + r.reposts,
+    bookmarks: acc.bookmarks + r.bookmarks,
+    interactions: acc.interactions + r.interactions,
+  }), { posts: 0, impressions: 0, likes: 0, replies: 0, reposts: 0, bookmarks: 0, interactions: 0 });
+  lines.push(`| **total** | ${total.posts} | ${total.impressions} | ${total.likes} | ${total.replies} | ${total.reposts} | ${total.bookmarks} | ${pctOrDash(total.impressions > 0 ? total.interactions / total.impressions : null)} |`);
+  return [...head, ...lines].join('\n');
+}
+
+export function renderMarkdown(rows, nowMs = Date.now()) {
+  return [
+    '# @sxsiant post metrics',
+    '',
+    'Auto-generated by `node bot/metrics.mjs --write`. Source: X API v2 `public_metrics`',
+    'joined with `state.published` (the ledger of posts the bot actually bought).',
+    '',
+    `Last run: ${new Date(nowMs).toISOString()}`,
+    '',
+    renderTable(rows),
+    '',
+    'Engagement rate = (likes + replies + reposts + bookmarks) / impressions.',
+    'Retrospective after 4 weeks (plan P3): keep the three archetypes that earn their call.',
+    '',
+  ].join('\n');
+}
+
+function argValue(argv, flag) {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : null;
+}
+
+function readCreds(state) {
+  const clientId = process.env.X_CLIENT_ID;
+  const clientSecret = process.env.X_CLIENT_SECRET;
+  const refreshToken = state.refreshToken || process.env.X_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) return null;
+  return { clientId, clientSecret, refreshToken };
+}
+
+async function main(argv) {
+  loadEnvFile(path.join(BOT_DIR, '.env'));
+  const write = argv.includes('--write');
+  const statePath = argValue(argv, '--state') || DEFAULT_STATE;
+  const state = loadState(statePath);
+  const nowMs = Date.now();
+
+  const creds = readCreds(state);
+  if (!creds) {
+    console.log('[metrics] missing X credentials (X_CLIENT_ID / X_CLIENT_SECRET / X_REFRESH_TOKEN)');
+    return 1;
+  }
+
+  const token = await refreshAccessToken(creds);
+  if (!token.ok) {
+    console.log(`[metrics] token refresh failed: ${token.reason}${token.status ? ` (HTTP ${token.status})` : ''}`);
+    return token.retryable ? 0 : 1;
+  }
+  if (token.refreshToken) saveRotatedToken(statePath, state, token.refreshToken);
+
+  const me = await getMe({ accessToken: token.accessToken });
+  if (!me.ok || !me.userId) {
+    console.log(`[metrics] cannot resolve the account (HTTP ${me.status ?? 0}${me.reason ? `: ${me.reason}` : ''})`);
+    return 1;
+  }
+
+  const res = await getUserTweets({ accessToken: token.accessToken, userId: me.userId, maxResults: 100 });
+  if (!res.ok) {
+    console.log(`[metrics] tweet list failed: ${res.reason}${res.status ? ` (HTTP ${res.status})` : ''}`);
+    return res.retryable ? 0 : 1;
+  }
+
+  const tweets = parseTweetList(res.tweets);
+  const rows = aggregateByFamily(state.published || [], tweets);
+  const table = renderTable(rows);
+  console.log(`[metrics] @${me.username ?? 'sxsiant'} · ${tweets.length} tweet(s) · ${rows.length} family row(s)`);
+  console.log(table);
+
+  if (write) {
+    mkdirSync(path.dirname(METRICS_PATH), { recursive: true });
+    writeFileSync(METRICS_PATH, renderMarkdown(rows, nowMs), 'utf8');
+    console.log(`[metrics] wrote ${METRICS_PATH}`);
+  }
+  return 0;
+}
+
+const isMain = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (isMain) {
+  main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((e) => {
+      console.error('[metrics] fatal: ' + ((e && e.stack) || e));
+      process.exitCode = 1;
+    });
+}

@@ -2,7 +2,11 @@ name: twitter-bot
 
 on:
   schedule:
+    # Hourly attempt; bot/quality.mjs only lets a post out between 14:00 and
+    # 17:00 UTC, and run.mjs posts at most one candidate per run.
     - cron: '7 * * * *'
+    # Weekly engagement metrics (Monday 06:00 UTC), separate job below.
+    - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -17,6 +21,7 @@ concurrency:
 
 jobs:
   post:
+    if: github.event.schedule != '0 6 * * 1'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,6 +33,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      # @resvg/resvg-js (cards) is a devDependency with prebuilt binaries.
+      - name: Install dependencies
+        run: npm ci
 
       - name: Restore bot state
         id: state-restore
@@ -69,6 +78,9 @@ jobs:
             echo "Twitter bot run finished with status ${{ job.status }}."
             echo ""
             echo "dry_run=${{ inputs.dry_run }}"
+            COUNTS=$(grep -oE 'posts_this_run=[0-9]+ posts_this_week=[0-9]+ window=[a-z]+' bot-run.log | tail -1 || true)
+            echo "counters: ${COUNTS:-(none: run stopped before the gate)}"
+            echo ""
             echo '```'
             cat bot-run.log 2>/dev/null || echo "(no bot-run.log)"
             echo '```'
@@ -78,4 +90,64 @@ jobs:
             else
               echo "state.json NOT written"
             fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  metrics:
+    if: github.event.schedule == '0 6 * * 1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore bot state
+        uses: actions/cache/restore@v4
+        with:
+          path: bot/state.json
+          key: twitter-bot-state-${{ github.ref_name }}-metrics-${{ github.run_id }}
+          restore-keys: |
+            twitter-bot-state-${{ github.ref_name }}-
+
+      - name: Collect post metrics
+        env:
+          X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
+          X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
+          X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
+        run: node bot/metrics.mjs 2>&1 | tee metrics.log
+
+      - name: Rotate X refresh token secret
+        if: always() && hashFiles('bot/.rotated-token') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRETS_PAT }}
+        run: gh secret set X_REFRESH_TOKEN < bot/.rotated-token
+
+      # The metrics run rotates the refresh token too, so the state cache must
+      # be saved with it or the next post run restores a dead token.
+      - name: Save bot state
+        if: always() && hashFiles('bot/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: bot/state.json
+          key: twitter-bot-state-${{ github.ref_name }}-metrics-${{ github.run_id }}
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "Weekly post metrics finished with status ${{ job.status }}."
+            echo ""
+            echo '```'
+            cat metrics.log 2>/dev/null || echo "(no metrics.log)"
+            echo '```'
+            echo ""
+            echo "Permanent copy: run \`node bot/metrics.mjs --write\` locally (updates notes/twitter-metrics.md)."
           } >> "$GITHUB_STEP_SUMMARY"

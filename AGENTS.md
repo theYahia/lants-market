@@ -50,11 +50,14 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - `site/seaport-abi.mjs`, `site/seaport-order.mjs`, `site/seaport-buy.mjs` —
   Seaport 1.6 fulfill: pinned selector/struct, fail-closed validation, exact approve.
 - `site/render.mjs` — legacy positions table used by List view; prefer not to modify.
-- `bot/` — `@sxsiant` automation: `read-feed.mjs` (market feed context only),
-  `read-own-listings.mjs` (our own VexyMarketplace listings, now serving the
-  Telegram bot, not the Twitter bot), `diff.mjs` (change-only),
-  `xapi.mjs` (OAuth refresh + tweet), `run.mjs` (`--dry-run`). State is
-  gitignored `bot/state.json`; CI uses `.github/workflows/twitter-bot.yml`.
+- `bot/` — `@sxsiant` automation: `read-feed.mjs` (market feed), `read-snapshot.mjs`
+  (position snapshot; epoch emission + lot data), `aggregate.mjs` (board/lot numbers),
+  `diff.mjs` / `diff-live.mjs` (change detection), `format.mjs` (5 archetype builders),
+  `quality.mjs` (publication gate), `card.mjs` / `media.mjs` (SVG cards + upload),
+  `metrics.mjs` (weekly engagement table), `xapi.mjs` (OAuth + tweet + media),
+  `run.mjs` (`--dry-run`). State is gitignored `bot/state.json`; CI uses
+  `.github/workflows/twitter-bot.yml`. The bot posts exactly five archetypes:
+  epoch close (A), market board (B), lot highlight (C), network story (D), education (E).
 
 ## Invariants
 
@@ -79,14 +82,21 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
   simulate.
 - Files copied into `dist/` must be ASCII (Cyrillic is rejected; binary images are
   exempt).
-- The bot posts only epoch closes and attributed antseedstats data; it never
-  posts listings (new/floor/delist), `Sold`, or `Floor move` events: those are
-  the competitor's market-ticker story, not our inventory (rationale in
-  `docs/twitter-content-plan.md` "Removed post types"). Do not reintroduce them.
+- The bot posts only five archetypes — epoch close, market board, lot highlight,
+  network story, education — one post per run, at most one per family per 5 days
+  (education 10). It never posts listings (new/floor/delist), `Sold`, `Floor move`,
+  per-metric tickers (`settled`, `staked`, `usage`, `leaders`, `daily`, `diem`,
+  `modality`, `video`, `lifetime`, `usagetarget`, `countdown`, `alloc`,
+  `epochstats`, `record7d`, `topmodels`): those numbers live inside the epoch and
+  board cards. Everything is gated by `bot/quality.mjs` (link, number, prose first
+  line, 280 chars, family slot, 14:00–17:00 UTC window) — rationale and the full
+  list in `docs/twitter-content-plan.md` "Removed post types". Do not reintroduce.
 - The bot never posts APY / boost-yield numbers from antseedstats
   (`staking/pools.rows[].apy_*_pct`): the 2y figure is the "inflated yield" the
-  invariants ban. Demand-side top-models uses the models first page only, gated
-  behind `TOP_MODELS_ENABLED` (`bot/diff.mjs`); do not post the full catalog.
+  invariants ban.
+- Cards need the `media.write` X scope. Until the owner re-mints the refresh token
+  with it, `bot/media.mjs` skips the card and the post goes out as text — that
+  fallback is deliberate, never a reason to drop the post.
 
 ## Deploy & hygiene
 
@@ -95,3 +105,15 @@ Market front for locked ANTS positions (lANTS) on Base: valuation header, our ow
 - Do not commit `tmp-*.mjs`, `.kilo/`, `lants-thread/`, or unrelated local notes.
 - Current session state, commit list, validation status and next steps:
   `notes/handoff.md`.
+
+## Video clips (AntSeed Halloween series)
+
+- All media lives outside git in `C:\Users\romim\lants-video-media\<clip>\` (one folder per clip,
+  each with a `README.md`: delivered files, prices, what the audit proved, what is open).
+- Series pointer and per-clip lessons: `notes/antseed-video.md`. Verified entry, tool, seller
+  prices and traps: `C:\Users\romim\lants-video-media\halloween\PLAYBOOK.md`. Read those before
+  planning a new clip; do not re-research them.
+- The acceptance gate is a vision audit on the buyer node (`gemini-3.7-flash` over
+  `POST /v1/chat/completions` with base64 stills, ~$0.002 per call), not SSIM alone. Set
+  `ANTSEED_AUTHORIZATION` from `~/.config/kilo/secrets/antseed.key`; never put the key in a file.
+  One create ≤ $1.00, never pass `--audio`/`--no-audio`/`--aspect-ratio`.
